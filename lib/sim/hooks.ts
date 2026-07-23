@@ -1,0 +1,163 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  DEMO_USER_ID,
+  GROUPS,
+  PLAYERS,
+  playerById,
+} from "@/lib/data";
+import { IS_PILOT } from "@/lib/mode";
+import {
+  computeStandings,
+  divisionFor,
+  rowStats,
+  type StandingRow,
+  type ViewMode,
+} from "@/lib/scoring";
+import type { Player, Tournament } from "@/lib/types";
+import {
+  LIVE_COURSE,
+  LIVE_TOURNAMENT,
+  useSim,
+  type SavedGroup,
+} from "./store";
+
+const FIELD_IDS = GROUPS.flatMap((g) => g.playerIds);
+export const FIELD_PLAYERS = PLAYERS.filter((p) => FIELD_IDS.includes(p.id));
+
+const DEMO_GROUPS: SavedGroup[] = GROUPS.map((g) => ({
+  id: g.id,
+  number: g.number,
+  teeTime: g.teeTime,
+  playerIds: [...g.playerIds],
+}));
+
+export interface ActiveTournament {
+  tournament: Tournament;
+  groups: SavedGroup[];
+  players: Player[];
+}
+
+/**
+ * Resolves the tournament being played today.
+ * demo : always the seeded Muthaiga Captain's Prize with its field
+ * pilot: the admin-created tournament that was started, with saved pairings
+ *        and players drawn from the club roster
+ */
+export function useActiveTournament(): ActiveTournament | null {
+  const liveId = useSim((s) => s.liveTournamentId);
+  const created = useSim((s) => s.created);
+  const pairings = useSim((s) => s.pairings);
+  const roster = useSim((s) => s.roster);
+
+  return useMemo(() => {
+    if (!IS_PILOT) {
+      return {
+        tournament: LIVE_TOURNAMENT,
+        groups: pairings[LIVE_TOURNAMENT.id] ?? DEMO_GROUPS,
+        players: FIELD_PLAYERS,
+      };
+    }
+    if (!liveId) return null;
+    const tournament = created.find((t) => t.id === liveId);
+    if (!tournament) return null;
+    const groups = pairings[liveId] ?? [];
+    const ids = new Set(groups.flatMap((g) => g.playerIds));
+    const players = roster.filter((p) => ids.has(p.id));
+    return { tournament, groups, players };
+  }, [liveId, created, pairings, roster]);
+}
+
+export function useStandings(mode: ViewMode, division?: string): StandingRow[] {
+  const scores = useSim((s) => s.scores);
+  const active = useActiveTournament();
+  return useMemo(() => {
+    if (!active) return [];
+    let players = active.players;
+    if (division && division !== "Overall") {
+      players = players.filter(
+        (p) =>
+          divisionFor(p.handicap, active.tournament.divisions) === division,
+      );
+    }
+    return computeStandings(
+      players,
+      scores,
+      LIVE_COURSE,
+      active.tournament.handicapAllowance,
+      mode,
+    );
+  }, [scores, mode, division, active]);
+}
+
+/** The demo user's live status: position, points, thru. Demo mode only. */
+export function useUserLive() {
+  const scores = useSim((s) => s.scores);
+  const attested = useSim((s) => s.attested);
+  return useMemo(() => {
+    const rows = computeStandings(
+      FIELD_PLAYERS,
+      scores,
+      LIVE_COURSE,
+      LIVE_TOURNAMENT.handicapAllowance,
+      "points",
+    );
+    const me = rows.find((r) => r.player.id === DEMO_USER_ID)!;
+    return { ...me, attested };
+  }, [scores, attested]);
+}
+
+/** Current hole (1-based) for a group; 19 = finished. */
+export function groupCurrentHole(
+  scores: Record<string, (number | null)[]>,
+  groupId: string,
+) {
+  const g = GROUPS.find((x) => x.id === groupId)!;
+  const thru = Math.min(
+    ...g.playerIds.map((pid) => scores[pid].filter((x) => x != null).length),
+  );
+  return thru + 1;
+}
+
+export function playerStats(
+  scores: Record<string, (number | null)[]>,
+  playerId: string,
+) {
+  return rowStats(
+    playerById(playerId),
+    scores[playerId],
+    LIVE_COURSE,
+    LIVE_TOURNAMENT.handicapAllowance,
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Connectivity + sync status                                          */
+/* ------------------------------------------------------------------ */
+
+export function useOnline() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
+  return online;
+}
+
+export function useSyncStatus() {
+  const outbox = useSim((s) => s.outbox);
+  const lastSyncedAt = useSim((s) => s.lastSyncedAt);
+  const online = useOnline();
+  const pending = outbox.filter((o) => o.status === "pending").length;
+  const failed = outbox.filter((o) => o.status === "failed").length;
+  return { online, pending, failed, lastSyncedAt };
+}
