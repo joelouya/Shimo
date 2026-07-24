@@ -7,7 +7,7 @@ import { EyeOff, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LiveBadge } from "@/components/live-dot";
-import { LastUpdatedNote } from "@/components/sync-status";
+import { LastUpdatedNote, SyncStrip } from "@/components/sync-status";
 import { DEMO_USER_ID, GROUPS, clubById, courseById, playerById } from "@/lib/data";
 import {
   playingHandicap,
@@ -15,7 +15,7 @@ import {
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
-import { useActiveTournament, useStandings } from "@/lib/sim/hooks";
+import { useActiveTournament, useMeId, useStandings } from "@/lib/sim/hooks";
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
@@ -329,6 +329,7 @@ const BoardRow = memo(
 
 function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string }) {
   const rows = useStandings(mode, division);
+  const me = useMeId();
   const [expanded, setExpanded] = useState<string | null>(null);
   const toggle = useCallback(
     (id: string) => setExpanded((cur) => (cur === id ? null : id)),
@@ -350,7 +351,7 @@ function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string 
             key={r.player.id}
             r={r}
             mode={mode}
-            isUser={r.player.id === DEMO_USER_ID}
+            isUser={r.player.id === me}
             isOpen={expanded === r.player.id}
             onToggle={toggle}
           />
@@ -411,6 +412,8 @@ export default function LeaderboardPage() {
         {!blind && <EventTicker />}
         <LastUpdatedNote />
       </header>
+
+      <SyncStrip className="mt-3" />
 
       {blind ? (
         <div className="mt-10 rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">

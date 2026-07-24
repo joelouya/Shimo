@@ -43,15 +43,44 @@ import {
   type AuditRecord,
 } from "@/lib/integrity";
 import { IS_PILOT } from "@/lib/mode";
+import {
+  auditToRow,
+  certToRow,
+  correctionToRow,
+  disputeToRow,
+  pairingToRow,
+  playerToRow,
+  rowToAudit,
+  rowToCert,
+  rowToCorrection,
+  rowToDispute,
+  rowToPairing,
+  rowToPlayer,
+  rowToTournament,
+  tournamentToRow,
+} from "@/lib/sync/mappers";
+import type { HydrationSnapshot } from "@/lib/sync/remote";
 import type { HoleScores, Player, Tournament } from "@/lib/types";
 
 const COURSE = COURSES.find((c) => c.id === "muthaiga-main")!;
 const LIVE_T = TOURNAMENTS.find((t) => t.id === LIVE_TOURNAMENT_ID)!;
 const GRACE_ID = "p-wanjiku-g";
 
-const STORAGE_KEY = `shimo-sim-v7-${IS_PILOT ? "pilot" : "demo"}`;
-const CHANNEL = `shimo-sim-v7-${IS_PILOT ? "pilot" : "demo"}`;
-const SCHEMA = 7;
+const STORAGE_KEY = `shimo-sim-v8-${IS_PILOT ? "pilot" : "demo"}`;
+const CHANNEL = `shimo-sim-v8-${IS_PILOT ? "pilot" : "demo"}`;
+const SCHEMA = 8;
+
+/** Device-local identity — which player this phone belongs to (pilot). Kept in
+ *  its own key so it survives schema resets and is never uploaded. */
+const IDENTITY_KEY = "shimo-device-identity";
+function readIdentity(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(IDENTITY_KEY);
+  } catch {
+    return null;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -182,7 +211,8 @@ export interface SavedGroup {
  */
 export interface SyncOp {
   id: string;
-  kind: "score" | "card-in" | "attest" | "resolve";
+  /** score/resolve → scores table; entity → a mapped row on a state table */
+  kind: "score" | "resolve" | "entity";
   payload: Record<string, unknown>;
   ts: number;
   status: "pending" | "synced" | "failed";
@@ -238,6 +268,8 @@ export interface SimState {
   signMethod: SignMethod;
   tonePref: "editorial" | "classic";
   locationConsent: "unset" | "granted" | "declined";
+  /** which player this device is (pilot); null until picked */
+  deviceIdentity: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -348,6 +380,7 @@ export function buildInitialState(): SimState {
     signMethod: "pin",
     tonePref: "editorial",
     locationConsent: "unset",
+    deviceIdentity: readIdentity(),
   };
   if (!IS_PILOT) state.lastUserPos = userPosition(state);
   return state;
@@ -645,7 +678,36 @@ function enqueueOp(
     status: "pending",
     attempts: 0,
   });
-  draft.outbox = draft.outbox.slice(-300);
+  draft.outbox = draft.outbox.slice(-600);
+}
+
+/** Queue a mapped state row (tournament, pairing, cert, …) for the remote. */
+function enqueueEntity(
+  draft: SimState,
+  table: string,
+  row: Record<string, unknown>,
+  opts: { conflict?: string; insertOnly?: boolean } = {},
+) {
+  enqueueOp(draft, "entity", {
+    table,
+    row,
+    conflict: opts.conflict,
+    insertOnly: opts.insertOnly,
+  });
+}
+
+function syncCert(draft: SimState, playerId: string) {
+  const c = draft.certifications[playerId];
+  if (!c) return;
+  enqueueEntity(draft, "certifications", certToRow(activeTournamentOf(draft).id, c), {
+    conflict: "tournament_id,player_id",
+  });
+}
+
+function syncAuditTail(draft: SimState, count: number) {
+  for (const rec of draft.auditLog.slice(-count)) {
+    enqueueEntity(draft, "audit_log", auditToRow(rec), { insertOnly: true });
+  }
 }
 
 function ensureCard(draft: SimState, pid: string) {
@@ -714,7 +776,17 @@ export function setBulkScore(pid: string, holeIdx: number, gross: number | null)
 export function setCardIn(pid: string, on: boolean) {
   mutate((draft) => {
     draft.cardIn[pid] = on;
-    enqueueOp(draft, "card-in", { playerId: pid, on });
+    enqueueEntity(
+      draft,
+      "card_in",
+      {
+        tournament_id: activeTournamentOf(draft).id,
+        player_id: pid,
+        is_in: on,
+        updated_at: new Date().toISOString(),
+      },
+      { conflict: "tournament_id,player_id" },
+    );
   });
 }
 
@@ -726,30 +798,58 @@ export function addRosterMember(p: Player) {
   mutate((draft) => {
     draft.roster.unshift(p);
     ensureCard(draft, p.id);
+    enqueueEntity(draft, "players", playerToRow(p), { conflict: "id" });
   });
 }
 
 export function updateRosterMember(id: string, patch: Partial<Player>) {
   mutate((draft) => {
     draft.roster = draft.roster.map((m) => (m.id === id ? { ...m, ...patch } : m));
+    const updated = draft.roster.find((m) => m.id === id);
+    if (updated) enqueueEntity(draft, "players", playerToRow(updated), { conflict: "id" });
   });
 }
 
 export function savePairings(tournamentId: string, groups: SavedGroup[]) {
   mutate((draft) => {
     draft.pairings[tournamentId] = groups;
+    // only publish pairings for a tournament that already exists in the cloud
+    if (draft.liveTournamentId === tournamentId) {
+      for (const g of groups) {
+        enqueueEntity(draft, "pairings", pairingToRow(tournamentId, g), {
+          conflict: "tournament_id,group_id",
+        });
+      }
+    }
   });
 }
 
-/** Pilot: flip a created tournament into today's live event. */
+/**
+ * Pilot: flip a created tournament into today's live event. This is the
+ * "publish" moment — the tournament, its pairings, and every player in the
+ * field go to the cloud so any device that joins hydrates the whole thing.
+ */
 export function startTournamentDay(tournamentId: string) {
   mutate((draft) => {
     draft.liveTournamentId = tournamentId;
     const t = draft.created.find((x) => x.id === tournamentId);
     if (t) t.status = "live";
-    // fresh cards for everyone in the field
-    for (const g of draft.pairings[tournamentId] ?? []) {
+    const groups = draft.pairings[tournamentId] ?? [];
+    for (const g of groups) {
       for (const pid of g.playerIds) ensureCard(draft, pid);
+    }
+    // publish everything a joining device needs
+    if (t) enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+    for (const g of groups) {
+      enqueueEntity(draft, "pairings", pairingToRow(tournamentId, g), {
+        conflict: "tournament_id,group_id",
+      });
+    }
+    const fieldIds = new Set(groups.flatMap((g) => g.playerIds));
+    for (const p of draft.roster) {
+      if (fieldIds.has(p.id)) {
+        enqueueEntity(draft, "players", playerToRow(p), { conflict: "id" });
+      }
     }
   });
 }
@@ -820,7 +920,8 @@ export function markerAttest(
       ts: Date.now(),
       detail: `Marker attested the card (${artifact.method}).`,
     });
-    enqueueOp(draft, "attest", { playerId, markerId, stage: "marker", ts: Date.now() });
+    syncCert(draft, playerId);
+    syncAuditTail(draft, 1);
     // the demo counterpart: when Joel attests David's card, David's phone
     // attests Joel's a moment later, then certifies his own once Joel has
     if (!IS_PILOT && markerId === DEMO_USER_ID) {
@@ -909,7 +1010,8 @@ export async function playerCertify(
       // David certifies his own card shortly after
       queueEcho(draft, { kind: "david-certifies", hole: 0, at: now + 2200 });
     }
-    enqueueOp(draft, "attest", { playerId, stage: "player", hash, ts: now });
+    syncCert(draft, playerId);
+    syncAuditTail(draft, 2);
   });
 }
 
@@ -961,6 +1063,10 @@ export function raiseDispute(
       status: "open",
       ts: Date.now(),
     });
+    const disp = draft.disputes[0];
+    enqueueEntity(draft, "disputes", disputeToRow(t.id, disp), { conflict: "id" });
+    syncCert(draft, playerId);
+    syncAuditTail(draft, 1);
   });
 }
 
@@ -968,6 +1074,7 @@ export function markCommitteeReview(playerId: string) {
   mutate((draft) => {
     const c = draft.certifications[playerId];
     if (c && c.stage === "disputed") c.stage = "committee-review";
+    syncCert(draft, playerId);
   });
 }
 
@@ -1048,6 +1155,17 @@ export async function resolveDispute(
       device: deviceFingerprint(),
       detail: disp.resolution ?? decision.reason,
     });
+    enqueueEntity(draft, "disputes", disputeToRow(t.id, disp), { conflict: "id" });
+    if (agreed != null) {
+      enqueueOp(draft, "resolve", {
+        playerId: d.playerId,
+        hole: d.holeIdx,
+        gross: agreed,
+        source: "committee",
+      });
+    }
+    syncCert(draft, d.playerId);
+    syncAuditTail(draft, 1);
   });
 }
 
@@ -1091,6 +1209,10 @@ export function requestCorrection(
       status: "open",
       ts: Date.now(),
     });
+    enqueueEntity(draft, "corrections", correctionToRow(t.id, draft.corrections[0]), {
+      conflict: "id",
+    });
+    syncAuditTail(draft, 1);
   });
 }
 
@@ -1148,6 +1270,17 @@ export async function decideCorrection(
       hash,
       detail: `Correction ${approve ? "approved" : "rejected"} for hole ${corr.holeIdx + 1} (${corr.currentGross} → ${corr.proposedGross}): ${reason}`,
     });
+    enqueueEntity(draft, "corrections", correctionToRow(t.id, corr), { conflict: "id" });
+    if (approve) {
+      enqueueOp(draft, "resolve", {
+        playerId: corr.playerId,
+        hole: corr.holeIdx,
+        gross: corr.proposedGross,
+        source: "committee",
+      });
+    }
+    syncCert(draft, corr.playerId);
+    syncAuditTail(draft, 1);
   });
 }
 
@@ -1179,6 +1312,21 @@ export function setLocationConsent(v: "granted" | "declined") {
   });
 }
 
+export function setDeviceIdentity(playerId: string | null) {
+  try {
+    if (playerId) localStorage.setItem(IDENTITY_KEY, playerId);
+    else localStorage.removeItem(IDENTITY_KEY);
+  } catch {}
+  mutate((d) => {
+    d.deviceIdentity = playerId;
+  });
+}
+
+/** The player this device acts as: the picked identity in pilot, Joel in demo. */
+export function meId(s: SimState): string {
+  return IS_PILOT ? (s.deviceIdentity ?? "") : DEMO_USER_ID;
+}
+
 export function registerForTournament(id: string) {
   mutate((draft) => {
     if (!draft.registrations.includes(id)) draft.registrations.push(id);
@@ -1196,6 +1344,7 @@ export function registerForTournament(id: string) {
 export function createTournament(t: Tournament) {
   mutate((draft) => {
     draft.created.unshift(t);
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
   });
 }
 
@@ -1351,13 +1500,127 @@ export function startSim() {
 /** Exposed for the sync engine's remote-merge path. */
 export function applyRemoteScore(pid: string, holeIdx: number, gross: number | null) {
   const s = simStore.getState();
-  if (!s.scores[pid]) return;
-  if (s.scores[pid][holeIdx] === gross) return;
+  if (s.scores[pid]?.[holeIdx] === gross) return;
   mutate((draft) => {
     ensureCard(draft, pid);
     draft.scores[pid][holeIdx] = gross;
     draft.markerScores[pid][holeIdx] = gross;
     if (gross != null) pushEvent(draft, pid, holeIdx, gross);
+  });
+}
+
+/**
+ * Apply one realtime row from another device. Never enqueues — these are
+ * inbound merges. Idempotent so a self-echo or a re-delivery is harmless.
+ */
+export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
+  mutate((draft) => {
+    switch (table) {
+      case "tournaments": {
+        const t = rowToTournament(row);
+        const i = draft.created.findIndex((x) => x.id === t.id);
+        if (i >= 0) draft.created[i] = t;
+        else draft.created.unshift(t);
+        if (t.status === "live") draft.liveTournamentId = t.id;
+        break;
+      }
+      case "pairings": {
+        const tid = row.tournament_id as string;
+        const g = rowToPairing(row);
+        const list = (draft.pairings[tid] ??= []);
+        const i = list.findIndex((x) => x.id === g.id);
+        if (i >= 0) list[i] = g;
+        else list.push(g);
+        list.sort((a, b) => a.number - b.number);
+        for (const pid of g.playerIds) ensureCard(draft, pid);
+        break;
+      }
+      case "players": {
+        const p = rowToPlayer(row);
+        const i = draft.roster.findIndex((x) => x.id === p.id);
+        if (i >= 0) draft.roster[i] = p;
+        else draft.roster.push(p);
+        ensureCard(draft, p.id);
+        break;
+      }
+      case "card_in": {
+        draft.cardIn[row.player_id as string] = Boolean(row.is_in);
+        break;
+      }
+      case "certifications": {
+        const c = rowToCert(row);
+        draft.certifications[c.playerId] = {
+          ...draft.certifications[c.playerId],
+          ...c,
+        };
+        break;
+      }
+      case "disputes": {
+        const d = rowToDispute(row);
+        const i = draft.disputes.findIndex((x) => x.id === d.id);
+        if (i >= 0) draft.disputes[i] = d;
+        else draft.disputes.unshift(d);
+        break;
+      }
+      case "corrections": {
+        const c = rowToCorrection(row);
+        const i = draft.corrections.findIndex((x) => x.id === c.id);
+        if (i >= 0) draft.corrections[i] = c;
+        else draft.corrections.unshift(c);
+        break;
+      }
+      case "audit_log": {
+        const a = rowToAudit(row);
+        if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
+        break;
+      }
+    }
+  });
+}
+
+/**
+ * Merge a full cloud snapshot into local state on load / discovery. Only fires
+ * when there is a real tournament in the snapshot, so it can never blank out a
+ * device that has local-only state.
+ */
+export function hydrateFromSnapshot(snap: HydrationSnapshot) {
+  if (!snap.tournament) return;
+  mutate((draft) => {
+    const t = rowToTournament(snap.tournament!);
+    const i = draft.created.findIndex((x) => x.id === t.id);
+    if (i >= 0) draft.created[i] = t;
+    else draft.created.unshift(t);
+    if (t.status === "live") draft.liveTournamentId = t.id;
+
+    draft.pairings[t.id] = snap.pairings
+      .map(rowToPairing)
+      .sort((a, b) => a.number - b.number);
+
+    for (const r of snap.players) {
+      const p = rowToPlayer(r);
+      const j = draft.roster.findIndex((x) => x.id === p.id);
+      if (j >= 0) draft.roster[j] = p;
+      else draft.roster.push(p);
+      ensureCard(draft, p.id);
+    }
+    for (const r of snap.scores) {
+      ensureCard(draft, r.player_id);
+      draft.scores[r.player_id][r.hole] = r.gross;
+      draft.markerScores[r.player_id][r.hole] = r.gross;
+    }
+    for (const r of snap.cardIn) {
+      draft.cardIn[r.player_id as string] = Boolean(r.is_in);
+    }
+    for (const r of snap.certifications) {
+      const c = rowToCert(r);
+      draft.certifications[c.playerId] = c;
+    }
+    draft.disputes = snap.disputes.map(rowToDispute);
+    draft.corrections = snap.corrections.map(rowToCorrection);
+    for (const r of snap.audit) {
+      const a = rowToAudit(r);
+      if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
+    }
   });
 }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { TrendingDown } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,7 +22,7 @@ import {
   playerById,
 } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
-import { setHideLeaderboard, setSignMethod, setTonePref, useSim, type SignMethod } from "@/lib/sim/store";
+import { setDeviceIdentity, setHideLeaderboard, setSignMethod, setTonePref, useSim, type SignMethod } from "@/lib/sim/store";
 import { formatDate, initials, ordinal } from "@/lib/utils";
 
 /**
@@ -69,7 +70,12 @@ function HandicapSparkline() {
 }
 
 export default function ProfilePage() {
-  const user = playerById(DEMO_USER_ID);
+  const identity = useSim((s) => s.deviceIdentity);
+  const roster = useSim((s) => s.roster);
+  const user =
+    IS_PILOT && identity
+      ? (roster.find((p) => p.id === identity) ?? playerById(DEMO_USER_ID))
+      : playerById(DEMO_USER_ID);
   const club = clubById(user.clubId);
   const hidden = useSim((s) => s.hideLeaderboard);
   const signMethod = useSim((s) => s.signMethod);
@@ -193,6 +199,23 @@ export default function ProfilePage() {
       <section className="mt-7 pb-4">
         <p className="smallcaps mb-3 text-muted-foreground">Settings</p>
         <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+          {IS_PILOT && identity && (
+            <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5">
+              <div>
+                <Label className="text-foreground">This device is you</Label>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {user.name} · your place is highlighted on the board
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeviceIdentity(null)}
+              >
+                Change
+              </Button>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3 px-4 py-3.5">
             <div>
               <Label className="text-foreground">Scoreboard blindness</Label>

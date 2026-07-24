@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * Offline -> "scores saved locally". Failed sync -> Retry, never a raw error.
  */
 export function SyncStrip({ className }: { className?: string }) {
-  const { online, failed } = useSyncStatus();
+  const { online, pending, failed } = useSyncStatus();
   if (online && failed === 0) return null;
   return (
     <div
@@ -24,7 +24,9 @@ export function SyncStrip({ className }: { className?: string }) {
         <>
           <CloudOff className="size-4 shrink-0 text-amber-flag" />
           <p className="flex-1 text-[13px] font-medium text-amber-flag">
-            Offline. Scores saved locally
+            {pending > 0
+              ? `Offline. ${pending} change${pending > 1 ? "s" : ""} queued`
+              : "Offline. Changes saved locally"}
           </p>
           <span className="text-[11.5px] text-amber-flag/70">
             They&apos;ll sync when you&apos;re back
@@ -80,7 +82,8 @@ export function AttestSyncNote() {
   const { online } = useSyncStatus();
   const attestOp = useSim((s) => {
     for (let i = s.outbox.length - 1; i >= 0; i--) {
-      if (s.outbox[i].kind === "attest") return s.outbox[i];
+      const o = s.outbox[i];
+      if (o.kind === "entity" && o.payload.table === "certifications") return o;
     }
     return undefined;
   });

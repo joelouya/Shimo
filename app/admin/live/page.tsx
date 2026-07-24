@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ClipboardList, Flag, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Check, ClipboardList, Flag, Share2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,27 @@ function timeAgo(ts: number) {
   const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
   if (s < 60) return `${s}s ago`;
   return `${Math.round(s / 60)}m ago`;
+}
+
+function SharePublicBoard({ tournamentId }: { tournamentId: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      onClick={async () => {
+        const url = `${window.location.origin}/live/${tournamentId}`;
+        try {
+          await navigator.clipboard.writeText(url);
+        } catch {}
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2200);
+      }}
+      title="Public leaderboard link for clubhouse screens and WhatsApp"
+    >
+      {copied ? <Check className="size-4 text-clay" /> : <Share2 className="size-4" />}
+      {copied ? "Link copied" : "Share board"}
+    </Button>
+  );
 }
 
 function eventWord(gross: number, par: number) {
@@ -363,6 +384,7 @@ export default function LiveOpsPage() {
               <p className="smallcaps mt-1 text-[9px] text-muted-foreground">{s.l}</p>
             </div>
           ))}
+          <SharePublicBoard tournamentId={active.tournament.id} />
           <Button variant="outline" asChild>
             <Link href="/admin/scores">
               <ClipboardList className="size-4" />

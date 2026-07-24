@@ -1,23 +1,31 @@
 "use client";
 
 /**
- * The sync engine: drains the outbox to the remote from the leader tab,
- * marks ops synced/failed, and merges realtime rows from other devices.
+ * The sync engine: drains the outbox to the remote from the leader tab, marks
+ * ops synced/failed, hydrates the live tournament on load, and merges realtime
+ * rows from other devices.
  *
  * Rules per the pilot spec:
- * - writes always land locally first (the store does that)
- * - an op that keeps failing while online for 30s becomes "failed" and the
- *   UI offers Retry — never a raw error
+ * - writes always land locally first (the store does that); no spinner
+ * - an op that keeps failing while online for 30s becomes "failed" and the UI
+ *   offers Retry — never a raw error
+ * - offline: everything waits, nothing fails
  */
 
 import type { StoreApi } from "zustand";
 
-import { applyRemoteScore, type SimState } from "@/lib/sim/store";
+import {
+  applyRemoteEntity,
+  applyRemoteScore,
+  hydrateFromSnapshot,
+  type SimState,
+} from "@/lib/sim/store";
 import { getRemote } from "./remote";
 
 const FAIL_AFTER_MS = 30_000;
 const TICK_MS = 3_000;
 const PRUNE_SYNCED_AFTER_MS = 5 * 60_000;
+const REHYDRATE_MS = 60_000;
 
 interface EngineDeps {
   store: StoreApi<SimState>;
@@ -33,17 +41,44 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
 
   const remote = getRemote();
 
-  remote.subscribeScores((row) => {
-    applyRemoteScore(row.player_id, row.hole, row.gross);
-  });
+  /* ---- inbound: hydrate + realtime ---- */
+  if (remote.kind === "supabase") {
+    const hydrate = async () => {
+      try {
+        const liveId =
+          store.getState().liveTournamentId ??
+          (await remote.findLiveTournamentId());
+        if (liveId) hydrateFromSnapshot(await remote.hydrate(liveId));
+      } catch {
+        /* offline or not-yet-created: try again on the next pass */
+      }
+    };
+    hydrate();
+    // periodic reconcile catches anything realtime missed (dropped socket)
+    setInterval(() => {
+      if (navigator.onLine) hydrate();
+    }, REHYDRATE_MS);
 
+    remote.subscribeTables((table, row) => {
+      if (table === "scores") {
+        applyRemoteScore(
+          row.player_id as string,
+          row.hole as number,
+          (row.gross ?? null) as number | null,
+        );
+      } else {
+        applyRemoteEntity(table, row);
+      }
+    });
+  }
+
+  /* ---- outbound: drain the outbox ---- */
   let pushing = false;
 
   const tick = async () => {
     if (!isLeader() || pushing) return;
     const s = store.getState();
 
-    // prune old synced ops so the queue stays small
     if (
       s.outbox.some(
         (o) => o.status === "synced" && Date.now() - o.ts > PRUNE_SYNCED_AFTER_MS,
@@ -56,7 +91,7 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
       });
     }
 
-    if (!navigator.onLine) return; // offline: everything waits, nothing fails
+    if (!navigator.onLine) return;
     const pending = s.outbox.filter((o) => o.status === "pending");
     if (!pending.length) return;
 

@@ -7,6 +7,7 @@ import { ArrowRight, ChevronRight } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { LiveBadge } from "@/components/live-dot";
 import { InstallPrompt } from "@/components/pwa";
+import { IdentityGate } from "@/components/golfer/identity-pick";
 import { TournamentCard } from "@/components/golfer/tournament-card";
 import { DEMO_USER_ID, clubById, courseById, playerById } from "@/lib/data";
 import { handicapSet } from "@/lib/scoring";
@@ -141,8 +142,14 @@ export default function HomePage() {
   const registrations = useSim((s) => s.registrations);
   const created = useSim((s) => s.created);
   const tone = useSim((s) => s.tonePref);
-  const user = playerById(DEMO_USER_ID);
-  const firstName = user.name.split(" ")[0];
+  const roster = useSim((s) => s.roster);
+  const identity = useSim((s) => s.deviceIdentity);
+  const me =
+    IS_PILOT && identity
+      ? (roster.find((p) => p.id === identity) ?? playerById(DEMO_USER_ID))
+      : playerById(DEMO_USER_ID);
+  const user = me;
+  const firstName = IS_PILOT && !identity ? "there" : me.name.split(" ")[0];
 
   const hour = new Date().getHours();
   const greeting =
@@ -267,11 +274,26 @@ export default function HomePage() {
 
 function PilotHomeLive() {
   const active = useActiveTournament();
-  if (!active) return null;
   return (
-    <section className="mt-7">
-      <SectionLabel>Live now</SectionLabel>
-      <PilotLiveCard />
-    </section>
+    <>
+      <IdentityGate />
+      {active && (
+        <section className="mt-7">
+          <SectionLabel>Live now</SectionLabel>
+          <PilotLiveCard />
+        </section>
+      )}
+      {!active && (
+        <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
+          <p className="font-serif text-lg text-foreground">
+            No tournament running
+          </p>
+          <p className="mx-auto mt-2 max-w-[260px] text-[14px] leading-relaxed text-muted-foreground">
+            When your club starts a tournament day, it appears here with the
+            live leaderboard.
+          </p>
+        </div>
+      )}
+    </>
   );
 }

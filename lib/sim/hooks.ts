@@ -20,9 +20,15 @@ import type { Player, Tournament } from "@/lib/types";
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
+  meId,
   useSim,
   type SavedGroup,
 } from "./store";
+
+/** The player this device acts as (picked identity in pilot, Joel in demo). */
+export function useMeId(): string {
+  return useSim(meId);
+}
 
 const FIELD_IDS = GROUPS.flatMap((g) => g.playerIds);
 export const FIELD_PLAYERS = PLAYERS.filter((p) => FIELD_IDS.includes(p.id));
