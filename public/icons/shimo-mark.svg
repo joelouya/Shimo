@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Shimo">
+  <title>Shimo</title>
+  <!-- Cream field. Remove this rect for a transparent-background version. -->
+  <rect width="512" height="512" fill="#F7F3EC"/>
+  <!-- The hole -->
+  <circle cx="256" cy="256" r="174" fill="none" stroke="#1A2332" stroke-width="51"/>
+  <!-- The ball at the lip of the cup -->
+  <circle cx="256" cy="430" r="43" fill="#B84A2E"/>
+</svg>
