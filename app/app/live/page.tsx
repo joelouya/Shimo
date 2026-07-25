@@ -29,7 +29,13 @@ import {
   HandicapChain,
   LocationConsentCard,
 } from "@/components/golfer/certification";
-import { DEMO_USER_ID, MARKER_ID, courseById, playerById } from "@/lib/data";
+import {
+  DEMO_USER_ID,
+  MARKER_ID,
+  clubById,
+  courseById,
+  playerById,
+} from "@/lib/data";
 import { stablefordPoints, strokesReceived, handicapSet } from "@/lib/scoring";
 import {
   useActiveTournament,
@@ -309,6 +315,9 @@ function PilotScoring() {
           netToPar={myStats.netToPar}
           position="on the board"
           hidden={hidden}
+          correctionWindowMin={tournament.correctionWindowMin}
+          clubShort={clubById(tournament.clubId).short}
+          course={course}
         />
       ) : (
         <>

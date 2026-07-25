@@ -625,6 +625,9 @@ export function CardReturnedView({
   position,
   hidden,
   me = DEMO_USER_ID,
+  correctionWindowMin = LIVE_TOURNAMENT.correctionWindowMin,
+  clubShort = clubById(LIVE_TOURNAMENT.clubId).short,
+  course = LIVE_COURSE,
 }: {
   points: number;
   gross: number;
@@ -633,6 +636,12 @@ export function CardReturnedView({
   hidden: boolean;
   /** whose returned card this is; defaults to the demo user */
   me?: string;
+  /** minutes a player may request a correction for, from this event's setup */
+  correctionWindowMin?: number;
+  /** short name of the club whose clubhouse the distance is measured from */
+  clubShort?: string;
+  /** the course being played, for the correction dialog's hole list */
+  course?: Course;
 }) {
   const cert = useSim((s) => s.certifications[me]);
   const record = useSim((s) => {
@@ -662,7 +671,8 @@ export function CardReturnedView({
   }
 
   const certifiedAt = cert?.playerCertifiedAt ?? Date.now();
-  const windowMin = LIVE_TOURNAMENT.correctionWindowMin ?? 15;
+  // the window the club actually configured for this event, not the demo one
+  const windowMin = correctionWindowMin ?? 15;
   const deadline = certifiedAt + windowMin * 60_000;
   const remaining = Math.max(0, deadline - now);
   const windowOpen = windowMin > 0 && remaining > 0;
@@ -703,7 +713,7 @@ export function CardReturnedView({
                   <>
                     <br />
                     Signed {record.distanceFromClubhouseM.toLocaleString()} m
-                    from the {clubById(LIVE_TOURNAMENT.clubId).short} clubhouse
+                    from the {clubShort} clubhouse
                   </>
                 )}
               </>
@@ -756,7 +766,12 @@ export function CardReturnedView({
         See where you finish
       </a>
 
-      <CorrectionDialog open={corrOpen} onOpenChange={setCorrOpen} me={me} />
+      <CorrectionDialog
+        open={corrOpen}
+        onOpenChange={setCorrOpen}
+        me={me}
+        course={course}
+      />
     </motion.div>
   );
 }
@@ -765,10 +780,12 @@ function CorrectionDialog({
   open,
   onOpenChange,
   me = DEMO_USER_ID,
+  course = LIVE_COURSE,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   me?: string;
+  course?: Course;
 }) {
   const scores = useSim((s) => s.scores[me]);
   const [hole, setHole] = useState("1");
@@ -794,7 +811,7 @@ function CorrectionDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {LIVE_COURSE.holes.map((h) => (
+                {course.holes.map((h) => (
                   <SelectItem key={h.hole} value={String(h.hole)}>
                     Hole {h.hole} · currently {scores?.[h.hole - 1] ?? "·"}
                   </SelectItem>
