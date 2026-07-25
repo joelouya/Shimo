@@ -22,7 +22,17 @@ import {
   playerById,
 } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
-import { setDeviceIdentity, setHideLeaderboard, setSignMethod, setTonePref, useSim, type SignMethod } from "@/lib/sim/store";
+import {
+  meId,
+  setAuth,
+  setDeviceIdentity,
+  setHideLeaderboard,
+  setSignMethod,
+  setTonePref,
+  useSim,
+  type SignMethod,
+} from "@/lib/sim/store";
+import { signOut } from "@/lib/sync/auth";
 import { formatDate, initials, ordinal } from "@/lib/utils";
 
 /**
@@ -71,10 +81,12 @@ function HandicapSparkline() {
 
 export default function ProfilePage() {
   const identity = useSim((s) => s.deviceIdentity);
+  const authEmail = useSim((s) => s.authEmail);
+  const myId = useSim(meId);
   const roster = useSim((s) => s.roster);
   const user =
-    IS_PILOT && identity
-      ? (roster.find((p) => p.id === identity) ?? playerById(DEMO_USER_ID))
+    IS_PILOT && myId
+      ? (roster.find((p) => p.id === myId) ?? playerById(DEMO_USER_ID))
       : playerById(DEMO_USER_ID);
   const club = clubById(user.clubId);
   const hidden = useSim((s) => s.hideLeaderboard);
@@ -199,12 +211,32 @@ export default function ProfilePage() {
       <section className="mt-7 pb-4">
         <p className="smallcaps mb-3 text-muted-foreground">Settings</p>
         <div className="overflow-hidden rounded-2xl bg-card shadow-card">
-          {IS_PILOT && identity && (
+          {IS_PILOT && authEmail && (
+            <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5">
+              <div className="min-w-0">
+                <Label className="text-foreground">Signed in</Label>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {authEmail} · {user.name}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await signOut();
+                  setAuth(null, null);
+                }}
+              >
+                Sign out
+              </Button>
+            </div>
+          )}
+          {IS_PILOT && !authEmail && identity && (
             <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5">
               <div>
                 <Label className="text-foreground">This device is you</Label>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {user.name} · your place is highlighted on the board
+                  {user.name} · following as a guest
                 </p>
               </div>
               <Button

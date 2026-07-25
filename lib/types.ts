@@ -5,7 +5,7 @@ export type Format =
   | "Better Ball"
   | "Scramble";
 
-export type TournamentStatus = "upcoming" | "live" | "completed";
+export type TournamentStatus = "upcoming" | "live" | "completed" | "cancelled";
 
 export interface Club {
   id: string;

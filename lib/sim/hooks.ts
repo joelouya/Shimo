@@ -21,13 +21,48 @@ import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
   meId,
+  setAuth,
   useSim,
   type SavedGroup,
 } from "./store";
+import { AUTH_AVAILABLE, getSession, onAuthChange } from "@/lib/sync/auth";
 
 /** The player this device acts as (picked identity in pilot, Joel in demo). */
 export function useMeId(): string {
   return useSim(meId);
+}
+
+/** The Player object for this device's identity, or null if unknown. */
+export function useMe(): Player | null {
+  const id = useSim(meId);
+  const roster = useSim((s) => s.roster);
+  return useMemo(() => {
+    if (!id) return null;
+    if (!IS_PILOT) return playerById(id);
+    return roster.find((p) => p.id === id) ?? null;
+  }, [id, roster]);
+}
+
+/**
+ * Mirror the Supabase auth session into the store, once at the app root, so
+ * meId resolves synchronously everywhere. Reconciles on mount and on every
+ * sign-in / sign-out.
+ */
+export function useAuthReconcile() {
+  useEffect(() => {
+    if (!AUTH_AVAILABLE) return;
+    let active = true;
+    getSession().then((s) => {
+      if (active) setAuth(s?.user?.email ?? null, s?.user?.id ?? null);
+    });
+    const unsub = onAuthChange((s) =>
+      setAuth(s?.user?.email ?? null, s?.user?.id ?? null),
+    );
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, []);
 }
 
 const FIELD_IDS = GROUPS.flatMap((g) => g.playerIds);

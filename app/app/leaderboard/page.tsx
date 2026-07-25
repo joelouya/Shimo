@@ -140,7 +140,7 @@ function ExpandedScorecard({ row }: { row: StandingRow }) {
   const ph = playingHandicap(row.player.handicap, LIVE_TOURNAMENT.handicapAllowance);
 
   const Nine = ({ from }: { from: number }) => (
-    <div className="grid grid-cols-10 gap-y-1 text-center">
+    <div className="grid grid-cols-[3.4rem_repeat(9,minmax(0,1fr))] gap-y-1 text-center">
       <span className="smallcaps text-[8px] text-muted-foreground self-center text-left pl-1">
         {from === 0 ? "Out" : "In"}
       </span>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Plus, Sparkles, Trophy, X } from "lucide-react";
 
@@ -19,7 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { COURSES, clubById, courseById } from "@/lib/data";
 import { IS_PILOT, WIRED_FORMATS } from "@/lib/mode";
-import { createTournament } from "@/lib/sim/store";
+import { createTournament, updateTournament, useSim } from "@/lib/sim/store";
 import type { Format, Tournament } from "@/lib/types";
 import { cn, formatDateLong, formatKES } from "@/lib/utils";
 
@@ -91,6 +91,31 @@ const INITIAL: Draft = {
   ],
 };
 
+/** Rebuild the wizard draft from an existing tournament, for editing. */
+function draftFromTournament(t: Tournament): Draft {
+  const course = courseById(t.courseId);
+  return {
+    name: t.name,
+    date: t.date,
+    courseId: t.courseId,
+    format: t.format,
+    tees: course.tees,
+    membersOnly: t.membersOnly,
+    hcMin: t.minHandicap ?? 0,
+    hcMax: t.maxHandicap ?? 28,
+    gender: t.ladiesOnly ? "ladies" : "open",
+    splitDivisions: t.divisions.length > 1,
+    fee: t.entryFee,
+    maxPlayers: t.maxPlayers,
+    regOpens: INITIAL.regOpens,
+    regCloses: t.regCloses,
+    allowance: t.handicapAllowance,
+    countback: INITIAL.countback,
+    correctionWindowMin: t.correctionWindowMin ?? 15,
+    prizes: t.prizes.map((p) => ({ place: p.place, prize: p.prize })),
+  };
+}
+
 function Field({
   label,
   children,
@@ -109,11 +134,28 @@ function Field({
   );
 }
 
-export default function CreateTournamentPage() {
+function CreateTournamentInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  const created = useSim((s) => s.created);
+  const editing = useMemo(
+    () => (editId ? created.find((t) => t.id === editId) : undefined),
+    [editId, created],
+  );
+
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<Draft>(INITIAL);
   const [publishing, setPublishing] = useState(false);
+  const [loadedEdit, setLoadedEdit] = useState(false);
+
+  // prefill once the tournament being edited is available from the store
+  useEffect(() => {
+    if (editing && !loadedEdit) {
+      setDraft(draftFromTournament(editing));
+      setLoadedEdit(true);
+    }
+  }, [editing, loadedEdit]);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }));
@@ -130,14 +172,14 @@ export default function CreateTournamentPage() {
   const publish = () => {
     setPublishing(true);
     const t: Tournament = {
-      id: `t-custom-${Date.now()}`,
+      id: editing ? editing.id : `t-custom-${Date.now()}`,
       name: draft.name.trim(),
       clubId: club.id,
       courseId: draft.courseId,
       date: draft.date,
       format: draft.format,
       entryFee: draft.fee,
-      status: "upcoming",
+      status: editing ? editing.status : "upcoming",
       membersOnly: draft.membersOnly,
       maxHandicap: draft.hcMax < 28 ? draft.hcMax : undefined,
       minHandicap: draft.hcMin > 0 ? draft.hcMin : undefined,
@@ -161,13 +203,16 @@ export default function CreateTournamentPage() {
       maxPlayers: draft.maxPlayers,
       regCloses: draft.regCloses,
       handicapAllowance: draft.allowance,
-      firstTee: "07:30",
-      teeInterval: 10,
-      fieldSize: 0,
+      firstTee: editing?.firstTee ?? "07:30",
+      teeInterval: editing?.teeInterval ?? 10,
+      fieldSize: editing?.fieldSize ?? 0,
       correctionWindowMin: draft.correctionWindowMin,
+      registered: editing?.registered,
+      result: editing?.result,
     };
     setTimeout(() => {
-      createTournament(t);
+      if (editing) updateTournament(t);
+      else createTournament(t);
       router.push("/admin/tournaments");
     }, 700);
   };
@@ -182,7 +227,9 @@ export default function CreateTournamentPage() {
         Tournaments
       </Link>
       <header className="mt-3">
-        <p className="smallcaps text-clay">New tournament</p>
+        <p className="smallcaps text-clay">
+          {editing ? "Edit tournament" : "New tournament"}
+        </p>
         <h1 className="mt-1 font-serif text-[32px] leading-tight text-foreground">
           {draft.name.trim() || "Untitled tournament"}
         </h1>
@@ -481,7 +528,7 @@ export default function CreateTournamentPage() {
                     <SelectContent>
                       {[0, 5, 15, 30, 60].map((m) => (
                         <SelectItem key={m} value={String(m)}>
-                          {m === 0 ? "Off — cards lock immediately" : `${m} minutes`}
+                          {m === 0 ? "Off · cards lock immediately" : `${m} minutes`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -633,8 +680,9 @@ export default function CreateTournamentPage() {
                 <div className="mt-5 rounded-xl border border-clay/20 bg-clay-wash/50 px-4 py-3.5">
                   <p className="flex items-center gap-2 text-[12.5px] text-clay-deep">
                     <Sparkles className="size-3.5" />
-                    Publishing lists this instantly in the Shimo app for every
-                    golfer in Kenya.
+                    {editing
+                      ? "Saving updates every device that has this tournament, instantly."
+                      : "Publishing lists this instantly in the Shimo app for every golfer in Kenya."}
                   </p>
                 </div>
               </div>
@@ -665,12 +713,26 @@ export default function CreateTournamentPage() {
                 onClick={publish}
                 disabled={publishing || draft.name.trim().length < 3}
               >
-                {publishing ? "Publishing…" : "Publish tournament"}
+                {publishing
+                  ? editing
+                    ? "Saving…"
+                    : "Publishing…"
+                  : editing
+                    ? "Save changes"
+                    : "Publish tournament"}
               </Button>
             )}
           </div>
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function CreateTournamentPage() {
+  return (
+    <Suspense fallback={null}>
+      <CreateTournamentInner />
+    </Suspense>
   );
 }

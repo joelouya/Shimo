@@ -36,7 +36,15 @@ export function supabase(): Promise<SupabaseClient> {
   }
   clientPromise ??= import("@supabase/supabase-js").then(({ createClient }) =>
     createClient(SUPABASE_URL!, SUPABASE_KEY!, {
-      auth: { persistSession: false },
+      auth: {
+        // persist the magic-link session so the phone stays signed in across
+        // reloads and the JWT rides on every request (for authenticated RLS).
+        persistSession: true,
+        autoRefreshToken: true,
+        // we verify a 6-digit code in-app, not a URL redirect
+        detectSessionInUrl: false,
+        storageKey: "shimo-auth",
+      },
       realtime: { params: { eventsPerSecond: 10 } },
     }),
   );

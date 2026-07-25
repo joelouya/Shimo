@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ClipboardList, Flag, Share2 } from "lucide-react";
+import { AlertTriangle, Check, ClipboardList, Flag, Share2, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -20,6 +22,7 @@ import { DEMO_USER_ID, playerById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import { useActiveTournament, useStandings } from "@/lib/sim/hooks";
 import {
+  endTournamentDay,
   reviewFlag,
   useSim,
   type OpsFlag,
@@ -305,9 +308,11 @@ function EventFeed({ byId }: { byId: Map<string, Player> }) {
 /* ------------------------------------------------------------------ */
 
 export default function LiveOpsPage() {
+  const router = useRouter();
   const flags = useSim((s) => s.flags);
   const scores = useSim((s) => s.scores);
   const [reviewing, setReviewing] = useState<OpsFlag | null>(null);
+  const [ending, setEnding] = useState(false);
   const [tab, setTab] = useState("course");
   const openItems = useSim(
     (s) =>
@@ -391,6 +396,12 @@ export default function LiveOpsPage() {
               Enter scores from cards
             </Link>
           </Button>
+          {IS_PILOT && (
+            <Button variant="clay" onClick={() => setEnding(true)}>
+              <Flag className="size-4" />
+              End tournament
+            </Button>
+          )}
         </div>
       </header>
 
@@ -473,6 +484,36 @@ export default function LiveOpsPage() {
               </Button>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ending} onOpenChange={setEnding}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>End {active.tournament.name}?</DialogTitle>
+            <DialogDescription className="leading-relaxed">
+              This freezes the final standings and closes live scoring. You&apos;ll
+              go straight to the prizegiving summary: winners by division, prizes,
+              and the full field. The board stays viewable afterwards.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEnding(false)}>
+              Not yet
+            </Button>
+            <Button
+              variant="clay"
+              onClick={() => {
+                const id = active.tournament.id;
+                endTournamentDay(id);
+                setEnding(false);
+                router.push(`/admin/tournaments/${id}/summary`);
+              }}
+            >
+              <Trophy className="size-4" />
+              End &amp; see results
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

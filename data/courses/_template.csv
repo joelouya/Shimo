@@ -1,0 +1,47 @@
+# Shimo course scorecard — one file per real course.
+# Lines starting with # are ignored. Blank lines are ignored.
+# Fill this in from the club's printed scorecard, then run:
+#     node scripts/import-course.mjs data/courses/<thisfile>.csv
+# and paste the printed object into the COURSES array in lib/data.ts.
+#
+# --- meta -------------------------------------------------------------
+# id         : short unique slug used everywhere (letters, digits, dashes)
+# clubId     : must match a club id in lib/data.ts CLUBS (e.g. muthaiga, karen)
+# name       : full course name as it should read in the app
+# defaultTee : the tee the yards column below is measured from
+meta,id,muthaiga-main
+meta,clubId,muthaiga
+meta,name,Muthaiga Main Course
+meta,defaultTee,Yellow
+
+# --- holes ------------------------------------------------------------
+# One row per hole, 18 rows. si = stroke index (1..18, each used once).
+# yards = length from the defaultTee above.
+hole,par,si,yards
+1,4,7,378
+2,5,15,486
+3,4,3,411
+4,3,17,156
+5,4,1,432
+6,4,11,368
+7,3,13,172
+8,5,9,512
+9,4,5,401
+10,4,8,392
+11,4,2,428
+12,3,16,148
+13,5,12,495
+14,4,4,415
+15,4,10,377
+16,3,18,139
+17,5,14,501
+18,4,6,405
+
+# --- tees -------------------------------------------------------------
+# Course rating and slope per tee, from the club's course-rating certificate.
+# List every tee the club plays; the defaultTee above should appear here too.
+tee,courseRating,slope
+White,73.2,133
+Yellow,71.8,129
+Blue,74.1,136
+Red,69.5,122

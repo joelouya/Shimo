@@ -77,7 +77,7 @@ export function LocationConsentCard() {
           Capture location at sign-off?
         </p>
         <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
-          When you certify your card, Shimo can record where it was signed —
+          When you certify your card, Shimo can record where it was signed. It is
           the digital equivalent of returning the card to the scoring area.
           Only used at that moment.
         </p>
@@ -267,13 +267,13 @@ function DisputeDialog({
           <DialogTitle>
             <span className="flex items-center gap-2">
               <Scale className="size-4 text-amber-flag" />
-              Dispute — needs Committee
+              Dispute · needs Committee
             </span>
           </DialogTitle>
           <DialogDescription>
             If you and your marker can&apos;t agree hole{" "}
-            {holeIdx != null ? holeIdx + 1 : ""}, the card is held — uncertified
-            — and the Committee decides. This is the right thing to do when
+            {holeIdx != null ? holeIdx + 1 : ""}, the card is held uncertified
+            and the Committee decides. This is the right thing to do when
             discussion fails.
           </DialogDescription>
         </DialogHeader>
@@ -461,7 +461,7 @@ export function CertificationCeremony() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {DAVID.name}&apos;s card — as you marked it
+              {DAVID.name}&apos;s card, as you marked it
             </DialogTitle>
             <DialogDescription>
               Check the figures you recorded against {DAVID.name.split(" ")[0]}
@@ -503,10 +503,10 @@ export function CertificationCeremony() {
       <Dialog open={sheet === "B"} onOpenChange={(o) => !o && setSheet(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Your card — attested by your marker</DialogTitle>
+            <DialogTitle>Your card, attested by your marker</DialogTitle>
             <DialogDescription>
               {DAVID.name} has attested these scores. Check every hole, then
-              certify. Certifying returns the card — it locks.
+              certify. Certifying returns the card and locks it.
             </DialogDescription>
           </DialogHeader>
           <ReviewGrid
@@ -602,7 +602,7 @@ export function CardReturnedView({
     return (
       <div className="mt-6 rounded-2xl border border-red-flag/25 bg-red-wash p-6 text-center">
         <p className="font-serif text-xl text-red-flag">
-          Disqualified — Rule 3.3b(3)
+          Disqualified · Rule 3.3b(3)
         </p>
         <p className="mx-auto mt-2 max-w-[280px] text-[14px] text-ink-soft">
           The Committee has ruled on your card. Speak to the tournament desk
@@ -745,7 +745,7 @@ function CorrectionDialog({
               <SelectContent>
                 {LIVE_COURSE.holes.map((h) => (
                   <SelectItem key={h.hole} value={String(h.hole)}>
-                    Hole {h.hole} — currently {scores?.[h.hole - 1] ?? "·"}
+                    Hole {h.hole} · currently {scores?.[h.hole - 1] ?? "·"}
                   </SelectItem>
                 ))}
               </SelectContent>

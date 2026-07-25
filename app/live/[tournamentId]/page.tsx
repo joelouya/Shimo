@@ -241,7 +241,7 @@ export default function PublicLeaderboard({
               </AnimatePresence>
               <span className="text-center text-[12.5px] text-muted-foreground tnum">
                 {r.position === 1 && r.gap === 0
-                  ? "—"
+                  ? "·"
                   : effectiveMode === "points"
                     ? `-${r.gap}`
                     : `+${r.gap}`}

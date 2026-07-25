@@ -15,6 +15,7 @@ import {
 import { Logo } from "@/components/logo";
 import { DemoToggle } from "@/components/demo-toggle";
 import { NotificationToasts } from "@/components/notification-toasts";
+import { OnboardingGate } from "@/components/golfer/onboarding";
 import { useGolferRouteMemory } from "@/components/pwa";
 import { SimGate } from "@/components/sim-gate";
 import { IS_PILOT } from "@/lib/mode";
@@ -119,10 +120,12 @@ export default function GolferLayout({
       <AnimatePresence>{splash && <Splash />}</AnimatePresence>
       <div className="relative mx-auto min-h-dvh w-full max-w-[430px] bg-background sm:border-x sm:border-border/60">
         <SimGate>
-          <NotificationToasts />
-          <main className="pb-28">{children}</main>
-          <BottomNav />
-          {!IS_PILOT && <DemoToggle corner="phone" />}
+          <OnboardingGate>
+            <NotificationToasts />
+            <main className="pb-28">{children}</main>
+            <BottomNav />
+            {!IS_PILOT && <DemoToggle corner="phone" />}
+          </OnboardingGate>
         </SimGate>
       </div>
     </div>

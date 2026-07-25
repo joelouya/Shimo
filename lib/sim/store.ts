@@ -270,6 +270,13 @@ export interface SimState {
   locationConsent: "unset" | "granted" | "declined";
   /** which player this device is (pilot); null until picked */
   deviceIdentity: string | null;
+  /* ---- auth & onboarding (v8 / M2) ---- */
+  /** signed-in email (magic link); null when signed out */
+  authEmail: string | null;
+  /** Supabase auth user id; null when signed out */
+  authUserId: string | null;
+  /** first-run onboarding completed or skipped on this device */
+  onboarded: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -381,6 +388,9 @@ export function buildInitialState(): SimState {
     tonePref: "editorial",
     locationConsent: "unset",
     deviceIdentity: readIdentity(),
+    authEmail: null,
+    authUserId: null,
+    onboarded: false,
   };
   if (!IS_PILOT) state.lastUserPos = userPosition(state);
   return state;
@@ -1322,9 +1332,35 @@ export function setDeviceIdentity(playerId: string | null) {
   });
 }
 
-/** The player this device acts as: the picked identity in pilot, Joel in demo. */
+/** Sign-in landed: remember who this device is, by the roster email match. */
+export function setAuth(email: string | null, userId: string | null) {
+  mutate((d) => {
+    d.authEmail = email ? email.trim().toLowerCase() : null;
+    d.authUserId = userId;
+  });
+}
+
+export function setOnboarded(v: boolean) {
+  mutate((d) => {
+    d.onboarded = v;
+  });
+}
+
+/** Roster player matched to the signed-in email, if any. */
+export function authedPlayerId(s: SimState): string | null {
+  if (!s.authEmail) return null;
+  const email = s.authEmail.toLowerCase();
+  return s.roster.find((p) => (p.email ?? "").toLowerCase() === email)?.id ?? null;
+}
+
+/**
+ * The player this device acts as. Demo: always Joel. Pilot: the signed-in
+ * player (email → roster match); falls back to the manually-picked identity
+ * so the caddymaster/follow-only path still works without an account.
+ */
 export function meId(s: SimState): string {
-  return IS_PILOT ? (s.deviceIdentity ?? "") : DEMO_USER_ID;
+  if (!IS_PILOT) return DEMO_USER_ID;
+  return authedPlayerId(s) ?? s.deviceIdentity ?? "";
 }
 
 export function registerForTournament(id: string) {
@@ -1344,6 +1380,84 @@ export function registerForTournament(id: string) {
 export function createTournament(t: Tournament) {
   mutate((draft) => {
     draft.created.unshift(t);
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+}
+
+/** Edit a created tournament that hasn't started yet. Re-publishes the row. */
+export function updateTournament(t: Tournament) {
+  mutate((draft) => {
+    const i = draft.created.findIndex((x) => x.id === t.id);
+    if (i >= 0) draft.created[i] = t;
+    else draft.created.unshift(t);
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+}
+
+/**
+ * Remove a created tournament before it has started (a mistake, a cancelled
+ * event). Anon can't DELETE rows, so we mark it `cancelled` in the cloud —
+ * every device that holds it drops it — and remove it locally.
+ */
+export function deleteTournament(id: string) {
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === id);
+    if (t) {
+      enqueueEntity(
+        draft,
+        "tournaments",
+        { ...tournamentToRow(t), status: "cancelled" },
+        { conflict: "id" },
+      );
+    }
+    draft.created = draft.created.filter((x) => x.id !== id);
+    delete draft.pairings[id];
+    if (draft.liveTournamentId === id) draft.liveTournamentId = null;
+  });
+}
+
+/**
+ * Close a live tournament: freeze the final standings into `result` (winner +
+ * this device's finish, for the prizegiving summary and the app's history),
+ * flip the status to `completed`, and stand the live board down. The full
+ * final board stays recomputable from the synced scores on any device.
+ */
+export function endTournamentDay(id: string) {
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === id);
+    if (!t) return;
+    const groups = draft.pairings[id] ?? [];
+    const fieldIds = groups.flatMap((g) => g.playerIds);
+    const players = fieldIds
+      .map((pid) => draft.roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid))
+      .filter((p): p is Player => !!p);
+    const course = COURSES.find((c) => c.id === t.courseId);
+    const mode = t.format === "Stableford" ? "points" : "net";
+    if (course && players.length) {
+      const toParStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
+      const standings = computeStandings(
+        players,
+        draft.scores,
+        course,
+        t.handicapAllowance,
+        mode,
+      );
+      const win = standings[0];
+      const me = meId(draft);
+      const meRow = standings.find((r) => r.player.id === me);
+      const fmt = (r: (typeof standings)[number]) =>
+        mode === "points" ? `${r.points} pts` : toParStr(r.netToPar);
+      if (win) {
+        t.result = {
+          winner: win.player.name,
+          score: fmt(win),
+          userPosition: meRow?.position,
+          userScore: meRow ? fmt(meRow) : undefined,
+        };
+      }
+    }
+    t.status = "completed";
+    draft.liveTournamentId = null;
     enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
   });
 }
@@ -1518,10 +1632,19 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
     switch (table) {
       case "tournaments": {
         const t = rowToTournament(row);
+        if (t.status === "cancelled") {
+          // deleted elsewhere before it started — drop it everywhere
+          draft.created = draft.created.filter((x) => x.id !== t.id);
+          delete draft.pairings[t.id];
+          if (draft.liveTournamentId === t.id) draft.liveTournamentId = null;
+          break;
+        }
         const i = draft.created.findIndex((x) => x.id === t.id);
         if (i >= 0) draft.created[i] = t;
         else draft.created.unshift(t);
         if (t.status === "live") draft.liveTournamentId = t.id;
+        // ended elsewhere: stand the live board down on this device too
+        else if (draft.liveTournamentId === t.id) draft.liveTournamentId = null;
         break;
       }
       case "pairings": {

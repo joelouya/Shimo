@@ -101,7 +101,7 @@ function CommitteeGate({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
-        <Label>Committee reason — recorded in the audit trail</Label>
+        <Label>Committee reason, recorded in the audit trail</Label>
         <Input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -201,7 +201,7 @@ function DisputeCard({ d, name }: { d: Dispute; name: string }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Resolve dispute — {name}, hole {d.holeIdx + 1}</DialogTitle>
+            <DialogTitle>Resolve dispute · {name}, hole {d.holeIdx + 1}</DialogTitle>
             <DialogDescription>
               The Committee&apos;s decision is final and appends to the audit
               trail. The original entries are never overwritten.
@@ -302,7 +302,7 @@ function CorrectionCard({ c, name }: { c: CorrectionRequest; name: string }) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Correction — {name}, hole {c.holeIdx + 1}
+              Correction · {name}, hole {c.holeIdx + 1}
             </DialogTitle>
             <DialogDescription>
               Requested inside the correction window. Approving changes the
@@ -470,8 +470,8 @@ export function CertificationPanel() {
       <p className="mt-4 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
         <ShieldCheck className="size-3.5" />
         Every certification is sealed with a SHA-256 hash, UTC timestamp,
-        device fingerprint, and sign-off location. Committee actions append —
-        the originals are never overwritten.
+        device fingerprint, and sign-off location. Committee actions only ever
+        append, so the originals are never overwritten.
       </p>
     </div>
   );
