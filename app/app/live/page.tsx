@@ -29,20 +29,32 @@ import {
   HandicapChain,
   LocationConsentCard,
 } from "@/components/golfer/certification";
-import { DEMO_USER_ID, MARKER_ID, playerById } from "@/lib/data";
+import { DEMO_USER_ID, MARKER_ID, courseById, playerById } from "@/lib/data";
 import { stablefordPoints, strokesReceived, handicapSet } from "@/lib/scoring";
-import { useActiveTournament, useUserLive, playerStats } from "@/lib/sim/hooks";
+import {
+  useActiveTournament,
+  useMeId,
+  useUserLive,
+  playerStats,
+} from "@/lib/sim/hooks";
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
   enterMarkerScore,
+  enterMarkerScoreFor,
   enterOwnScore,
+  enterOwnScorePilot,
+  markedByMe,
+  markerOf,
   resolveDiscrepancy,
   setHideLeaderboard,
   useSim,
 } from "@/lib/sim/store";
 import { IS_PILOT } from "@/lib/mode";
 import { cn, ordinal, toPar } from "@/lib/utils";
+
+/** Shared empty card so a missing entry never allocates on every render. */
+const EMPTY_CARD: (number | null)[] = Array(18).fill(null);
 
 const JOE = playerById(DEMO_USER_ID);
 const DAVID = playerById(MARKER_ID);
@@ -137,9 +149,21 @@ export default function LiveScoringPage() {
   return <DemoLiveScoring />;
 }
 
-/** Pilot tier 1: rounds are scored at the club desk, the phone follows. */
+/**
+ * Pilot Live tab. If this device belongs to a player in today's field, they
+ * score their own ball and mark one playing partner, exactly as on paper. If
+ * not (a spectator, or the club running the desk), it stays a follow-only view.
+ */
 function PilotLiveTab() {
   const active = useActiveTournament();
+  const me = useMeId();
+
+  const myGroup = active?.groups.find((g) => g.playerIds.includes(me));
+
+  if (active && me && myGroup) {
+    return <PilotScoring />;
+  }
+
   return (
     <div className="px-5 pt-5">
       <header className="flex items-center gap-2">
@@ -153,8 +177,9 @@ function PilotLiveTab() {
               {active.tournament.name}
             </h1>
             <p className="mt-3 text-[15px] leading-relaxed text-primary-foreground/70">
-              Hand your card in at the desk as you finish. Scores go up on the
-              board the moment they&apos;re entered.
+              {me
+                ? "You're not in today's field. Follow the board as the cards come in."
+                : "Sign in from Profile to score your own card. Until then, follow the board live."}
             </p>
           </div>
           <Link
@@ -173,9 +198,254 @@ function PilotLiveTab() {
           </p>
         </div>
       )}
-      <p className="mt-6 text-center text-[13px] leading-relaxed text-muted-foreground">
-        Scoring your own round from the phone arrives later in the pilot.
-      </p>
+    </div>
+  );
+}
+
+/**
+ * Real dual entry for the signed-in player: their own ball on top, the partner
+ * they mark below. Both land locally the instant they're tapped and sync as
+ * separate figures, so a disagreement survives to the attestation step instead
+ * of one phone quietly overwriting the other.
+ */
+function PilotScoring() {
+  const active = useActiveTournament()!;
+  const me = useMeId();
+  const scores = useSim((s) => s.scores);
+  const markerScores = useSim((s) => s.markerScores);
+  const certs = useSim((s) => s.certifications);
+  const hidden = useSim((s) => s.hideLeaderboard);
+
+  const tournament = active.tournament;
+  const course = courseById(tournament.courseId);
+  const group = active.groups.find((g) => g.playerIds.includes(me));
+  const marksId = markedByMe(group, me);
+  const markedById = markerOf(group, me);
+
+  const byId = useMemo(
+    () => new Map(active.players.map((p) => [p.id, p] as const)),
+    [active.players],
+  );
+  const mePlayer = byId.get(me);
+  const marksPlayer = marksId ? byId.get(marksId) : undefined;
+
+  const myCard = scores[me] ?? EMPTY_CARD;
+  const myMarkerView = markerScores[me] ?? EMPTY_CARD; // what my marker has for me
+  const theirCard = marksId ? (markerScores[marksId] ?? EMPTY_CARD) : EMPTY_CARD;
+  const theirOwn = marksId ? (scores[marksId] ?? EMPTY_CARD) : EMPTY_CARD;
+
+  // first hole still needing an entry on this phone
+  const currentIdx = useMemo(() => {
+    const a = myCard.findIndex((x) => x == null);
+    const b = marksId ? theirCard.findIndex((x) => x == null) : -1;
+    if (a === -1 && b === -1) return 18;
+    return Math.min(a === -1 ? 18 : a, b === -1 ? 18 : b);
+  }, [myCard, theirCard, marksId]);
+
+  const [pinned, setPinned] = useState<number | null>(null);
+  const selected = pinned ?? Math.min(currentIdx, 17);
+  const hole = course.holes[selected];
+
+  const myPh = handicapSet(
+    mePlayer?.handicap ?? 0,
+    course,
+    tournament.handicapAllowance,
+  ).ph;
+  const theirPh = handicapSet(
+    marksPlayer?.handicap ?? 0,
+    course,
+    tournament.handicapAllowance,
+  ).ph;
+
+  const myStats = playerStats(scores, me, course, tournament.handicapAllowance);
+  const roundComplete = currentIdx === 18;
+  const myCert = certs[me];
+  // the card is back with the committee once certified (or a DQ was recorded)
+  const returned = myCert?.stage === "certified" || myCert?.stage === "dq";
+
+  if (!mePlayer || !group) return null;
+
+  return (
+    <div className="px-5 pt-5">
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <LiveBadge />
+            <p className="smallcaps truncate text-muted-foreground">
+              Group {group.number} · Tee {group.teeTime}
+            </p>
+          </div>
+          <h1 className="mt-2 font-serif text-[24px] leading-tight text-foreground">
+            {tournament.name}
+          </h1>
+          <HandicapChain
+            playerId={me}
+            course={course}
+            allowance={tournament.handicapAllowance}
+          />
+        </div>
+        <button
+          onClick={() => setHideLeaderboard(!hidden)}
+          className={cn(
+            "mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors cursor-pointer",
+            hidden
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-card text-muted-foreground hover:text-foreground",
+          )}
+          title={hidden ? "Show leaderboard" : "Hide leaderboard (play blind)"}
+        >
+          {hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      </header>
+
+      <SyncStrip className="mt-3" />
+      {!returned && !roundComplete && <LocationConsentCard />}
+
+      {returned ? (
+        <CardReturnedView
+          me={me}
+          points={myStats.points}
+          gross={myStats.grossTotal}
+          netToPar={myStats.netToPar}
+          position="on the board"
+          hidden={hidden}
+        />
+      ) : (
+        <>
+          {/* hole navigator */}
+          <div className="no-scrollbar -mx-5 mt-5 flex gap-1.5 overflow-x-auto px-5 pb-1">
+            {course.holes.map((h, i) => {
+              const entered = myCard[i] != null;
+              const isCur = i === Math.min(currentIdx, 17) && pinned == null;
+              const isSel = i === selected;
+              return (
+                <button
+                  key={h.hole}
+                  onClick={() => setPinned(i === Math.min(currentIdx, 17) ? null : i)}
+                  className={cn(
+                    "flex size-11 shrink-0 flex-col items-center justify-center rounded-full border text-[14px] font-medium tnum transition-all cursor-pointer",
+                    isSel
+                      ? "border-clay bg-clay text-white"
+                      : entered
+                        ? "border-transparent bg-secondary text-ink-soft"
+                        : "border-border bg-card text-muted-foreground",
+                    isCur && !isSel && "border-clay/50",
+                  )}
+                >
+                  {entered && !isSel ? myCard[i] : h.hole}
+                </button>
+              );
+            })}
+          </div>
+
+          {roundComplete ? (
+            <CertificationCeremony
+              me={me}
+              marks={marksId ?? me}
+              markedBy={markedById ?? me}
+              course={course}
+            />
+          ) : (
+            <>
+              {/* hole header */}
+              <div className="mt-5 flex items-end justify-between">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-serif text-[40px] leading-none text-foreground tnum">
+                    {hole.hole}
+                  </span>
+                  <span className="smallcaps text-muted-foreground">Hole</span>
+                </div>
+                <div className="flex gap-4 pb-1 text-right">
+                  {[
+                    { l: "Par", v: hole.par },
+                    { l: "SI", v: hole.si },
+                    { l: "Yards", v: hole.yards },
+                  ].map((x) => (
+                    <div key={x.l}>
+                      <p className="font-serif text-[17px] leading-none text-foreground tnum">
+                        {x.v}
+                      </p>
+                      <p className="smallcaps mt-1 text-[9px] text-muted-foreground">
+                        {x.l}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3">
+                <PlayerEntry
+                  title="Your ball"
+                  name={mePlayer.name}
+                  ph={myPh}
+                  strokes={strokesReceived(myPh, hole.si)}
+                  gross={myCard[selected]}
+                  par={hole.par}
+                  status={
+                    myCard[selected] == null
+                      ? null
+                      : myMarkerView[selected] == null
+                        ? "syncing"
+                        : myMarkerView[selected] === myCard[selected]
+                          ? "confirmed"
+                          : "differs"
+                  }
+                  markerName={
+                    markedById
+                      ? (byId.get(markedById)?.name.split(" ")[0] ?? "your marker")
+                      : "your marker"
+                  }
+                  onPick={(g) => enterOwnScorePilot(selected, g)}
+                />
+                {marksId && marksPlayer ? (
+                  <PlayerEntry
+                    title="You mark"
+                    name={marksPlayer.name}
+                    ph={theirPh}
+                    strokes={strokesReceived(theirPh, hole.si)}
+                    gross={theirCard[selected]}
+                    par={hole.par}
+                    status={
+                      theirCard[selected] == null
+                        ? null
+                        : theirOwn[selected] == null
+                          ? "syncing"
+                          : theirOwn[selected] === theirCard[selected]
+                            ? "confirmed"
+                            : "differs"
+                    }
+                    markerName="their phone"
+                    onPick={(g) => enterMarkerScoreFor(marksId, selected, g)}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-center">
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                      You&apos;re playing alone in this group, so there&apos;s no
+                      card to mark. The desk will attest yours.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* running totals */}
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            {[
+              { l: "Points", v: myStats.points },
+              { l: "Gross", v: myStats.grossTotal },
+              { l: "Net", v: toPar(myStats.netToPar) },
+            ].map((s) => (
+              <div key={s.l} className="rounded-xl bg-card py-3 text-center shadow-card">
+                <p className="font-serif text-xl text-foreground tnum">{s.v}</p>
+                <p className="smallcaps text-[9px] text-muted-foreground">
+                  {s.l} · thru {myStats.thru}
+                </p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

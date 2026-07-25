@@ -33,8 +33,11 @@ export interface ScoreRow {
   player_id: string;
   hole: number; // 0-based
   gross: number | null;
+  /** player | marker | desk — see schema-m2.sql */
   source: string;
   client_id: string;
+  /** set by the server; used to replay writes in order on hydration */
+  updated_at?: string;
 }
 
 /** Everything a joining device needs to reconstruct a live tournament. */
@@ -60,23 +63,26 @@ async function pushOps(sb: SupabaseClient, ops: SyncOp[], tournamentId: string) 
   // scores (and resolved-discrepancy score changes)
   const scoreOps = ops.filter((o) => o.kind === "score" || o.kind === "resolve");
   if (scoreOps.length) {
-    // de-dupe to the latest write per cell within this batch
+    // De-dupe to the latest write per cell within this batch. The key includes
+    // the source: a player's own entry and their marker's entry for the same
+    // hole are two different figures and must both survive (see schema-m2.sql).
     const byCell = new Map<string, ScoreRow & { updated_at: string }>();
     for (const o of scoreOps) {
-      const key = `${o.payload.playerId}:${o.payload.hole}`;
+      const source = String(o.payload.source ?? "app");
+      const key = `${o.payload.playerId}:${o.payload.hole}:${source}`;
       byCell.set(key, {
         tournament_id: tournamentId,
         player_id: String(o.payload.playerId),
         hole: Number(o.payload.hole),
         gross: (o.payload.gross ?? null) as number | null,
-        source: String(o.payload.source ?? "app"),
+        source,
         client_id: CLIENT_ID,
         updated_at: new Date(o.ts).toISOString(),
       });
     }
-    const { error } = await sb
-      .from("scores")
-      .upsert([...byCell.values()], { onConflict: "tournament_id,player_id,hole" });
+    const { error } = await sb.from("scores").upsert([...byCell.values()], {
+      onConflict: "tournament_id,player_id,hole,source",
+    });
     if (error) throw error;
   }
 

@@ -44,7 +44,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SignatureCapture } from "@/components/signature";
-import { DEMO_USER_ID, MARKER_ID, clubById, playerById } from "@/lib/data";
+import {
+  DEMO_USER_ID,
+  MARKER_ID,
+  PLAYERS,
+  clubById,
+  playerById,
+} from "@/lib/data";
 import { getGpsFix } from "@/lib/integrity";
 import { handicapSet } from "@/lib/scoring";
 import {
@@ -58,9 +64,8 @@ import {
   setLocationConsent,
   useSim,
 } from "@/lib/sim/store";
+import type { Course } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
-
-const DAVID = playerById(MARKER_ID);
 
 /* ------------------------------------------------------------------ */
 /* Location consent — asked early in the round, never at sign-off      */
@@ -108,17 +113,29 @@ export function LocationConsentCard() {
 /* HI · CH · PH transparency line                                      */
 /* ------------------------------------------------------------------ */
 
-export function HandicapChain({ playerId }: { playerId: string }) {
+export function HandicapChain({
+  playerId,
+  course: courseProp,
+  allowance,
+}: {
+  playerId: string;
+  /** the course being played; defaults to the demo course */
+  course?: Course;
+  /** handicap allowance in percent; defaults to the demo tournament's */
+  allowance?: number;
+}) {
   const [open, setOpen] = useState(false);
-  const player = playerById(playerId);
-  const course = LIVE_COURSE;
+  const roster = useSim((s) => s.roster);
+  // roster first, so a member imported from the club CSV resolves too
+  const player =
+    roster.find((p) => p.id === playerId) ??
+    PLAYERS.find((p) => p.id === playerId);
+  const course = courseProp ?? LIVE_COURSE;
+  const pct = allowance ?? LIVE_TOURNAMENT.handicapAllowance;
   const rating =
     course.ratings.find((r) => r.tee === course.tees) ?? course.ratings[0];
-  const { hi, ch, ph } = handicapSet(
-    player.handicap,
-    course,
-    LIVE_TOURNAMENT.handicapAllowance,
-  );
+  const { hi, ch, ph } = handicapSet(player?.handicap ?? 0, course, pct);
+  if (!player) return null;
   return (
     <>
       <button
@@ -153,7 +170,7 @@ export function HandicapChain({ playerId }: { playerId: string }) {
                 Playing Handicap
               </p>
               <p className="mt-1">
-                {ch} × {LIVE_TOURNAMENT.handicapAllowance}% ={" "}
+                {ch} × {pct}% ={" "}
                 <span className="font-medium">{ph}</span>
               </p>
             </div>
@@ -180,6 +197,7 @@ function ReviewGrid({
   discrepancies,
   onAgree,
   onDispute,
+  course = LIVE_COURSE,
 }: {
   ownScores: (number | null)[];
   markerScores: (number | null)[];
@@ -188,6 +206,7 @@ function ReviewGrid({
   discrepancies: number[];
   onAgree: (holeIdx: number, value: number) => void;
   onDispute: (holeIdx: number) => void;
+  course?: Course;
 }) {
   return (
     <div className="max-h-[300px] overflow-y-auto rounded-xl border border-border/70">
@@ -201,7 +220,7 @@ function ReviewGrid({
           </tr>
         </thead>
         <tbody>
-          {LIVE_COURSE.holes.map((h, i) => {
+          {course.holes.map((h, i) => {
             const isDisc = discrepancies.includes(i);
             return (
               <tr
@@ -253,10 +272,12 @@ function DisputeDialog({
   playerId,
   holeIdx,
   onClose,
+  raisedBy = DEMO_USER_ID,
 }: {
   playerId: string;
   holeIdx: number | null;
   onClose: () => void;
+  raisedBy?: string;
 }) {
   const [reason, setReason] = useState("");
   useEffect(() => setReason(""), [holeIdx]);
@@ -290,7 +311,7 @@ function DisputeDialog({
           disabled={reason.trim().length < 8}
           onClick={() => {
             if (holeIdx != null) {
-              raiseDispute(playerId, holeIdx, reason.trim(), DEMO_USER_ID);
+              raiseDispute(playerId, holeIdx, reason.trim(), raisedBy);
             }
             onClose();
           }}
@@ -306,18 +327,43 @@ function DisputeDialog({
 /* The ceremony                                                        */
 /* ------------------------------------------------------------------ */
 
-export function CertificationCeremony() {
+export function CertificationCeremony({
+  me = DEMO_USER_ID,
+  marks = MARKER_ID,
+  markedBy = MARKER_ID,
+  course = LIVE_COURSE,
+}: {
+  /** the player using this device */
+  me?: string;
+  /** the player this device's user marks (whose card they attest) */
+  marks?: string;
+  /** the player who marks this device's user (who attests their card) */
+  markedBy?: string;
+  /** the course being played */
+  course?: Course;
+} = {}) {
   const scores = useSim((s) => s.scores);
   const markerScores = useSim((s) => s.markerScores);
   const certs = useSim((s) => s.certifications);
+  const roster = useSim((s) => s.roster);
+  // resolve names from the roster first so pilot players work, falling back to
+  // the seeded field for demo mode
+  const nameOf = (id: string) =>
+    roster.find((p) => p.id === id)?.name ??
+    PLAYERS.find((p) => p.id === id)?.name ??
+    "your partner";
+  const marksName = nameOf(marks);
+  const markedByName = nameOf(markedBy);
+  const marksFirst = marksName.split(" ")[0];
+  const markedByFirst = markedByName.split(" ")[0];
   const [sheet, setSheet] = useState<null | "A" | "B">(null);
   const [dispute, setDispute] = useState<{ pid: string; hole: number } | null>(
     null,
   );
   const [certifying, setCertifying] = useState(false);
 
-  const davidCert = certs[MARKER_ID];
-  const joeCert = certs[DEMO_USER_ID];
+  const davidCert = certs[marks];
+  const joeCert = certs[me];
 
   const stageADone = Boolean(davidCert?.markerAttestedAt);
   const stageBReady = joeCert?.stage === "awaiting-player";
@@ -325,30 +371,30 @@ export function CertificationCeremony() {
   // discrepancies on David's card (Joel's record vs David's own)
   const davidDisc = useMemo(
     () =>
-      (scores[MARKER_ID] ?? [])
+      (scores[marks] ?? [])
         .map((own, i) =>
           own != null &&
-          markerScores[MARKER_ID]?.[i] != null &&
-          markerScores[MARKER_ID][i] !== own
+          markerScores[marks]?.[i] != null &&
+          markerScores[marks][i] !== own
             ? i
             : -1,
         )
         .filter((i) => i >= 0),
-    [scores, markerScores],
+    [scores, markerScores, marks],
   );
   // discrepancies on Joel's own card
   const joeDisc = useMemo(
     () =>
-      (scores[DEMO_USER_ID] ?? [])
+      (scores[me] ?? [])
         .map((own, i) =>
           own != null &&
-          markerScores[DEMO_USER_ID]?.[i] != null &&
-          markerScores[DEMO_USER_ID][i] !== own
+          markerScores[me]?.[i] != null &&
+          markerScores[me][i] !== own
             ? i
             : -1,
         )
         .filter((i) => i >= 0),
-    [scores, markerScores],
+    [scores, markerScores, me],
   );
 
   if (joeCert?.stage === "disputed" || joeCert?.stage === "committee-review") {
@@ -401,10 +447,10 @@ export function CertificationCeremony() {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-medium text-foreground">
-            Attest {DAVID.name.split(" ")[0]}&apos;s card
+            Attest {marksFirst}&apos;s card
           </span>
           <span className="block text-[13px] text-muted-foreground">
-            You are his marker
+            You are their marker
             {davidDisc.length > 0 && !stageADone && (
               <span className="ml-1.5 text-amber-flag">
                 · {davidDisc.length} hole{davidDisc.length > 1 ? "s" : ""} to
@@ -442,11 +488,11 @@ export function CertificationCeremony() {
           </span>
           <span className="block text-[13px] text-muted-foreground">
             {stageBReady ? (
-              `${DAVID.name.split(" ")[0]} has attested your scores`
+              `${markedByFirst} has attested your scores`
             ) : stageADone ? (
               <span className="inline-flex items-center gap-1.5">
                 <Loader2 className="size-3 animate-spin" />
-                Waiting for {DAVID.name.split(" ")[0]} to attest your card…
+                Waiting for {markedByFirst} to attest your card…
               </span>
             ) : (
               "Unlocks after Stage A"
@@ -461,31 +507,31 @@ export function CertificationCeremony() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {DAVID.name}&apos;s card, as you marked it
+              {marksName}&apos;s card, as you marked it
             </DialogTitle>
             <DialogDescription>
-              Check the figures you recorded against {DAVID.name.split(" ")[0]}
-              &apos;s own. Any difference must be agreed between you before you
-              attest.
+              Check the figures you recorded against {marksFirst}&apos;s own.
+              Any difference must be agreed between you before you attest.
             </DialogDescription>
           </DialogHeader>
           <ReviewGrid
-            ownScores={scores[MARKER_ID] ?? []}
-            markerScores={markerScores[MARKER_ID] ?? []}
+            ownScores={scores[marks] ?? []}
+            markerScores={markerScores[marks] ?? []}
             ownLabel="His entry"
             markerLabel="Your record"
             discrepancies={davidDisc}
-            onAgree={(i, v) => resolveDiscrepancy(MARKER_ID, i, v)}
+            onAgree={(i, v) => resolveDiscrepancy(marks, i, v)}
             onDispute={(i) => {
               setSheet(null);
-              setDispute({ pid: MARKER_ID, hole: i });
+              setDispute({ pid: marks, hole: i });
             }}
+            course={course}
           />
           {davidDisc.length === 0 ? (
             <SignatureCapture
               actionLabel="attest as marker"
               onSign={(artifact) => {
-                markerAttest(MARKER_ID, DEMO_USER_ID, artifact);
+                markerAttest(marks, me, artifact);
                 setSheet(null);
               }}
             />
@@ -493,7 +539,7 @@ export function CertificationCeremony() {
             <p className="flex items-center gap-2 rounded-xl bg-amber-wash px-4 py-3 text-[13px] text-amber-flag">
               <AlertTriangle className="size-4 shrink-0" />
               Agree the highlighted hole{davidDisc.length > 1 ? "s" : ""} with{" "}
-              {DAVID.name.split(" ")[0]} before attesting.
+              {marksFirst} before attesting.
             </p>
           )}
         </DialogContent>
@@ -505,21 +551,22 @@ export function CertificationCeremony() {
           <DialogHeader>
             <DialogTitle>Your card, attested by your marker</DialogTitle>
             <DialogDescription>
-              {DAVID.name} has attested these scores. Check every hole, then
+              {markedByName} has attested these scores. Check every hole, then
               certify. Certifying returns the card and locks it.
             </DialogDescription>
           </DialogHeader>
           <ReviewGrid
-            ownScores={scores[DEMO_USER_ID] ?? []}
-            markerScores={markerScores[DEMO_USER_ID] ?? []}
+            ownScores={scores[me] ?? []}
+            markerScores={markerScores[me] ?? []}
             ownLabel="Your entry"
             markerLabel="Marker"
             discrepancies={joeDisc}
-            onAgree={(i, v) => resolveDiscrepancy(DEMO_USER_ID, i, v)}
+            onAgree={(i, v) => resolveDiscrepancy(me, i, v)}
             onDispute={(i) => {
               setSheet(null);
-              setDispute({ pid: DEMO_USER_ID, hole: i });
+              setDispute({ pid: me, hole: i });
             }}
+            course={course}
           />
           {joeDisc.length === 0 ? (
             certifying ? (
@@ -532,7 +579,7 @@ export function CertificationCeremony() {
                 actionLabel="certify your card"
                 onSign={async (artifact) => {
                   setCertifying(true);
-                  await playerCertify(DEMO_USER_ID, artifact);
+                  await playerCertify(me, artifact);
                   setCertifying(false);
                   setSheet(null);
                 }}
@@ -549,9 +596,10 @@ export function CertificationCeremony() {
       </Dialog>
 
       <DisputeDialog
-        playerId={dispute?.pid ?? DEMO_USER_ID}
+        playerId={dispute?.pid ?? me}
         holeIdx={dispute?.hole ?? null}
         onClose={() => setDispute(null)}
+        raisedBy={me}
       />
     </div>
   );
@@ -576,25 +624,26 @@ export function CardReturnedView({
   netToPar,
   position,
   hidden,
+  me = DEMO_USER_ID,
 }: {
   points: number;
   gross: number;
   netToPar: number;
   position: string;
   hidden: boolean;
+  /** whose returned card this is; defaults to the demo user */
+  me?: string;
 }) {
-  const cert = useSim((s) => s.certifications[DEMO_USER_ID]);
+  const cert = useSim((s) => s.certifications[me]);
   const record = useSim((s) => {
     for (let i = s.auditLog.length - 1; i >= 0; i--) {
       const r = s.auditLog[i];
-      if (r.kind === "card-returned" && r.playerId === DEMO_USER_ID) return r;
+      if (r.kind === "card-returned" && r.playerId === me) return r;
     }
     return undefined;
   });
   const allCorrections = useSim((s) => s.corrections);
-  const corrections = allCorrections.filter(
-    (c) => c.playerId === DEMO_USER_ID,
-  );
+  const corrections = allCorrections.filter((c) => c.playerId === me);
   const now = useNow(1000);
   const [corrOpen, setCorrOpen] = useState(false);
 
@@ -707,7 +756,7 @@ export function CardReturnedView({
         See where you finish
       </a>
 
-      <CorrectionDialog open={corrOpen} onOpenChange={setCorrOpen} />
+      <CorrectionDialog open={corrOpen} onOpenChange={setCorrOpen} me={me} />
     </motion.div>
   );
 }
@@ -715,11 +764,13 @@ export function CardReturnedView({
 function CorrectionDialog({
   open,
   onOpenChange,
+  me = DEMO_USER_ID,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  me?: string;
 }) {
-  const scores = useSim((s) => s.scores[DEMO_USER_ID]);
+  const scores = useSim((s) => s.scores[me]);
   const [hole, setHole] = useState("1");
   const [score, setScore] = useState("");
   const [why, setWhy] = useState("");
@@ -776,7 +827,7 @@ function CorrectionDialog({
           disabled={!score || why.trim().length < 8}
           onClick={() => {
             requestCorrection(
-              DEMO_USER_ID,
+              me,
               holeIdx,
               parseInt(score, 10),
               why.trim(),

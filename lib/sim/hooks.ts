@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  COURSES,
   DEMO_USER_ID,
   GROUPS,
   PLAYERS,
@@ -16,12 +17,13 @@ import {
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
-import type { Player, Tournament } from "@/lib/types";
+import type { Course, Player, Tournament } from "@/lib/types";
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
   meId,
   setAuth,
+  simStore,
   useSim,
   type SavedGroup,
 } from "./store";
@@ -123,10 +125,14 @@ export function useStandings(mode: ViewMode, division?: string): StandingRow[] {
           divisionFor(p.handicap, active.tournament.divisions) === division,
       );
     }
+    // the tournament's own course, not the demo one: par and stroke index
+    // drive every point, so this must follow the event being played
+    const course =
+      COURSES.find((c) => c.id === active.tournament.courseId) ?? LIVE_COURSE;
     return computeStandings(
       players,
       scores,
-      LIVE_COURSE,
+      course,
       active.tournament.handicapAllowance,
       mode,
     );
@@ -165,13 +171,23 @@ export function groupCurrentHole(
 export function playerStats(
   scores: Record<string, (number | null)[]>,
   playerId: string,
+  course: Course = LIVE_COURSE,
+  allowance: number = LIVE_TOURNAMENT.handicapAllowance,
+  player?: Player,
 ) {
-  return rowStats(
-    playerById(playerId),
-    scores[playerId],
-    LIVE_COURSE,
-    LIVE_TOURNAMENT.handicapAllowance,
-  );
+  const p =
+    player ??
+    PLAYERS.find((x) => x.id === playerId) ??
+    simStore.getState().roster.find((x) => x.id === playerId);
+  if (!p) {
+    return rowStats(
+      { id: playerId, name: "", clubId: "", handicap: 0, gender: "M" },
+      scores[playerId] ?? Array(18).fill(null),
+      course,
+      allowance,
+    );
+  }
+  return rowStats(p, scores[playerId] ?? Array(18).fill(null), course, allowance);
 }
 
 /* ------------------------------------------------------------------ */

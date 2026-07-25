@@ -65,6 +65,7 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
           row.player_id as string,
           row.hole as number,
           (row.gross ?? null) as number | null,
+          row.source as string | undefined,
         );
       } else {
         applyRemoteEntity(table, row);

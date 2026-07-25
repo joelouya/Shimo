@@ -746,6 +746,75 @@ export function enterMarkerScore(holeIdx: number, gross: number) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Pilot dual entry: real players, real devices                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Who marks whom inside a group. Round-robin, so in a group of [A,B,C,D]
+ * A marks B, B marks C, C marks D and D marks A. Every player therefore has
+ * exactly one marker and marks exactly one other player, which is what
+ * Rule 3.3b assumes, and it is derived from the saved pairings so every
+ * device agrees without extra state.
+ */
+export function markedByMe(group: SavedGroup | undefined, me: string): string | null {
+  if (!group) return null;
+  const ids = group.playerIds;
+  const i = ids.indexOf(me);
+  if (i < 0 || ids.length < 2) return null;
+  return ids[(i + 1) % ids.length];
+}
+
+/** The player who marks `me` (the inverse of markedByMe). */
+export function markerOf(group: SavedGroup | undefined, me: string): string | null {
+  if (!group) return null;
+  const ids = group.playerIds;
+  const i = ids.indexOf(me);
+  if (i < 0 || ids.length < 2) return null;
+  return ids[(i - 1 + ids.length) % ids.length];
+}
+
+/**
+ * Pilot: this device's player records their own score. Lands locally at once
+ * and syncs as source "player", so it never overwrites the marker's figure.
+ */
+export function enterOwnScorePilot(holeIdx: number, gross: number) {
+  mutate((draft) => {
+    const me = meId(draft);
+    if (!me) return;
+    ensureCard(draft, me);
+    draft.scores[me][holeIdx] = gross;
+    pushEvent(draft, me, holeIdx, gross);
+    enqueueOp(draft, "score", {
+      playerId: me,
+      hole: holeIdx,
+      gross,
+      source: "player",
+    });
+  });
+}
+
+/**
+ * Pilot: this device's player, acting as marker, records what they saw their
+ * playing partner score. Syncs as source "marker" against that partner.
+ */
+export function enterMarkerScoreFor(
+  playerId: string,
+  holeIdx: number,
+  gross: number,
+) {
+  mutate((draft) => {
+    ensureCard(draft, playerId);
+    draft.markerScores[playerId][holeIdx] = gross;
+    enqueueOp(draft, "score", {
+      playerId,
+      hole: holeIdx,
+      gross,
+      source: "marker",
+    });
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Bulk entry (the caddymaster desk)                                   */
 /* ------------------------------------------------------------------ */
 
@@ -1612,14 +1681,50 @@ export function startSim() {
 }
 
 /** Exposed for the sync engine's remote-merge path. */
-export function applyRemoteScore(pid: string, holeIdx: number, gross: number | null) {
+/**
+ * Write one inbound score into the right card view.
+ *
+ *   player : the player's own card
+ *   marker : what their marker recorded for them, kept separate so a
+ *            discrepancy is visible instead of being silently overwritten
+ *   desk   : the caddymaster's entry from the paper card. That figure is the
+ *            agreed one, so it settles both views.
+ */
+function applyScoreRow(
+  draft: SimState,
+  pid: string,
+  holeIdx: number,
+  gross: number | null,
+  source?: string,
+) {
+  if (source === "marker") {
+    draft.markerScores[pid][holeIdx] = gross;
+    return;
+  }
+  if (source === "player") {
+    draft.scores[pid][holeIdx] = gross;
+    return;
+  }
+  // desk, resolved discrepancies, and anything older that predates sources
+  draft.scores[pid][holeIdx] = gross;
+  draft.markerScores[pid][holeIdx] = gross;
+}
+
+export function applyRemoteScore(
+  pid: string,
+  holeIdx: number,
+  gross: number | null,
+  source?: string,
+) {
   const s = simStore.getState();
-  if (s.scores[pid]?.[holeIdx] === gross) return;
+  const current =
+    source === "marker" ? s.markerScores[pid]?.[holeIdx] : s.scores[pid]?.[holeIdx];
+  if (current === gross) return;
   mutate((draft) => {
     ensureCard(draft, pid);
-    draft.scores[pid][holeIdx] = gross;
-    draft.markerScores[pid][holeIdx] = gross;
-    if (gross != null) pushEvent(draft, pid, holeIdx, gross);
+    applyScoreRow(draft, pid, holeIdx, gross, source);
+    // the ticker follows the player's own card, not the marker's copy
+    if (gross != null && source !== "marker") pushEvent(draft, pid, holeIdx, gross);
   });
 }
 
@@ -1726,10 +1831,16 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
       else draft.roster.push(p);
       ensureCard(draft, p.id);
     }
-    for (const r of snap.scores) {
+    // Replay scores in write order so a later desk entry overrides what the
+    // players recorded, and route each row to the card view it belongs to:
+    // the player's own card, their marker's view of it, or (from the desk) the
+    // agreed figure that settles both.
+    const ordered = [...snap.scores].sort((a, b) =>
+      String(a.updated_at ?? "").localeCompare(String(b.updated_at ?? "")),
+    );
+    for (const r of ordered) {
       ensureCard(draft, r.player_id);
-      draft.scores[r.player_id][r.hole] = r.gross;
-      draft.markerScores[r.player_id][r.hole] = r.gross;
+      applyScoreRow(draft, r.player_id, r.hole, r.gross, r.source);
     }
     for (const r of snap.cardIn) {
       draft.cardIn[r.player_id as string] = Boolean(r.is_in);
