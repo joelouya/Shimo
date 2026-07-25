@@ -3,12 +3,30 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, FileDown, GripVertical, Plus, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  FileDown,
+  GripVertical,
+  Plus,
+  Users,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GROUPS, clubById } from "@/lib/data";
-import { allTournaments, savePairings, useSim } from "@/lib/sim/store";
+import {
+  allTournaments,
+  cutAfterRound,
+  fieldOfRound,
+  groupsFromOrder,
+  orderByStandings,
+  savePairings,
+  simStore,
+  useSim,
+} from "@/lib/sim/store";
+import { roundKey, roundsOf } from "@/lib/rounds";
 import type { Player } from "@/lib/types";
 import { cn, formatDateLong } from "@/lib/utils";
 
@@ -76,18 +94,32 @@ export default function PairingsPage({
   const { id } = use(params);
   const created = useSim((s) => s.created);
   const roster = useSim((s) => s.roster);
-  const saved = useSim((s) => s.pairings[id]);
   const t = allTournaments(created).find((x) => x.id === id);
+  const rounds = t ? roundsOf(t) : [];
+
+  // pairings are per round: leaders get re-paired for the next one
+  const [round, setRound] = useState(1);
+  const saved = useSim((s) => s.pairings[roundKey(id, round)]);
+  const roundInfo = rounds.find((r) => r.number === round) ?? rounds[0];
 
   const isCaptains = id === "t-captains-prize";
-  const [groups, setGroups] = useState<DraftGroup[]>(() => {
-    if (saved?.length)
-      return saved.map((g) => ({ id: g.id, playerIds: [...g.playerIds] }));
-    if (isCaptains)
-      return GROUPS.map((g) => ({ id: g.id, playerIds: [...g.playerIds] }));
-    return Array.from({ length: 6 }, (_, i) => ({ id: `ng${i + 1}`, playerIds: [] }));
-  });
-  const [firstTee, setFirstTee] = useState(t?.firstTee ?? "07:30");
+  const [groups, setGroups] = useState<DraftGroup[]>([]);
+  const [firstTee, setFirstTee] = useState(roundInfo?.firstTee ?? "07:30");
+
+  // load the round's saved pairings when the round changes
+  useEffect(() => {
+    if (saved?.length) {
+      setGroups(saved.map((g) => ({ id: g.id, playerIds: [...g.playerIds] })));
+    } else if (isCaptains && round === 1) {
+      setGroups(GROUPS.map((g) => ({ id: g.id, playerIds: [...g.playerIds] })));
+    } else {
+      setGroups(
+        Array.from({ length: 6 }, (_, i) => ({ id: `ng${i + 1}`, playerIds: [] })),
+      );
+    }
+    if (roundInfo) setFirstTee(roundInfo.firstTee);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round]);
   const [exported, setExported] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -105,7 +137,7 @@ export default function PairingsPage({
   );
 
   // autosave pairings + tee times so tournament day can pick them up
-  const interval = t?.teeInterval || 10;
+  const interval = roundInfo?.teeInterval || t?.teeInterval || 10;
   useEffect(() => {
     if (!t) return;
     savePairings(
@@ -116,9 +148,31 @@ export default function PairingsPage({
         teeTime: addMinutes(firstTee, i * interval),
         playerIds: g.playerIds,
       })),
+      round,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, firstTee]);
+  }, [groups, firstTee, round]);
+
+  /**
+   * Fill this round from the previous one's leaderboard: survivors of the cut
+   * if there is one, otherwise the same field, ordered so the leaders go out
+   * in the last group.
+   */
+  const repairFromLeaderboard = () => {
+    if (!t || round < 2) return;
+    const s = simStore.getState();
+    const prev = round - 1;
+    const cut = cutAfterRound(s, t, prev);
+    const carried = cut ? cut.survivors : fieldOfRound(s, id, prev);
+    if (!carried.length) return;
+    const ordered = orderByStandings(s, t, prev, carried);
+    setGroups(
+      groupsFromOrder(ordered, firstTee, interval).map((g) => ({
+        id: g.id,
+        playerIds: g.playerIds,
+      })),
+    );
+  };
 
   if (!t) {
     return (
@@ -167,10 +221,17 @@ export default function PairingsPage({
             {t.name}
           </h1>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            {formatDateLong(t.date)} · {clubById(t.clubId).name} · 10-minute intervals
+            {formatDateLong(roundInfo?.date ?? t.date)} · {clubById(t.clubId).name}{" "}
+            · {interval}-minute intervals
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {round > 1 && (
+            <Button variant="outline" onClick={repairFromLeaderboard}>
+              <Users className="size-4" />
+              Re-pair by leaderboard
+            </Button>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">First tee</span>
             <Input
@@ -186,6 +247,38 @@ export default function PairingsPage({
           </Button>
         </div>
       </header>
+
+      {/* one tee sheet per round */}
+      {rounds.length > 1 && (
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          {rounds.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => setRound(r.number)}
+              className={cn(
+                "flex min-h-9 items-center gap-2 rounded-full border px-4 text-[13px] font-medium transition-colors cursor-pointer",
+                round === r.number
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {r.name}
+              {r.cut && (
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-px text-[10px]",
+                    round === r.number
+                      ? "bg-white/15 text-primary-foreground"
+                      : "bg-clay-wash text-clay-deep",
+                  )}
+                >
+                  cut {r.cut.topN}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       <AnimatePresence>
         {exported && (

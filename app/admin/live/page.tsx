@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ClipboardList, Flag, Share2, Trophy } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  ClipboardList,
+  Flag,
+  Share2,
+  Trophy,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,10 +34,12 @@ import { useActiveTournament, useStandings,
 import {
   endTournamentDay,
   reviewFlag,
+  startNextRound,
   useSim,
   type OpsFlag,
   type SavedGroup,
 } from "@/lib/sim/store";
+import { roundsOf } from "@/lib/rounds";
 import type { Player } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
 
@@ -315,6 +325,7 @@ export default function LiveOpsPage() {
   const scores = useRoundScores();
   const [reviewing, setReviewing] = useState<OpsFlag | null>(null);
   const [ending, setEnding] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
   const [tab, setTab] = useState("course");
   const openItems = useSim(
     (s) =>
@@ -341,6 +352,11 @@ export default function LiveOpsPage() {
       a + (scores[pid] ?? []).filter((x) => x != null).length,
     0,
   );
+  const rounds = active ? roundsOf(active.tournament) : [];
+  const hasNextRound = !!active && active.round < rounds.length;
+  const thisRoundCut = active
+    ? (rounds.find((r) => r.number === active.round)?.cut ?? null)
+    : null;
   const groupsOut = (active?.groups ?? []).filter((g) =>
     g.playerIds.some(
       (pid) => (scores[pid] ?? []).filter((x) => x != null).length < 18,
@@ -372,7 +388,9 @@ export default function LiveOpsPage() {
           <div className="flex items-center gap-3">
             <LiveBadge />
             <p className="smallcaps text-muted-foreground">
-              Round 1 · first tee {active.tournament.firstTee}
+              {active.roundInfo.name}
+              {rounds.length > 1 && ` of ${rounds.length}`} · first tee{" "}
+              {active.roundInfo.firstTee}
             </p>
           </div>
           <h1 className="mt-2 font-serif text-[32px] leading-tight text-foreground">
@@ -399,6 +417,12 @@ export default function LiveOpsPage() {
               Enter scores from cards
             </Link>
           </Button>
+          {IS_PILOT && hasNextRound && (
+            <Button variant="outline" onClick={() => setAdvancing(true)}>
+              <ArrowRight className="size-4" />
+              Close round
+            </Button>
+          )}
           {IS_PILOT && (
             <Button variant="clay" onClick={() => setEnding(true)}>
               <Flag className="size-4" />
@@ -487,6 +511,34 @@ export default function LiveOpsPage() {
               </Button>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={advancing} onOpenChange={setAdvancing}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Close {active.roundInfo.name}?</DialogTitle>
+            <DialogDescription className="leading-relaxed">
+              {thisRoundCut
+                ? `The field is cut to the leading ${thisRoundCut.topN} and ties, and the next round is paired from the leaderboard with the leaders out last. Cards already certified stay locked.`
+                : "The next round opens, paired from the leaderboard with the leaders out last. Cards already certified stay locked."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAdvancing(false)}>
+              Not yet
+            </Button>
+            <Button
+              variant="clay"
+              onClick={() => {
+                startNextRound(active.tournament.id);
+                setAdvancing(false);
+              }}
+            >
+              <ArrowRight className="size-4" />
+              Open the next round
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

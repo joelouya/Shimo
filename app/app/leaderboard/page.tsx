@@ -9,14 +9,17 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LiveBadge } from "@/components/live-dot";
 import { LastUpdatedNote, SyncStrip } from "@/components/sync-status";
 import { DEMO_USER_ID, GROUPS, clubById, courseById, playerById } from "@/lib/data";
+import { roundsOf } from "@/lib/rounds";
 import {
+  formatCutLine,
   playingHandicap,
   stablefordPoints,
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
-import { useActiveTournament, useMeId, useStandings,
+import { useActiveTournament, useCumulative, useMeId, useStandings,
   useRoundScores
+
 } from "@/lib/sim/hooks";
 import {
   LIVE_COURSE,
@@ -329,6 +332,98 @@ const BoardRow = memo(
     a.isOpen === b.isOpen,
 );
 
+/**
+ * The multi-round board: every round summed, a column per round, and players
+ * who missed the cut shown as MC with the scores they made.
+ */
+function CumulativeRows({
+  mode,
+  division,
+  rounds,
+}: {
+  mode: ViewMode;
+  division: string;
+  rounds: number[];
+}) {
+  const board = useCumulative(mode, division);
+  const me = useMeId();
+  const fmt = (v: { points: number; netToPar: number; grossToPar: number }) =>
+    mode === "points" ? `${v.points}` : toPar(mode === "net" ? v.netToPar : v.grossToPar);
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-card">
+      <div
+        className="grid items-center gap-1 border-b border-border bg-secondary/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+        style={{
+          gridTemplateColumns: `2.4rem 1fr ${rounds.map(() => "2.2rem").join(" ")} 3rem`,
+        }}
+      >
+        <span>Pos</span>
+        <span>Player</span>
+        {rounds.map((r) => (
+          <span key={r} className="text-center">
+            R{r}
+          </span>
+        ))}
+        <span className="text-center">{mode === "points" ? "Tot" : "Score"}</span>
+      </div>
+      {board.rows.map((r) => (
+        <div
+          key={r.player.id}
+          className={cn(
+            "grid items-center gap-1 border-b border-border/50 px-3 py-2.5 last:border-b-0",
+            r.player.id === me && "bg-clay-wash/45",
+            !r.madeCut && "opacity-55",
+          )}
+          style={{
+            gridTemplateColumns: `2.4rem 1fr ${rounds.map(() => "2.2rem").join(" ")} 3rem`,
+          }}
+        >
+          <span
+            className={cn(
+              "font-serif text-[15px] tnum",
+              r.position <= 3 && r.madeCut ? "text-clay-deep" : "text-foreground",
+            )}
+          >
+            {r.madeCut ? `${r.tied ? "T" : ""}${r.position}` : "MC"}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[14.5px] text-foreground">
+              {r.player.name}
+              {r.player.id === me && (
+                <span className="ml-1 text-[11px] text-clay">you</span>
+              )}
+            </span>
+            <span className="block truncate text-[11px] text-muted-foreground">
+              {clubById(r.player.clubId).short} · HC {r.player.handicap}
+            </span>
+          </span>
+          {rounds.map((rn) => {
+            const line = r.rounds.find((x) => x.round === rn);
+            return (
+              <span
+                key={rn}
+                className="text-center text-[12.5px] text-muted-foreground tnum"
+              >
+                {!line || line.missed ? "·" : line.thru === 0 ? "·" : fmt(line)}
+              </span>
+            );
+          })}
+          <span className="text-center font-serif text-[16px] text-foreground tnum">
+            {fmt(r)}
+          </span>
+        </div>
+      ))}
+      {board.cut && (
+        <p className="border-t border-border/60 bg-secondary/30 px-3 py-2 text-center text-[11.5px] text-muted-foreground">
+          Cut after {`R${board.cut.afterRound}`}: top {board.cut.count} and ties
+          {board.cut.line != null && ` · ${formatCutLine(board.cut.line, mode)}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string }) {
   const rows = useStandings(mode, division);
   const me = useMeId();
@@ -374,6 +469,8 @@ export default function LeaderboardPage() {
   );
   const [division, setDivision] = useState("Overall");
   const [peeking, setPeeking] = useState(false);
+  // "cumulative" or a round number, for multi-round events
+  const [scope, setScope] = useState("cumulative");
 
   const blind = !IS_PILOT && hidden && !attested && !peeking;
 
@@ -391,6 +488,7 @@ export default function LeaderboardPage() {
     );
   }
 
+  const allRounds = roundsOf(active.tournament);
   const divisions = [
     "Overall",
     ...active.tournament.divisions
@@ -404,7 +502,7 @@ export default function LeaderboardPage() {
       <header>
         <div className="flex items-center justify-between">
           <p className="smallcaps text-muted-foreground">
-            Round 1 · {club.short} · Par {courseById(active.tournament.courseId).par}
+            {active.roundInfo.name} · {club.short} · Par {active.course.par}
           </p>
           <LiveBadge />
         </div>
@@ -453,6 +551,32 @@ export default function LeaderboardPage() {
               </TabsList>
             </Tabs>
           </div>
+
+          {/* a multi-round event can be read as a whole or one round at a time */}
+          {allRounds.length > 1 && (
+            <div className="no-scrollbar mt-2.5 flex gap-2 overflow-x-auto pb-1">
+              {[
+                { key: "cumulative", label: "Cumulative" },
+                ...allRounds.map((r) => ({
+                  key: String(r.number),
+                  label: r.number === active.round ? "This round" : r.name,
+                })),
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setScope(opt.key)}
+                  className={cn(
+                    "flex min-h-11 shrink-0 items-center rounded-full border px-4 text-[13px] font-medium transition-colors cursor-pointer",
+                    scope === opt.key
+                      ? "border-clay bg-clay text-white"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="no-scrollbar mt-2.5 flex gap-2 overflow-x-auto pb-1">
             {divisions.map((d) => (
               <button
@@ -470,7 +594,15 @@ export default function LeaderboardPage() {
             ))}
           </div>
 
-          <LeaderboardRows mode={mode} division={division} />
+          {scope === "cumulative" && allRounds.length > 1 ? (
+            <CumulativeRows
+              mode={mode}
+              division={division}
+              rounds={allRounds.map((r) => r.number)}
+            />
+          ) : (
+            <LeaderboardRows mode={mode} division={division} />
+          )}
           <p className="mt-3 pb-2 text-center text-[12px] text-muted-foreground">
             Scores update live as cards are entered ·{" "}
             {active.tournament.handicapAllowance}% allowance

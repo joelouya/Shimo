@@ -20,17 +20,20 @@ import { Switch } from "@/components/ui/switch";
 import { COURSES, clubById, courseById } from "@/lib/data";
 import { IS_PILOT, WIRED_FORMATS } from "@/lib/mode";
 import { createTournament, updateTournament, useSim } from "@/lib/sim/store";
-import type { Format, Tournament } from "@/lib/types";
+import { makeRound, roundsOf, withRoundsSynced } from "@/lib/rounds";
+import type { Format, Round, Tournament } from "@/lib/types";
 import { cn, formatDateLong, formatKES } from "@/lib/utils";
 
 const STEPS = [
   { n: 1, label: "Basics" },
-  { n: 2, label: "Eligibility" },
-  { n: 3, label: "Entry" },
-  { n: 4, label: "Format details" },
-  { n: 5, label: "Prizes" },
-  { n: 6, label: "Review & publish" },
+  { n: 2, label: "Rounds" },
+  { n: 3, label: "Eligibility" },
+  { n: 4, label: "Entry" },
+  { n: 5, label: "Format details" },
+  { n: 6, label: "Prizes" },
+  { n: 7, label: "Review & publish" },
 ];
+const LAST_STEP = 7;
 
 const ALL_FORMATS: Format[] = [
   "Stableford",
@@ -48,6 +51,7 @@ const FORMATS: Format[] = IS_PILOT
 interface Draft {
   name: string;
   date: string;
+  rounds: Round[];
   courseId: string;
   format: Format;
   tees: string;
@@ -69,6 +73,7 @@ interface Draft {
 const INITIAL: Draft = {
   name: "",
   date: "2026-08-22",
+  rounds: [makeRound(1, { date: "2026-08-22", courseId: "muthaiga-main", tees: "Yellow" })],
   courseId: "muthaiga-main",
   format: "Stableford",
   tees: "Yellow",
@@ -97,6 +102,7 @@ function draftFromTournament(t: Tournament): Draft {
   return {
     name: t.name,
     date: t.date,
+    rounds: roundsOf(t),
     courseId: t.courseId,
     format: t.format,
     tees: course.tees,
@@ -160,12 +166,69 @@ function CreateTournamentInner() {
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }));
 
+  /** Basics edits round 1 directly, which is all a single-round event has. */
+  const setBasics = (patch: Partial<Draft>) =>
+    setDraft((d) => {
+      const next = { ...d, ...patch };
+      const [first, ...rest] = next.rounds.length
+        ? next.rounds
+        : [makeRound(1, { date: next.date, courseId: next.courseId, tees: next.tees })];
+      next.rounds = [
+        {
+          ...first,
+          date: next.date,
+          courseId: next.courseId,
+          tees: next.tees,
+        },
+        ...rest,
+      ];
+      return next;
+    });
+
+  const updateRound = (i: number, patch: Partial<Round>) =>
+    setDraft((d) => {
+      const rounds = d.rounds.map((r, j) => (j === i ? { ...r, ...patch } : r));
+      // round 1 is mirrored on the tournament itself
+      return i === 0
+        ? { ...d, rounds, date: rounds[0].date, courseId: rounds[0].courseId }
+        : { ...d, rounds };
+    });
+
+  const addRound = () =>
+    setDraft((d) => {
+      const last = d.rounds[d.rounds.length - 1];
+      const nextDay = new Date(last.date + "T12:00:00");
+      nextDay.setDate(nextDay.getDate() + 1);
+      return {
+        ...d,
+        rounds: [
+          ...d.rounds,
+          makeRound(d.rounds.length + 1, {
+            date: nextDay.toISOString().slice(0, 10),
+            courseId: last.courseId,
+            tees: last.tees,
+            firstTee: last.firstTee,
+            teeInterval: last.teeInterval,
+          }),
+        ],
+      };
+    });
+
+  const removeRound = (i: number) =>
+    setDraft((d) => {
+      if (d.rounds.length <= 1) return d;
+      const rounds = d.rounds
+        .filter((_, j) => j !== i)
+        .map((r, j) => ({ ...r, id: `r${j + 1}`, number: j + 1 }));
+      return { ...d, rounds, date: rounds[0].date, courseId: rounds[0].courseId };
+    });
+
   const course = courseById(draft.courseId);
   const club = clubById(course.clubId);
 
   const canContinue = useMemo(() => {
     if (step === 1) return draft.name.trim().length >= 3 && !!draft.date;
-    if (step === 3) return draft.fee >= 0 && draft.maxPlayers > 0;
+    if (step === 4) return draft.fee >= 0 && draft.maxPlayers > 0;
     return true;
   }, [step, draft]);
 
@@ -206,13 +269,17 @@ function CreateTournamentInner() {
       firstTee: editing?.firstTee ?? "07:30",
       teeInterval: editing?.teeInterval ?? 10,
       fieldSize: editing?.fieldSize ?? 0,
+      rounds: draft.rounds,
       correctionWindowMin: draft.correctionWindowMin,
       registered: editing?.registered,
       result: editing?.result,
     };
+    // round 1's date, course and tee times are mirrored onto the tournament so
+    // lists and cards never drift from the rounds
+    const synced = withRoundsSynced(t);
     setTimeout(() => {
-      if (editing) updateTournament(t);
-      else createTournament(t);
+      if (editing) updateTournament(synced);
+      else createTournament(synced);
       router.push("/admin/tournaments");
     }, 700);
   };
@@ -290,15 +357,25 @@ function CreateTournamentInner() {
                   />
                 </Field>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Date">
+                  <Field
+                    label="Date"
+                    hint={
+                      draft.rounds.length > 1
+                        ? "Round 1. The rest are set on the next step."
+                        : undefined
+                    }
+                  >
                     <Input
                       type="date"
                       value={draft.date}
-                      onChange={(e) => set("date", e.target.value)}
+                      onChange={(e) => setBasics({ date: e.target.value })}
                     />
                   </Field>
                   <Field label="Tee selection">
-                    <Select value={draft.tees} onValueChange={(v) => set("tees", v)}>
+                    <Select
+                      value={draft.tees}
+                      onValueChange={(v) => setBasics({ tees: v })}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -315,7 +392,7 @@ function CreateTournamentInner() {
                 <Field label="Course">
                   <Select
                     value={draft.courseId}
-                    onValueChange={(v) => set("courseId", v)}
+                    onValueChange={(v) => setBasics({ courseId: v })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -358,6 +435,159 @@ function CreateTournamentInner() {
             )}
 
             {step === 2 && (
+              <div className="flex flex-col gap-4">
+                <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
+                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                    Most club events are a single round, which is already set up
+                    below. A championship adds a round for each day, and can cut
+                    the field after any of them.
+                  </p>
+                </div>
+
+                {draft.rounds.map((r, i) => (
+                  <div
+                    key={r.id}
+                    className="rounded-xl border border-border bg-card/60 p-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="smallcaps text-clay">Round {r.number}</p>
+                      {draft.rounds.length > 1 && (
+                        <button
+                          onClick={() => removeRound(i)}
+                          aria-label={`Remove round ${r.number}`}
+                          className="rounded p-1 text-muted-foreground hover:text-destructive cursor-pointer"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex flex-col gap-3">
+                      <Field label="Name">
+                        <Input
+                          value={r.name}
+                          onChange={(e) => updateRound(i, { name: e.target.value })}
+                          placeholder={`Round ${r.number}`}
+                        />
+                      </Field>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Date">
+                          <Input
+                            type="date"
+                            value={r.date}
+                            onChange={(e) => updateRound(i, { date: e.target.value })}
+                          />
+                        </Field>
+                        <Field label="First tee">
+                          <Input
+                            type="time"
+                            value={r.firstTee}
+                            onChange={(e) => updateRound(i, { firstTee: e.target.value })}
+                          />
+                        </Field>
+                      </div>
+                      <Field label="Course" hint="A championship can move courses between rounds.">
+                        <Select
+                          value={r.courseId}
+                          onValueChange={(v) => updateRound(i, { courseId: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COURSES.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Tees">
+                          <Select
+                            value={r.tees || "Yellow"}
+                            onValueChange={(v) => updateRound(i, { tees: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(courseById(r.courseId).ratings ?? []).map((t) => (
+                                <SelectItem key={t.tee} value={t.tee}>
+                                  {t.tee} tees
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Field label="Tee interval" hint="Minutes between groups.">
+                          <Input
+                            type="number"
+                            min={5}
+                            max={20}
+                            value={r.teeInterval}
+                            onChange={(e) =>
+                              updateRound(i, {
+                                teeInterval: parseInt(e.target.value, 10) || 10,
+                              })
+                            }
+                          />
+                        </Field>
+                      </div>
+
+                      {/* a cut only makes sense when another round follows */}
+                      {i < draft.rounds.length - 1 && (
+                        <div className="rounded-lg bg-secondary/50 px-3.5 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <Label className="text-foreground">
+                                Cut after this round
+                              </Label>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                Ties are always kept, so a top 30 usually returns
+                                a few more.
+                              </p>
+                            </div>
+                            <Switch
+                              checked={!!r.cut}
+                              onCheckedChange={(on) =>
+                                updateRound(i, { cut: on ? { topN: 30 } : null })
+                              }
+                            />
+                          </div>
+                          {r.cut && (
+                            <div className="mt-3">
+                              <Field label="Players who play on">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={r.cut.topN}
+                                  onChange={(e) =>
+                                    updateRound(i, {
+                                      cut: {
+                                        topN: parseInt(e.target.value, 10) || 1,
+                                      },
+                                    })
+                                  }
+                                />
+                              </Field>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                <Button variant="outline" className="w-fit" onClick={addRound}>
+                  <Plus className="size-4" />
+                  Add a round
+                </Button>
+              </div>
+            )}
+
+            {step === 3 && (
               <div className="flex flex-col gap-5">
                 <div className="flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3.5">
                   <div>
@@ -421,7 +651,7 @@ function CreateTournamentInner() {
               </div>
             )}
 
-            {step === 3 && (
+            {step === 4 && (
               <div className="flex flex-col gap-5">
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Entry fee (KES)">
@@ -470,7 +700,7 @@ function CreateTournamentInner() {
               </div>
             )}
 
-            {step === 4 && (
+            {step === 5 && (
               <div className="flex flex-col gap-5">
                 <Field
                   label="Handicap allowance"
@@ -544,7 +774,7 @@ function CreateTournamentInner() {
               </div>
             )}
 
-            {step === 5 && (
+            {step === 6 && (
               <div className="flex flex-col gap-4">
                 <p className="text-[13px] leading-relaxed text-muted-foreground">
                   What&apos;s on the table? These publish with the tournament
@@ -623,12 +853,24 @@ function CreateTournamentInner() {
               </div>
             )}
 
-            {step === 6 && (
+            {step === 7 && (
               <div>
                 <div className="flex flex-col divide-y divide-border/60">
                   {[
                     ["Name", draft.name.trim() || "·"],
-                    ["Date", formatDateLong(draft.date)],
+                    [
+                      "Rounds",
+                      draft.rounds.length === 1
+                        ? `One round · ${formatDateLong(draft.date)}`
+                        : draft.rounds
+                            .map(
+                              (r) =>
+                                `${r.name}, ${formatDateLong(r.date)}${
+                                  r.cut ? ` (cut to ${r.cut.topN})` : ""
+                                }`,
+                            )
+                            .join(" · "),
+                    ],
                     ["Course", `${course.name} · ${draft.tees} tees`],
                     ["Format", `${draft.format} · ${draft.allowance}% allowance`],
                     [
@@ -698,7 +940,7 @@ function CreateTournamentInner() {
               <ArrowLeft className="size-4" />
               Back
             </Button>
-            {step < 6 ? (
+            {step < LAST_STEP ? (
               <Button
                 onClick={() => setStep((s) => s + 1)}
                 disabled={!canContinue}
