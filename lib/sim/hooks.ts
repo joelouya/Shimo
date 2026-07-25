@@ -11,22 +11,33 @@ import {
 } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import {
+  applyCut,
   computeStandings,
+  cumulativeStandings,
   divisionFor,
   rowStats,
+  type CumulativeRow,
+  type RoundCards,
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
-import type { Course, Player, Tournament } from "@/lib/types";
+import type { Course, HoleScores, Player, Round, Tournament } from "@/lib/types";
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
+  liveKey,
   meId,
+  roundCardIn,
+  roundCerts,
+  roundMarkerScores,
+  roundPairings,
+  roundScores,
   setAuth,
   simStore,
   useSim,
   type SavedGroup,
 } from "./store";
+import { roundKey as roundKeyOf, roundOf, roundsOf } from "@/lib/rounds";
 import { AUTH_AVAILABLE, getSession, onAuthChange } from "@/lib/sync/auth";
 
 /** The player this device acts as (picked identity in pilot, Joel in demo). */
@@ -81,6 +92,12 @@ export interface ActiveTournament {
   tournament: Tournament;
   groups: SavedGroup[];
   players: Player[];
+  /** the round on the course right now (1-based) */
+  round: number;
+  /** that round's configuration: its date, course, tees and cut */
+  roundInfo: Round;
+  /** the course this round is played on */
+  course: Course;
 }
 
 /**
@@ -91,30 +108,62 @@ export interface ActiveTournament {
  */
 export function useActiveTournament(): ActiveTournament | null {
   const liveId = useSim((s) => s.liveTournamentId);
+  const liveRound = useSim((s) => s.liveRound);
   const created = useSim((s) => s.created);
   const pairings = useSim((s) => s.pairings);
   const roster = useSim((s) => s.roster);
 
   return useMemo(() => {
+    const round = liveRound || 1;
     if (!IS_PILOT) {
+      const info = roundOf(LIVE_TOURNAMENT, 1);
       return {
         tournament: LIVE_TOURNAMENT,
-        groups: pairings[LIVE_TOURNAMENT.id] ?? DEMO_GROUPS,
+        groups: pairings[roundKeyOf(LIVE_TOURNAMENT.id, 1)] ?? DEMO_GROUPS,
         players: FIELD_PLAYERS,
+        round: 1,
+        roundInfo: info,
+        course: LIVE_COURSE,
       };
     }
     if (!liveId) return null;
     const tournament = created.find((t) => t.id === liveId);
     if (!tournament) return null;
-    const groups = pairings[liveId] ?? [];
+    const info = roundOf(tournament, round);
+    const groups = pairings[roundKeyOf(liveId, round)] ?? [];
     const ids = new Set(groups.flatMap((g) => g.playerIds));
     const players = roster.filter((p) => ids.has(p.id));
-    return { tournament, groups, players };
-  }, [liveId, created, pairings, roster]);
+    return {
+      tournament,
+      groups,
+      players,
+      round,
+      roundInfo: info,
+      course: COURSES.find((c) => c.id === info.courseId) ?? LIVE_COURSE,
+    };
+  }, [liveId, liveRound, created, pairings, roster]);
 }
 
+/* ---- round-scoped views of the live round, in the shape components expect ---- */
+
+/** Every player's own card for the round on the course. */
+export function useRoundScores(): Record<string, HoleScores> {
+  return useSim((s) => roundScores(s));
+}
+/** What each player's marker has recorded for them, this round. */
+export function useRoundMarkerScores(): Record<string, HoleScores> {
+  return useSim((s) => roundMarkerScores(s));
+}
+export function useRoundCerts() {
+  return useSim((s) => roundCerts(s));
+}
+export function useRoundCardIn() {
+  return useSim((s) => roundCardIn(s));
+}
+
+/** Standings for the round on the course only. */
 export function useStandings(mode: ViewMode, division?: string): StandingRow[] {
-  const scores = useSim((s) => s.scores);
+  const scores = useRoundScores();
   const active = useActiveTournament();
   return useMemo(() => {
     if (!active) return [];
@@ -125,23 +174,97 @@ export function useStandings(mode: ViewMode, division?: string): StandingRow[] {
           divisionFor(p.handicap, active.tournament.divisions) === division,
       );
     }
-    // the tournament's own course, not the demo one: par and stroke index
-    // drive every point, so this must follow the event being played
-    const course =
-      COURSES.find((c) => c.id === active.tournament.courseId) ?? LIVE_COURSE;
+    // this round's course: par and stroke index drive every point, and a
+    // championship can move courses between rounds
     return computeStandings(
       players,
       scores,
-      course,
+      active.course,
       active.tournament.handicapAllowance,
       mode,
     );
   }, [scores, mode, division, active]);
 }
 
+export interface CumulativeBoard {
+  rows: CumulativeRow[];
+  /** rounds that have at least one score in, in order */
+  playedRounds: number[];
+  /** the cut, once the round it follows has begun */
+  cut: { afterRound: number; line: number | null; count: number } | null;
+}
+
+/**
+ * The whole tournament: every round summed, with the cut applied so players
+ * who missed it are marked but keep the scores they made.
+ */
+export function useCumulative(
+  mode: ViewMode,
+  division?: string,
+): CumulativeBoard {
+  const allScores = useSim((s) => s.scores);
+  const pairings = useSim((s) => s.pairings);
+  const roster = useSim((s) => s.roster);
+  const active = useActiveTournament();
+
+  return useMemo(() => {
+    if (!active) return { rows: [], playedRounds: [], cut: null };
+    const t = active.tournament;
+    const rounds = roundsOf(t);
+
+    const fieldIn = (rnd: number) =>
+      (pairings[roundKeyOf(t.id, rnd)] ?? []).flatMap((g) => g.playerIds);
+
+    const ids = new Set(rounds.flatMap((r) => fieldIn(r.number)));
+    let players = [...ids]
+      .map(
+        (pid) =>
+          roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid),
+      )
+      .filter((p): p is Player => !!p);
+    if (!players.length) players = active.players;
+    if (division && division !== "Overall") {
+      players = players.filter(
+        (p) => divisionFor(p.handicap, t.divisions) === division,
+      );
+    }
+
+    const byRound: RoundCards[] = rounds.map((r) => ({
+      round: r.number,
+      scores: allScores[roundKeyOf(t.id, r.number)] ?? {},
+      course: COURSES.find((c) => c.id === r.courseId) ?? LIVE_COURSE,
+    }));
+
+    const rows = cumulativeStandings(
+      players,
+      byRound,
+      t.handicapAllowance,
+      mode,
+      (rnd, pid) => fieldIn(rnd).includes(pid),
+    );
+
+    const playedRounds = byRound
+      .filter((rc) => Object.values(rc.scores).some((c) => c.some((x) => x != null)))
+      .map((rc) => rc.round);
+
+    // a cut only means something once the round after it is under way
+    const cutRound = rounds.find((r) => r.cut && r.cut.topN > 0);
+    let cut: CumulativeBoard["cut"] = null;
+    if (cutRound && active.round > cutRound.number) {
+      const upTo = byRound.filter((rc) => rc.round <= cutRound.number);
+      const thru = cumulativeStandings(players, upTo, t.handicapAllowance, mode);
+      const res = applyCut(thru, cutRound.cut!.topN, mode);
+      for (const r of rows) r.madeCut = res.survivors.has(r.player.id);
+      cut = { afterRound: cutRound.number, line: res.line, count: res.count };
+    }
+
+    return { rows, playedRounds, cut };
+  }, [allScores, pairings, roster, active, mode, division]);
+}
+
 /** The demo user's live status: position, points, thru. Demo mode only. */
 export function useUserLive() {
-  const scores = useSim((s) => s.scores);
+  const scores = useRoundScores();
   const attested = useSim((s) => s.attested);
   return useMemo(() => {
     const rows = computeStandings(

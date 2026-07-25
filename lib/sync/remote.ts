@@ -30,6 +30,8 @@ export { CLIENT_ID, REMOTE_CONFIGURED } from "./client";
 
 export interface ScoreRow {
   tournament_id: string;
+  /** which round of the tournament (1-based) */
+  round: number;
   player_id: string;
   hole: number; // 0-based
   gross: number | null;
@@ -69,9 +71,11 @@ async function pushOps(sb: SupabaseClient, ops: SyncOp[], tournamentId: string) 
     const byCell = new Map<string, ScoreRow & { updated_at: string }>();
     for (const o of scoreOps) {
       const source = String(o.payload.source ?? "app");
-      const key = `${o.payload.playerId}:${o.payload.hole}:${source}`;
+      const round = Number(o.payload.round ?? 1);
+      const key = `${o.payload.playerId}:${round}:${o.payload.hole}:${source}`;
       byCell.set(key, {
         tournament_id: tournamentId,
+        round,
         player_id: String(o.payload.playerId),
         hole: Number(o.payload.hole),
         gross: (o.payload.gross ?? null) as number | null,
@@ -81,7 +85,7 @@ async function pushOps(sb: SupabaseClient, ops: SyncOp[], tournamentId: string) 
       });
     }
     const { error } = await sb.from("scores").upsert([...byCell.values()], {
-      onConflict: "tournament_id,player_id,hole,source",
+      onConflict: "tournament_id,round,player_id,hole,source",
     });
     if (error) throw error;
   }

@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { LiveBadge } from "@/components/live-dot";
 import { clubById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
-import { useActiveTournament, useStandings } from "@/lib/sim/hooks";
+import { useActiveTournament, useStandings,
+  useRoundScores
+} from "@/lib/sim/hooks";
 import { allTournaments, useSim } from "@/lib/sim/store";
 import { formatDate, formatKES, toPar } from "@/lib/utils";
 
@@ -28,7 +30,7 @@ function LivePanel() {
   const active = useActiveTournament();
   const isStableford = active?.tournament.format !== "Stroke Play";
   const rows = useStandings(isStableford ? "points" : "net");
-  const scores = useSim((s) => s.scores);
+  const scores = useRoundScores();
   const allFlags = useSim((s) => s.flags);
   const flags = allFlags.filter(
     (f) => f.status === "open" && (!IS_PILOT || f.kind !== "red"),

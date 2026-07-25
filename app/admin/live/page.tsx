@@ -20,7 +20,9 @@ import { CertificationPanel } from "@/components/admin/certification-panel";
 import { LiveBadge } from "@/components/live-dot";
 import { DEMO_USER_ID, playerById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
-import { useActiveTournament, useStandings } from "@/lib/sim/hooks";
+import { useActiveTournament, useStandings,
+  useRoundScores
+} from "@/lib/sim/hooks";
 import {
   endTournamentDay,
   reviewFlag,
@@ -110,7 +112,7 @@ function FlagCard({ flag, onReview }: { flag: OpsFlag; onReview: () => void }) {
 }
 
 function GroupCard({ g, byId }: { g: SavedGroup; byId: Map<string, Player> }) {
-  const scores = useSim((s) => s.scores);
+  const scores = useRoundScores();
   const events = useSim((s) => s.events);
   const allFlags = useSim((s) => s.flags);
   const flags = allFlags.filter(
@@ -310,7 +312,7 @@ function EventFeed({ byId }: { byId: Map<string, Player> }) {
 export default function LiveOpsPage() {
   const router = useRouter();
   const flags = useSim((s) => s.flags);
-  const scores = useSim((s) => s.scores);
+  const scores = useRoundScores();
   const [reviewing, setReviewing] = useState<OpsFlag | null>(null);
   const [ending, setEnding] = useState(false);
   const [tab, setTab] = useState("course");
@@ -335,7 +337,8 @@ export default function LiveOpsPage() {
   const byId = new Map((active?.players ?? []).map((p) => [p.id, p] as const));
   const fieldIds = active ? active.groups.flatMap((g) => g.playerIds) : [];
   const scoresIn = fieldIds.reduce(
-    (a, pid) => a + (scores[pid] ?? []).filter((x) => x != null).length,
+    (a: number, pid: string) =>
+      a + (scores[pid] ?? []).filter((x) => x != null).length,
     0,
   );
   const groupsOut = (active?.groups ?? []).filter((g) =>

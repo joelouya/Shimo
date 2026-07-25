@@ -26,11 +26,14 @@ import {
   playerById,
 } from "@/lib/data";
 import {
+  applyCut,
   computeStandings,
+  cumulativeStandings,
   generateGross,
   handicapSet,
   mulberry32,
   rowStats,
+  type RoundCards,
 } from "@/lib/scoring";
 import {
   APP_VERSION,
@@ -43,6 +46,7 @@ import {
   type AuditRecord,
 } from "@/lib/integrity";
 import { IS_PILOT } from "@/lib/mode";
+import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import {
   auditToRow,
   certToRow,
@@ -66,9 +70,9 @@ const COURSE = COURSES.find((c) => c.id === "muthaiga-main")!;
 const LIVE_T = TOURNAMENTS.find((t) => t.id === LIVE_TOURNAMENT_ID)!;
 const GRACE_ID = "p-wanjiku-g";
 
-const STORAGE_KEY = `shimo-sim-v8-${IS_PILOT ? "pilot" : "demo"}`;
-const CHANNEL = `shimo-sim-v8-${IS_PILOT ? "pilot" : "demo"}`;
-const SCHEMA = 8;
+const STORAGE_KEY = `shimo-sim-v9-${IS_PILOT ? "pilot" : "demo"}`;
+const CHANNEL = `shimo-sim-v9-${IS_PILOT ? "pilot" : "demo"}`;
+const SCHEMA = 9;
 
 /** Device-local identity — which player this phone belongs to (pilot). Kept in
  *  its own key so it survives schema resets and is never uploaded. */
@@ -164,6 +168,8 @@ export interface Certification {
 export interface Dispute {
   id: string;
   playerId: string;
+  /** which round's card this concerns (1-based) */
+  round: number;
   holeIdx: number; // 0-based
   markerValue: number | null;
   playerValue: number | null;
@@ -179,6 +185,8 @@ export interface Dispute {
 export interface CorrectionRequest {
   id: string;
   playerId: string;
+  /** which round's card this concerns (1-based) */
+  round: number;
   holeIdx: number; // 0-based
   currentGross: number | null;
   proposedGross: number;
@@ -226,10 +234,14 @@ export interface SimState {
   demoMode: boolean;
   /** scoreboard blindness — hide leaderboard references during the round */
   hideLeaderboard: boolean;
-  /** each player's card as entered on their own phone (source of truth) */
-  scores: Record<string, HoleScores>;
-  /** what each player's MARKER has recorded for them */
-  markerScores: Record<string, HoleScores>;
+  /**
+   * Each player's card as entered on their own phone (source of truth),
+   * filed under roundKey(tournamentId, round) then player id. A multi-round
+   * tournament keeps every round's cards side by side.
+   */
+  scores: Record<string, Record<string, HoleScores>>;
+  /** what each player's MARKER has recorded for them, same keying */
+  markerScores: Record<string, Record<string, HoleScores>>;
   /** discrepancy hole indices (0-based) the user has resolved */
   resolved: number[];
   attested: boolean;
@@ -246,19 +258,22 @@ export interface SimState {
   pendingEchoes: EchoTask[];
   /** the club's member roster (editable in Members) */
   roster: Player[];
-  /** saved pairings per tournament id */
+  /** saved pairings per roundKey(tournamentId, round) */
   pairings: Record<string, SavedGroup[]>;
   /** which tournament is being played today (null = none) */
   liveTournamentId: string | null;
-  /** bulk entry: paper card fully entered + checked, per player */
-  cardIn: Record<string, boolean>;
+  /** which round of it is on the course now (1-based) */
+  liveRound: number;
+  /** bulk entry: paper card fully entered + checked, per roundKey then player */
+  cardIn: Record<string, Record<string, boolean>>;
   /** pilot: anomalies logged quietly for committee review, never alerted */
   integrityLog: OpsFlag[];
   /** local-first sync queue */
   outbox: SyncOp[];
   lastSyncedAt: number | null;
   /* ---- certification & compliance (v7) ---- */
-  certifications: Record<string, Certification>;
+  /** per roundKey then player: a card is certified one round at a time */
+  certifications: Record<string, Record<string, Certification>>;
   /** append-only; committee interventions append, never overwrite */
   auditLog: AuditRecord[];
   disputes: Dispute[];
@@ -299,16 +314,19 @@ function emptyCard(): HoleScores {
 }
 
 export function buildInitialState(): SimState {
-  const scores: Record<string, HoleScores> = {};
-  const markerScores: Record<string, HoleScores> = {};
+  // Demo plays a single round of the seeded tournament; pilot starts empty and
+  // fills in when the club starts a round.
+  const DEMO_KEY = roundKey(LIVE_TOURNAMENT_ID, 1);
+  const cards: Record<string, HoleScores> = {};
+  const markerCards: Record<string, HoleScores> = {};
 
   const roster = IS_PILOT
     ? PLAYERS.filter((p) => p.clubId === "muthaiga")
     : [...PLAYERS];
 
   for (const p of roster) {
-    scores[p.id] = emptyCard();
-    markerScores[p.id] = emptyCard();
+    cards[p.id] = emptyCard();
+    markerCards[p.id] = emptyCard();
   }
 
   if (!IS_PILOT) {
@@ -317,13 +335,13 @@ export function buildInitialState(): SimState {
       const played = HOLES_PLAYED[g.id] ?? 0;
       for (const pid of g.playerIds) {
         if (g.id === USER_GROUP_ID) continue;
-        scores[pid] ??= emptyCard();
-        markerScores[pid] ??= emptyCard();
+        cards[pid] ??= emptyCard();
+        markerCards[pid] ??= emptyCard();
         const hc = playerById(pid).handicap;
         for (let h = 0; h < played; h++) {
           const gross = generateGross(COURSE.holes[h], hc, rnd, BIAS[pid] ?? 0);
-          scores[pid][h] = gross;
-          markerScores[pid][h] = gross;
+          cards[pid][h] = gross;
+          markerCards[pid][h] = gross;
         }
       }
     }
@@ -335,11 +353,11 @@ export function buildInitialState(): SimState {
       [GRACE_ID]: [4, 5, 4],
     };
     for (const [pid, arr] of Object.entries(seeded)) {
-      scores[pid] ??= emptyCard();
-      markerScores[pid] ??= emptyCard();
+      cards[pid] ??= emptyCard();
+      markerCards[pid] ??= emptyCard();
       arr.forEach((gross, i) => {
-        scores[pid][i] = gross;
-        markerScores[pid][i] = gross;
+        cards[pid][i] = gross;
+        markerCards[pid][i] = gross;
       });
     }
   }
@@ -349,8 +367,8 @@ export function buildInitialState(): SimState {
     v: 1,
     demoMode: false,
     hideLeaderboard: false,
-    scores,
-    markerScores,
+    scores: IS_PILOT ? {} : { [DEMO_KEY]: cards },
+    markerScores: IS_PILOT ? {} : { [DEMO_KEY]: markerCards },
     resolved: [],
     attested: false,
     events: [],
@@ -366,7 +384,7 @@ export function buildInitialState(): SimState {
     pairings: IS_PILOT
       ? {}
       : {
-          [LIVE_TOURNAMENT_ID]: GROUPS.map((g) => ({
+          [DEMO_KEY]: GROUPS.map((g) => ({
             id: g.id,
             number: g.number,
             teeTime: g.teeTime,
@@ -374,6 +392,7 @@ export function buildInitialState(): SimState {
           })),
         },
     liveTournamentId: IS_PILOT ? null : LIVE_TOURNAMENT_ID,
+    liveRound: 1,
     cardIn: {},
     integrityLog: [],
     outbox: [],
@@ -396,10 +415,66 @@ export function buildInitialState(): SimState {
   return state;
 }
 
+/* ------------------------------------------------------------------ */
+/* Round-scoped accessors                                              */
+/* ------------------------------------------------------------------ */
+
+/** The roundKey of whatever is on the course right now. */
+export function liveKey(s: SimState): string {
+  return roundKey(s.liveTournamentId ?? LIVE_TOURNAMENT_ID, s.liveRound || 1);
+}
+
+/** Every player's card for a round, creating the bucket if absent. */
+function cardsFor(draft: SimState, key: string): Record<string, HoleScores> {
+  return (draft.scores[key] ??= {});
+}
+function markerCardsFor(draft: SimState, key: string): Record<string, HoleScores> {
+  return (draft.markerScores[key] ??= {});
+}
+function certsFor(draft: SimState, key: string): Record<string, Certification> {
+  return (draft.certifications[key] ??= {});
+}
+function cardInFor(draft: SimState, key: string): Record<string, boolean> {
+  return (draft.cardIn[key] ??= {});
+}
+
+/** Read-only round views, safe when the round has no data yet. */
+export const EMPTY_CARDS: Record<string, HoleScores> = {};
+export function roundScores(s: SimState, key?: string): Record<string, HoleScores> {
+  return s.scores[key ?? liveKey(s)] ?? EMPTY_CARDS;
+}
+export function roundMarkerScores(
+  s: SimState,
+  key?: string,
+): Record<string, HoleScores> {
+  return s.markerScores[key ?? liveKey(s)] ?? EMPTY_CARDS;
+}
+const EMPTY_CERTS: Record<string, Certification> = {};
+export function roundCerts(
+  s: SimState,
+  key?: string,
+): Record<string, Certification> {
+  return s.certifications[key ?? liveKey(s)] ?? EMPTY_CERTS;
+}
+const EMPTY_CARD_IN: Record<string, boolean> = {};
+export function roundCardIn(s: SimState, key?: string): Record<string, boolean> {
+  return s.cardIn[key ?? liveKey(s)] ?? EMPTY_CARD_IN;
+}
+const EMPTY_GROUPS: SavedGroup[] = [];
+export function roundPairings(s: SimState, key?: string): SavedGroup[] {
+  return s.pairings[key ?? liveKey(s)] ?? EMPTY_GROUPS;
+}
+
 function userPosition(s: SimState): number {
   const fieldIds = GROUPS.flatMap((g) => g.playerIds);
   const field = PLAYERS.filter((p) => fieldIds.includes(p.id));
-  const rows = computeStandings(field, s.scores, COURSE, LIVE_T.handicapAllowance, "points");
+  const rows = computeStandings(
+    field,
+    roundScores(s),
+    COURSE,
+    LIVE_T.handicapAllowance,
+    "points",
+  );
   return rows.find((r) => r.player.id === DEMO_USER_ID)?.position ?? 0;
 }
 
@@ -470,8 +545,11 @@ function leaderLoop() {
 
 function groupThru(s: SimState, groupId: string): number {
   const g = GROUPS.find((x) => x.id === groupId)!;
+  const cards = roundScores(s);
   return Math.min(
-    ...g.playerIds.map((pid) => s.scores[pid].filter((x) => x != null).length),
+    ...g.playerIds.map(
+      (pid) => (cards[pid] ?? []).filter((x) => x != null).length,
+    ),
   );
 }
 
@@ -491,7 +569,12 @@ function checkStoryFlags(draft: SimState) {
   // red flag — the HC-24 player scoring far beyond expectation
   if (!draft.mutuaFlagged) {
     const mutua = playerById("p-mutua-d");
-    const st = rowStats(mutua, draft.scores["p-mutua-d"], COURSE, LIVE_T.handicapAllowance);
+    const st = rowStats(
+      mutua,
+      roundScores(draft)["p-mutua-d"] ?? emptyCard(),
+      COURSE,
+      LIVE_T.handicapAllowance,
+    );
     if (st.thru >= 8 && st.points >= st.thru * 2.2) {
       draft.mutuaFlagged = true;
       draft.flags.unshift({
@@ -531,7 +614,7 @@ function maybeNotifyPosition(draft: SimState) {
   if (pos < prev && pos <= 3 && !draft.attested) {
     const st = rowStats(
       playerById(DEMO_USER_ID),
-      draft.scores[DEMO_USER_ID],
+      roundScores(draft)[DEMO_USER_ID] ?? emptyCard(),
       COURSE,
       LIVE_T.handicapAllowance,
     );
@@ -551,6 +634,9 @@ function advanceGroup(draft: SimState, groupId: string) {
   const g = GROUPS.find((x) => x.id === groupId)!;
   const h = groupThru(draft, groupId);
   if (h >= 18) return;
+  const key = liveKey(draft);
+  const cards = cardsFor(draft, key);
+  const marks = markerCardsFor(draft, key);
   for (const pid of g.playerIds) {
     const gross = generateGross(
       COURSE.holes[h],
@@ -558,8 +644,8 @@ function advanceGroup(draft: SimState, groupId: string) {
       Math.random,
       BIAS[pid] ?? 0,
     );
-    draft.scores[pid][h] = gross;
-    draft.markerScores[pid][h] = gross;
+    (cards[pid] ??= emptyCard())[h] = gross;
+    (marks[pid] ??= emptyCard())[h] = gross;
     pushEvent(draft, pid, h, gross);
   }
 }
@@ -594,13 +680,16 @@ function queueEcho(draft: SimState, task: EchoTask) {
 /** Apply one due echo task. Returns silently if it no longer applies. */
 function applyEcho(draft: SimState, task: EchoTask) {
   const h = task.hole;
+  const key = liveKey(draft);
+  const cards = cardsFor(draft, key);
+  const marks = markerCardsFor(draft, key);
   if (task.kind === "marker-joe") {
     // "David's phone" confirms the user's own score —
     // except hole 4, where he has the user down for one more.
-    const own = draft.scores[DEMO_USER_ID][h];
-    if (own == null || draft.markerScores[DEMO_USER_ID][h] != null) return;
+    const own = (cards[DEMO_USER_ID] ??= emptyCard())[h];
+    if (own == null || (marks[DEMO_USER_ID] ??= emptyCard())[h] != null) return;
     const echo = h === 3 && !draft.resolved.includes(3) ? own + 1 : own;
-    draft.markerScores[DEMO_USER_ID][h] = echo;
+    marks[DEMO_USER_ID][h] = echo;
     if (echo !== own) {
       draft.flags.unshift({
         id: `flag-user-h${h + 1}`,
@@ -619,23 +708,23 @@ function applyEcho(draft: SimState, task: EchoTask) {
     }
   } else if (task.kind === "self-david") {
     // David's own phone agrees with what the user entered for him
-    const marked = draft.markerScores[MARKER_ID][h];
-    if (marked == null || draft.scores[MARKER_ID][h] != null) return;
-    draft.scores[MARKER_ID][h] = marked;
+    const marked = (marks[MARKER_ID] ??= emptyCard())[h];
+    if (marked == null || (cards[MARKER_ID] ??= emptyCard())[h] != null) return;
+    cards[MARKER_ID][h] = marked;
     pushEvent(draft, MARKER_ID, h, marked);
   } else if (task.kind === "grace") {
     // Grace plays alongside; her card fills in as the group moves through
-    if (draft.scores[GRACE_ID][h] != null) return;
+    if ((cards[GRACE_ID] ??= emptyCard())[h] != null) return;
     const gross = generateGross(COURSE.holes[h], playerById(GRACE_ID).handicap, Math.random);
-    draft.scores[GRACE_ID][h] = gross;
-    draft.markerScores[GRACE_ID][h] = gross;
+    cards[GRACE_ID][h] = gross;
+    (marks[GRACE_ID] ??= emptyCard())[h] = gross;
     pushEvent(draft, GRACE_ID, h, gross);
   } else if (task.kind === "auto-resolve") {
     // demo mode settles the discrepancy hands-free
     if (!draft.demoMode || draft.resolved.includes(h)) return;
-    const own = draft.scores[DEMO_USER_ID][h];
+    const own = (cards[DEMO_USER_ID] ??= emptyCard())[h];
     if (own == null) return;
-    draft.markerScores[DEMO_USER_ID][h] = own;
+    (marks[DEMO_USER_ID] ??= emptyCard())[h] = own;
     draft.resolved.push(h);
     const flag = draft.flags.find((f) => f.id === `flag-user-h${h + 1}`);
     if (flag) flag.status = "reviewed";
@@ -666,7 +755,7 @@ function processEchoes() {
     if (task.kind === "david-attests-joe") {
       markerAttest(DEMO_USER_ID, MARKER_ID, { method: "pin" });
     } else if (task.kind === "david-certifies") {
-      const cert = simStore.getState().certifications[MARKER_ID];
+      const cert = roundCerts(simStore.getState())[MARKER_ID];
       if (cert?.stage === "awaiting-player") {
         void playerCertify(MARKER_ID, { method: "pin" });
       }
@@ -707,11 +796,14 @@ function enqueueEntity(
 }
 
 function syncCert(draft: SimState, playerId: string) {
-  const c = draft.certifications[playerId];
+  const c = roundCerts(draft)[playerId];
   if (!c) return;
-  enqueueEntity(draft, "certifications", certToRow(activeTournamentOf(draft).id, c), {
-    conflict: "tournament_id,player_id",
-  });
+  enqueueEntity(
+    draft,
+    "certifications",
+    certToRow(activeTournamentOf(draft).id, draft.liveRound, c),
+    { conflict: "tournament_id,round,player_id" },
+  );
 }
 
 function syncAuditTail(draft: SimState, count: number) {
@@ -720,15 +812,18 @@ function syncAuditTail(draft: SimState, count: number) {
   }
 }
 
-function ensureCard(draft: SimState, pid: string) {
-  draft.scores[pid] ??= emptyCard();
-  draft.markerScores[pid] ??= emptyCard();
+/** Make sure both card views exist for a player in a round. */
+function ensureCard(draft: SimState, pid: string, key = liveKey(draft)) {
+  cardsFor(draft, key)[pid] ??= emptyCard();
+  markerCardsFor(draft, key)[pid] ??= emptyCard();
 }
 
 export function enterOwnScore(holeIdx: number, gross: number) {
   mutate((draft) => {
-    draft.scores[DEMO_USER_ID][holeIdx] = gross;
-    draft.markerScores[DEMO_USER_ID][holeIdx] = null; // marker re-confirms
+    const key = liveKey(draft);
+    ensureCard(draft, DEMO_USER_ID, key);
+    cardsFor(draft, key)[DEMO_USER_ID][holeIdx] = gross;
+    markerCardsFor(draft, key)[DEMO_USER_ID][holeIdx] = null; // marker re-confirms
     pushEvent(draft, DEMO_USER_ID, holeIdx, gross);
     queueEcho(draft, { kind: "marker-joe", hole: holeIdx, at: Date.now() + 1700 });
     queueEcho(draft, { kind: "grace", hole: holeIdx, at: Date.now() + 2400 });
@@ -739,7 +834,9 @@ export function enterOwnScore(holeIdx: number, gross: number) {
 
 export function enterMarkerScore(holeIdx: number, gross: number) {
   mutate((draft) => {
-    draft.markerScores[MARKER_ID][holeIdx] = gross;
+    const key = liveKey(draft);
+    ensureCard(draft, MARKER_ID, key);
+    markerCardsFor(draft, key)[MARKER_ID][holeIdx] = gross;
     queueEcho(draft, { kind: "self-david", hole: holeIdx, at: Date.now() + 1300 });
     enqueueOp(draft, "score", { playerId: MARKER_ID, hole: holeIdx, gross, source: "marker" });
   });
@@ -781,11 +878,13 @@ export function enterOwnScorePilot(holeIdx: number, gross: number) {
   mutate((draft) => {
     const me = meId(draft);
     if (!me) return;
-    ensureCard(draft, me);
-    draft.scores[me][holeIdx] = gross;
+    const key = liveKey(draft);
+    ensureCard(draft, me, key);
+    cardsFor(draft, key)[me][holeIdx] = gross;
     pushEvent(draft, me, holeIdx, gross);
     enqueueOp(draft, "score", {
       playerId: me,
+      round: draft.liveRound,
       hole: holeIdx,
       gross,
       source: "player",
@@ -803,10 +902,12 @@ export function enterMarkerScoreFor(
   gross: number,
 ) {
   mutate((draft) => {
-    ensureCard(draft, playerId);
-    draft.markerScores[playerId][holeIdx] = gross;
+    const key = liveKey(draft);
+    ensureCard(draft, playerId, key);
+    markerCardsFor(draft, key)[playerId][holeIdx] = gross;
     enqueueOp(draft, "score", {
       playerId,
+      round: draft.liveRound,
       hole: holeIdx,
       gross,
       source: "marker",
@@ -822,7 +923,12 @@ export function enterMarkerScoreFor(
 function checkIntegrity(draft: SimState, pid: string) {
   const player = draft.roster.find((p) => p.id === pid);
   if (!player || player.handicap < 15) return;
-  const st = rowStats(player, draft.scores[pid], COURSE, LIVE_T.handicapAllowance);
+  const st = rowStats(
+    player,
+    roundScores(draft)[pid] ?? emptyCard(),
+    COURSE,
+    LIVE_T.handicapAllowance,
+  );
   const already = draft.integrityLog.some((f) => f.playerId === pid);
   if (!already && st.thru >= 9 && st.points >= st.thru * 2.2) {
     draft.integrityLog.unshift({
@@ -841,30 +947,39 @@ function checkIntegrity(draft: SimState, pid: string) {
 /** Desk entry of one cell from a paper card. Both card views stay agreed. */
 export function setBulkScore(pid: string, holeIdx: number, gross: number | null) {
   mutate((draft) => {
-    ensureCard(draft, pid);
-    const prev = draft.scores[pid][holeIdx];
-    draft.scores[pid][holeIdx] = gross;
-    draft.markerScores[pid][holeIdx] = gross;
+    const key = liveKey(draft);
+    ensureCard(draft, pid, key);
+    const cards = cardsFor(draft, key);
+    const prev = cards[pid][holeIdx];
+    cards[pid][holeIdx] = gross;
+    markerCardsFor(draft, key)[pid][holeIdx] = gross;
     if (gross != null && gross !== prev) pushEvent(draft, pid, holeIdx, gross);
     if (IS_PILOT) checkIntegrity(draft, pid);
     else maybeNotifyPosition(draft);
-    enqueueOp(draft, "score", { playerId: pid, hole: holeIdx, gross, source: "desk" });
+    enqueueOp(draft, "score", {
+      playerId: pid,
+      round: draft.liveRound,
+      hole: holeIdx,
+      gross,
+      source: "desk",
+    });
   });
 }
 
 export function setCardIn(pid: string, on: boolean) {
   mutate((draft) => {
-    draft.cardIn[pid] = on;
+    cardInFor(draft, liveKey(draft))[pid] = on;
     enqueueEntity(
       draft,
       "card_in",
       {
         tournament_id: activeTournamentOf(draft).id,
+        round: draft.liveRound,
         player_id: pid,
         is_in: on,
         updated_at: new Date().toISOString(),
       },
-      { conflict: "tournament_id,player_id" },
+      { conflict: "tournament_id,round,player_id" },
     );
   });
 }
@@ -889,14 +1004,19 @@ export function updateRosterMember(id: string, patch: Partial<Player>) {
   });
 }
 
-export function savePairings(tournamentId: string, groups: SavedGroup[]) {
+/** Pairings are per round: leaders get re-paired for the next one. */
+export function savePairings(
+  tournamentId: string,
+  groups: SavedGroup[],
+  round = 1,
+) {
   mutate((draft) => {
-    draft.pairings[tournamentId] = groups;
+    draft.pairings[roundKey(tournamentId, round)] = groups;
     // only publish pairings for a tournament that already exists in the cloud
     if (draft.liveTournamentId === tournamentId) {
       for (const g of groups) {
-        enqueueEntity(draft, "pairings", pairingToRow(tournamentId, g), {
-          conflict: "tournament_id,group_id",
+        enqueueEntity(draft, "pairings", pairingToRow(tournamentId, round, g), {
+          conflict: "tournament_id,round,group_id",
         });
       }
     }
@@ -908,20 +1028,22 @@ export function savePairings(tournamentId: string, groups: SavedGroup[]) {
  * "publish" moment — the tournament, its pairings, and every player in the
  * field go to the cloud so any device that joins hydrates the whole thing.
  */
-export function startTournamentDay(tournamentId: string) {
+export function startTournamentDay(tournamentId: string, round = 1) {
   mutate((draft) => {
     draft.liveTournamentId = tournamentId;
+    draft.liveRound = round;
     const t = draft.created.find((x) => x.id === tournamentId);
     if (t) t.status = "live";
-    const groups = draft.pairings[tournamentId] ?? [];
+    const key = roundKey(tournamentId, round);
+    const groups = draft.pairings[key] ?? [];
     for (const g of groups) {
-      for (const pid of g.playerIds) ensureCard(draft, pid);
+      for (const pid of g.playerIds) ensureCard(draft, pid, key);
     }
     // publish everything a joining device needs
     if (t) enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
     for (const g of groups) {
-      enqueueEntity(draft, "pairings", pairingToRow(tournamentId, g), {
-        conflict: "tournament_id,group_id",
+      enqueueEntity(draft, "pairings", pairingToRow(tournamentId, round, g), {
+        conflict: "tournament_id,round,group_id",
       });
     }
     const fieldIds = new Set(groups.flatMap((g) => g.playerIds));
@@ -931,6 +1053,132 @@ export function startTournamentDay(tournamentId: string) {
       }
     }
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Round lifecycle                                                     */
+/* ------------------------------------------------------------------ */
+
+/** Every round's cards plus the course it was played on, for cumulative work. */
+export function roundCardsOf(s: SimState, t: Tournament): RoundCards[] {
+  return roundsOf(t).map((r) => ({
+    round: r.number,
+    scores: s.scores[roundKey(t.id, r.number)] ?? EMPTY_CARDS,
+    course: COURSES.find((c) => c.id === r.courseId) ?? COURSE,
+  }));
+}
+
+/** The field of a given round, from that round's pairings. */
+export function fieldOfRound(s: SimState, tournamentId: string, round: number) {
+  return (s.pairings[roundKey(tournamentId, round)] ?? []).flatMap(
+    (g) => g.playerIds,
+  );
+}
+
+/**
+ * Who survives the cut configured after `round`, computed from the cumulative
+ * standings up to and including it. Returns null when that round has no cut.
+ */
+export function cutAfterRound(
+  s: SimState,
+  t: Tournament,
+  round: number,
+): { survivors: string[]; line: number | null; count: number } | null {
+  const r = roundsOf(t).find((x) => x.number === round);
+  if (!r?.cut || r.cut.topN <= 0) return null;
+  const upTo = roundCardsOf(s, t).filter((rc) => rc.round <= round);
+  const ids = new Set(
+    roundsOf(t)
+      .filter((x) => x.number <= round)
+      .flatMap((x) => fieldOfRound(s, t.id, x.number)),
+  );
+  const players = [...ids]
+    .map((pid) => s.roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid))
+    .filter((p): p is Player => !!p);
+  const mode = t.format === "Stableford" ? "points" : "net";
+  const rows = cumulativeStandings(players, upTo, t.handicapAllowance, mode);
+  const cut = applyCut(rows, r.cut.topN, mode);
+  return { survivors: [...cut.survivors], line: cut.line, count: cut.count };
+}
+
+/**
+ * Close the round on the course and open the next one. If the round that just
+ * finished has a cut, the next round's pairings are seeded with the survivors
+ * in leaderboard order, leaders out last, which is how championships re-pair.
+ */
+export function startNextRound(tournamentId: string) {
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === tournamentId);
+    if (!t) return;
+    const rounds = roundsOf(t);
+    const current = draft.liveRound || 1;
+    const next = rounds.find((r) => r.number === current + 1);
+    if (!next) return;
+
+    const nextKey = roundKey(tournamentId, next.number);
+    // carry the field forward if the admin has not set this round's pairings
+    if (!draft.pairings[nextKey]?.length) {
+      const cut = cutAfterRound(draft, t, current);
+      const carried = cut
+        ? cut.survivors
+        : fieldOfRound(draft, tournamentId, current);
+      const ordered = orderByStandings(draft, t, current, carried);
+      draft.pairings[nextKey] = groupsFromOrder(ordered, next.firstTee, next.teeInterval);
+    }
+
+    draft.liveRound = next.number;
+    for (const g of draft.pairings[nextKey] ?? []) {
+      for (const pid of g.playerIds) ensureCard(draft, pid, nextKey);
+      enqueueEntity(draft, "pairings", pairingToRow(tournamentId, next.number, g), {
+        conflict: "tournament_id,round,group_id",
+      });
+    }
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+}
+
+/** Leaderboard order after `throughRound`, worst first so leaders tee off last. */
+export function orderByStandings(
+  s: SimState,
+  t: Tournament,
+  throughRound: number,
+  ids: string[],
+): string[] {
+  const players = ids
+    .map((pid) => s.roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid))
+    .filter((p): p is Player => !!p);
+  const mode = t.format === "Stableford" ? "points" : "net";
+  const rows = cumulativeStandings(
+    players,
+    roundCardsOf(s, t).filter((rc) => rc.round <= throughRound),
+    t.handicapAllowance,
+    mode,
+  );
+  // reverse: the last group out is the leading group
+  return rows.map((r) => r.player.id).reverse();
+}
+
+/** Split an ordered field into threes with staggered tee times. */
+export function groupsFromOrder(
+  ids: string[],
+  firstTee: string,
+  interval: number,
+  size = 3,
+): SavedGroup[] {
+  const [hh, mm] = firstTee.split(":").map((x) => parseInt(x, 10));
+  const start = (isNaN(hh) ? 7 : hh) * 60 + (isNaN(mm) ? 30 : mm);
+  const groups: SavedGroup[] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    const n = groups.length;
+    const mins = start + n * interval;
+    groups.push({
+      id: `g${n + 1}`,
+      number: n + 1,
+      teeTime: `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`,
+      playerIds: ids.slice(i, i + size),
+    });
+  }
+  return groups;
 }
 
 export function retryFailedOps() {
@@ -945,13 +1193,20 @@ export function retryFailedOps() {
 
 export function resolveDiscrepancy(playerId: string, holeIdx: number, agreed: number) {
   mutate((draft) => {
-    draft.scores[playerId][holeIdx] = agreed;
-    draft.markerScores[playerId][holeIdx] = agreed;
+    const key = liveKey(draft);
+    ensureCard(draft, playerId, key);
+    cardsFor(draft, key)[playerId][holeIdx] = agreed;
+    markerCardsFor(draft, key)[playerId][holeIdx] = agreed;
     if (!draft.resolved.includes(holeIdx)) draft.resolved.push(holeIdx);
     const flag = draft.flags.find((f) => f.id === `flag-user-h${holeIdx + 1}`);
     if (flag) flag.status = "reviewed";
     maybeNotifyPosition(draft);
-    enqueueOp(draft, "resolve", { playerId, hole: holeIdx, gross: agreed });
+    enqueueOp(draft, "resolve", {
+      playerId,
+      round: draft.liveRound,
+      hole: holeIdx,
+      gross: agreed,
+    });
   });
 }
 
@@ -960,12 +1215,9 @@ export function resolveDiscrepancy(playerId: string, holeIdx: number, agreed: nu
 /* ------------------------------------------------------------------ */
 
 function ensureCert(draft: SimState, playerId: string, markerId: string) {
-  draft.certifications[playerId] ??= {
-    playerId,
-    markerId,
-    stage: "awaiting-marker",
-  };
-  return draft.certifications[playerId];
+  const certs = certsFor(draft, liveKey(draft));
+  certs[playerId] ??= { playerId, markerId, stage: "awaiting-marker" };
+  return certs[playerId];
 }
 
 function pushAudit(draft: SimState, rec: Omit<AuditRecord, "id" | "appVersion">) {
@@ -994,6 +1246,7 @@ export function markerAttest(
     pushAudit(draft, {
       kind: "marker-attested",
       tournamentId: t.id,
+      round: draft.liveRound,
       playerId,
       actor: markerId,
       ts: Date.now(),
@@ -1019,22 +1272,26 @@ export async function playerCertify(
   artifact: SignatureArtifact,
 ) {
   const s = simStore.getState();
-  const cert = s.certifications[playerId];
+  const round = s.liveRound;
+  const cert = roundCerts(s)[playerId];
   if (!cert || cert.stage !== "awaiting-player") return;
   const t = IS_PILOT
     ? (s.created.find((x) => x.id === s.liveTournamentId) ?? LIVE_T)
     : LIVE_T;
-  const course = COURSES.find((c) => c.id === t.courseId) ?? COURSE;
+  // the course of the round being certified, which may differ per round
+  const course =
+    COURSES.find((c) => c.id === roundOf(t, round).courseId) ?? COURSE;
   const player =
     s.roster.find((p) => p.id === playerId) ?? playerById(playerId);
 
   const hash = await sha256Hex(
     scorePayload({
       tournamentId: t.id,
+      round,
       courseId: course.id,
       playerId,
       markerId: cert.markerId,
-      scores: s.scores[playerId] ?? [],
+      scores: roundScores(s)[playerId] ?? [],
     }),
   );
   const gps =
@@ -1047,7 +1304,7 @@ export async function playerCertify(
   const now = Date.now();
 
   mutate((draft) => {
-    const c = draft.certifications[playerId];
+    const c = roundCerts(draft)[playerId];
     if (!c || c.stage !== "awaiting-player") return;
     c.stage = "certified";
     c.playerCertifiedAt = now;
@@ -1057,6 +1314,7 @@ export async function playerCertify(
     pushAudit(draft, {
       kind: "player-certified",
       tournamentId: t.id,
+      round,
       playerId,
       actor: playerId,
       ts: now,
@@ -1065,6 +1323,7 @@ export async function playerCertify(
     pushAudit(draft, {
       kind: "card-returned",
       tournamentId: t.id,
+      round,
       playerId,
       actor: playerId,
       ts: now,
@@ -1106,15 +1365,16 @@ export function raiseDispute(
     const cert = ensureCert(
       draft,
       playerId,
-      draft.certifications[playerId]?.markerId ?? MARKER_ID,
+      roundCerts(draft)[playerId]?.markerId ?? MARKER_ID,
     );
     cert.stage = "disputed";
     draft.disputes.unshift({
       id: `disp-${Date.now().toString(36)}`,
       playerId,
+      round: draft.liveRound,
       holeIdx,
-      markerValue: draft.markerScores[playerId]?.[holeIdx] ?? null,
-      playerValue: draft.scores[playerId]?.[holeIdx] ?? null,
+      markerValue: roundMarkerScores(draft)[playerId]?.[holeIdx] ?? null,
+      playerValue: roundScores(draft)[playerId]?.[holeIdx] ?? null,
       markerEnteredAt: Date.now() - 90_000,
       playerEnteredAt: Date.now() - 150_000,
       reason,
@@ -1125,6 +1385,7 @@ export function raiseDispute(
     pushAudit(draft, {
       kind: "dispute-raised",
       tournamentId: t.id,
+      round: draft.liveRound,
       playerId,
       actor: raisedBy,
       ts: Date.now(),
@@ -1151,7 +1412,7 @@ export function raiseDispute(
 
 export function markCommitteeReview(playerId: string) {
   mutate((draft) => {
-    const c = draft.certifications[playerId];
+    const c = roundCerts(draft)[playerId];
     if (c && c.stage === "disputed") c.stage = "committee-review";
     syncCert(draft, playerId);
   });
@@ -1172,7 +1433,11 @@ export async function resolveDispute(
   const t = IS_PILOT
     ? (s.created.find((x) => x.id === s.liveTournamentId) ?? LIVE_T)
     : LIVE_T;
-  const course = COURSES.find((c) => c.id === t.courseId) ?? COURSE;
+  // a dispute belongs to the round it was raised in, which may not be the
+  // round now on the course
+  const dkey = roundKey(t.id, d.round);
+  const course =
+    COURSES.find((c) => c.id === roundOf(t, d.round).courseId) ?? COURSE;
 
   const agreed =
     decision.kind === "marker"
@@ -1183,7 +1448,7 @@ export async function resolveDispute(
           ? (decision.score ?? d.playerValue)
           : null;
 
-  const nextScores = [...(s.scores[d.playerId] ?? [])];
+  const nextScores = [...(roundScores(s, dkey)[d.playerId] ?? [])];
   if (agreed != null) nextScores[d.holeIdx] = agreed;
   const hash =
     decision.kind === "dq"
@@ -1191,9 +1456,10 @@ export async function resolveDispute(
       : await sha256Hex(
           scorePayload({
             tournamentId: t.id,
+            round: d.round,
             courseId: course.id,
             playerId: d.playerId,
-            markerId: s.certifications[d.playerId]?.markerId ?? "",
+            markerId: roundCerts(s, dkey)[d.playerId]?.markerId ?? "",
             scores: nextScores,
           }),
         );
@@ -1202,14 +1468,15 @@ export async function resolveDispute(
     const disp = draft.disputes.find((x) => x.id === disputeId);
     if (!disp || disp.status === "resolved") return;
     disp.status = "resolved";
-    const cert = draft.certifications[d.playerId];
+    const cert = certsFor(draft, dkey)[d.playerId];
     if (decision.kind === "dq") {
       disp.resolution = `DQ under Rule 3.3b(3): ${decision.reason}`;
       if (cert) cert.stage = "dq";
     } else {
       if (agreed != null) {
-        draft.scores[d.playerId][d.holeIdx] = agreed;
-        draft.markerScores[d.playerId][d.holeIdx] = agreed;
+        ensureCard(draft, d.playerId, dkey);
+        cardsFor(draft, dkey)[d.playerId][d.holeIdx] = agreed;
+        markerCardsFor(draft, dkey)[d.playerId][d.holeIdx] = agreed;
       }
       disp.resolution = `${decision.kind === "committee" ? "Committee score" : decision.kind === "marker" ? "Marker's figure" : "Player's figure"} ${agreed} for hole ${d.holeIdx + 1}: ${decision.reason}`;
       if (cert) {
@@ -1227,6 +1494,7 @@ export async function resolveDispute(
     pushAudit(draft, {
       kind: "dispute-resolved",
       tournamentId: t.id,
+      round: d.round,
       playerId: d.playerId,
       actor: "committee",
       ts: Date.now(),
@@ -1238,6 +1506,7 @@ export async function resolveDispute(
     if (agreed != null) {
       enqueueOp(draft, "resolve", {
         playerId: d.playerId,
+        round: d.round,
         hole: d.holeIdx,
         gross: agreed,
         source: "committee",
@@ -1261,8 +1530,9 @@ export function requestCorrection(
     draft.corrections.unshift({
       id: `corr-${Date.now().toString(36)}`,
       playerId,
+      round: draft.liveRound,
       holeIdx,
-      currentGross: draft.scores[playerId]?.[holeIdx] ?? null,
+      currentGross: roundScores(draft)[playerId]?.[holeIdx] ?? null,
       proposedGross,
       reason,
       ts: Date.now(),
@@ -1271,10 +1541,11 @@ export function requestCorrection(
     pushAudit(draft, {
       kind: "correction-requested",
       tournamentId: t.id,
+      round: draft.liveRound,
       playerId,
       actor: playerId,
       ts: Date.now(),
-      detail: `Correction requested for hole ${holeIdx + 1}: ${draft.scores[playerId]?.[holeIdx]} → ${proposedGross}. ${reason}`,
+      detail: `Correction requested for hole ${holeIdx + 1}: ${roundScores(draft)[playerId]?.[holeIdx]} → ${proposedGross}. ${reason}`,
     });
     const who = draft.roster.find((p) => p.id === playerId)?.name ?? playerId;
     draft.flags.unshift({
@@ -1306,18 +1577,22 @@ export async function decideCorrection(
   const t = IS_PILOT
     ? (s.created.find((x) => x.id === s.liveTournamentId) ?? LIVE_T)
     : LIVE_T;
-  const course = COURSES.find((x) => x.id === t.courseId) ?? COURSE;
+  // a correction belongs to the round whose card it amends
+  const ckey = roundKey(t.id, c.round);
+  const course =
+    COURSES.find((x) => x.id === roundOf(t, c.round).courseId) ?? COURSE;
 
   let hash: string | undefined;
   if (approve) {
-    const nextScores = [...(s.scores[c.playerId] ?? [])];
+    const nextScores = [...(roundScores(s, ckey)[c.playerId] ?? [])];
     nextScores[c.holeIdx] = c.proposedGross;
     hash = await sha256Hex(
       scorePayload({
         tournamentId: t.id,
+        round: c.round,
         courseId: course.id,
         playerId: c.playerId,
-        markerId: s.certifications[c.playerId]?.markerId ?? "",
+        markerId: roundCerts(s, ckey)[c.playerId]?.markerId ?? "",
         scores: nextScores,
       }),
     );
@@ -1331,9 +1606,10 @@ export async function decideCorrection(
     corr.decisionReason = reason;
     corr.decidedAt = Date.now();
     if (approve) {
-      draft.scores[corr.playerId][corr.holeIdx] = corr.proposedGross;
-      draft.markerScores[corr.playerId][corr.holeIdx] = corr.proposedGross;
-      const cert = draft.certifications[corr.playerId];
+      ensureCard(draft, corr.playerId, ckey);
+      cardsFor(draft, ckey)[corr.playerId][corr.holeIdx] = corr.proposedGross;
+      markerCardsFor(draft, ckey)[corr.playerId][corr.holeIdx] = corr.proposedGross;
+      const cert = certsFor(draft, ckey)[corr.playerId];
       if (cert) cert.lockedHash = hash;
     }
     const flag = draft.flags.find(
@@ -1343,6 +1619,7 @@ export async function decideCorrection(
     pushAudit(draft, {
       kind: "correction-decided",
       tournamentId: t.id,
+      round: corr.round,
       playerId: corr.playerId,
       actor: "committee",
       ts: Date.now(),
@@ -1353,6 +1630,7 @@ export async function decideCorrection(
     if (approve) {
       enqueueOp(draft, "resolve", {
         playerId: corr.playerId,
+        round: corr.round,
         hole: corr.holeIdx,
         gross: corr.proposedGross,
         source: "committee",
@@ -1495,21 +1773,28 @@ export function endTournamentDay(id: string) {
   mutate((draft) => {
     const t = draft.created.find((x) => x.id === id);
     if (!t) return;
-    const groups = draft.pairings[id] ?? [];
-    const fieldIds = groups.flatMap((g) => g.playerIds);
-    const players = fieldIds
+    // the field is everyone who appeared in any round's pairings
+    const rounds = roundsOf(t);
+    const fieldIds = new Set(
+      rounds.flatMap((r) =>
+        (draft.pairings[roundKey(id, r.number)] ?? []).flatMap((g) => g.playerIds),
+      ),
+    );
+    const players = [...fieldIds]
       .map((pid) => draft.roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid))
       .filter((p): p is Player => !!p);
-    const course = COURSES.find((c) => c.id === t.courseId);
     const mode = t.format === "Stableford" ? "points" : "net";
-    if (course && players.length) {
+    if (players.length) {
       const toParStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
-      const standings = computeStandings(
+      const standings = cumulativeStandings(
         players,
-        draft.scores,
-        course,
+        roundCardsOf(draft, t),
         t.handicapAllowance,
         mode,
+        (rnd, pid) =>
+          (draft.pairings[roundKey(id, rnd)] ?? []).some((g) =>
+            g.playerIds.includes(pid),
+          ),
       );
       const win = standings[0];
       const me = meId(draft);
@@ -1527,6 +1812,7 @@ export function endTournamentDay(id: string) {
     }
     t.status = "completed";
     draft.liveTournamentId = null;
+    draft.liveRound = 1;
     enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
   });
 }
@@ -1575,23 +1861,25 @@ function demoAutoplay() {
   const s = simStore.getState();
   if (!s.demoMode || !isLeader || s.attested) return;
   // next hole where the user's own card is empty
-  const ownNext = s.scores[DEMO_USER_ID].findIndex((x) => x == null);
-  const markerNext = s.markerScores[MARKER_ID].findIndex((x) => x == null);
+  const cards = roundScores(s);
+  const marks = roundMarkerScores(s);
+  const own = cards[DEMO_USER_ID] ?? emptyCard();
+  const ownNext = own.findIndex((x) => x == null);
+  const markerNext = (marks[MARKER_ID] ?? emptyCard()).findIndex((x) => x == null);
   // a waiting discrepancy pauses play for a beat, then resolves itself
-  const discIdx = s.scores[DEMO_USER_ID].findIndex(
-    (own, i) =>
-      own != null &&
-      s.markerScores[DEMO_USER_ID][i] != null &&
-      s.markerScores[DEMO_USER_ID][i] !== own,
+  const mine = marks[DEMO_USER_ID] ?? emptyCard();
+  const discIdx = own.findIndex(
+    (v, i) => v != null && mine[i] != null && mine[i] !== v,
   );
   if (discIdx >= 0) {
-    resolveDiscrepancy(DEMO_USER_ID, discIdx, s.scores[DEMO_USER_ID][discIdx]!);
+    resolveDiscrepancy(DEMO_USER_ID, discIdx, own[discIdx]!);
     return;
   }
   if (ownNext === -1 && markerNext === -1) {
     // walk the certification ceremony hands-free
-    const davidCert = s.certifications[MARKER_ID];
-    const joeCert = s.certifications[DEMO_USER_ID];
+    const certs = roundCerts(s);
+    const davidCert = certs[MARKER_ID];
+    const joeCert = certs[DEMO_USER_ID];
     if (!davidCert || davidCert.stage === "awaiting-marker") {
       markerAttest(MARKER_ID, DEMO_USER_ID, { method: "pin" });
     } else if (joeCert?.stage === "awaiting-player") {
@@ -1692,22 +1980,24 @@ export function startSim() {
  */
 function applyScoreRow(
   draft: SimState,
+  key: string,
   pid: string,
   holeIdx: number,
   gross: number | null,
   source?: string,
 ) {
+  ensureCard(draft, pid, key);
   if (source === "marker") {
-    draft.markerScores[pid][holeIdx] = gross;
+    markerCardsFor(draft, key)[pid][holeIdx] = gross;
     return;
   }
   if (source === "player") {
-    draft.scores[pid][holeIdx] = gross;
+    cardsFor(draft, key)[pid][holeIdx] = gross;
     return;
   }
   // desk, resolved discrepancies, and anything older that predates sources
-  draft.scores[pid][holeIdx] = gross;
-  draft.markerScores[pid][holeIdx] = gross;
+  cardsFor(draft, key)[pid][holeIdx] = gross;
+  markerCardsFor(draft, key)[pid][holeIdx] = gross;
 }
 
 export function applyRemoteScore(
@@ -1715,16 +2005,26 @@ export function applyRemoteScore(
   holeIdx: number,
   gross: number | null,
   source?: string,
+  round?: number,
+  tournamentId?: string,
 ) {
   const s = simStore.getState();
+  const key = roundKey(
+    tournamentId ?? s.liveTournamentId ?? LIVE_TOURNAMENT_ID,
+    round ?? s.liveRound ?? 1,
+  );
   const current =
-    source === "marker" ? s.markerScores[pid]?.[holeIdx] : s.scores[pid]?.[holeIdx];
+    source === "marker"
+      ? roundMarkerScores(s, key)[pid]?.[holeIdx]
+      : roundScores(s, key)[pid]?.[holeIdx];
   if (current === gross) return;
   mutate((draft) => {
-    ensureCard(draft, pid);
-    applyScoreRow(draft, pid, holeIdx, gross, source);
-    // the ticker follows the player's own card, not the marker's copy
-    if (gross != null && source !== "marker") pushEvent(draft, pid, holeIdx, gross);
+    applyScoreRow(draft, key, pid, holeIdx, gross, source);
+    // the ticker only follows the round on the course, and only the player's
+    // own card, never the marker's copy
+    if (gross != null && source !== "marker" && key === liveKey(draft)) {
+      pushEvent(draft, pid, holeIdx, gross);
+    }
   });
 }
 
@@ -1738,9 +2038,11 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
       case "tournaments": {
         const t = rowToTournament(row);
         if (t.status === "cancelled") {
-          // deleted elsewhere before it started — drop it everywhere
+          // deleted elsewhere before it started: drop it everywhere
           draft.created = draft.created.filter((x) => x.id !== t.id);
-          delete draft.pairings[t.id];
+          for (const k of Object.keys(draft.pairings)) {
+            if (k.startsWith(`${t.id}#`)) delete draft.pairings[k];
+          }
           if (draft.liveTournamentId === t.id) draft.liveTournamentId = null;
           break;
         }
@@ -1754,13 +2056,15 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
       }
       case "pairings": {
         const tid = row.tournament_id as string;
+        const rnd = (row.round as number) ?? 1;
+        const key = roundKey(tid, rnd);
         const g = rowToPairing(row);
-        const list = (draft.pairings[tid] ??= []);
+        const list = (draft.pairings[key] ??= []);
         const i = list.findIndex((x) => x.id === g.id);
         if (i >= 0) list[i] = g;
         else list.push(g);
         list.sort((a, b) => a.number - b.number);
-        for (const pid of g.playerIds) ensureCard(draft, pid);
+        for (const pid of g.playerIds) ensureCard(draft, pid, key);
         break;
       }
       case "players": {
@@ -1772,15 +2076,21 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
         break;
       }
       case "card_in": {
-        draft.cardIn[row.player_id as string] = Boolean(row.is_in);
+        const key = roundKey(
+          row.tournament_id as string,
+          (row.round as number) ?? 1,
+        );
+        cardInFor(draft, key)[row.player_id as string] = Boolean(row.is_in);
         break;
       }
       case "certifications": {
+        const key = roundKey(
+          row.tournament_id as string,
+          (row.round as number) ?? 1,
+        );
         const c = rowToCert(row);
-        draft.certifications[c.playerId] = {
-          ...draft.certifications[c.playerId],
-          ...c,
-        };
+        const certs = certsFor(draft, key);
+        certs[c.playerId] = { ...certs[c.playerId], ...c };
         break;
       }
       case "disputes": {
@@ -1839,15 +2149,17 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
       String(a.updated_at ?? "").localeCompare(String(b.updated_at ?? "")),
     );
     for (const r of ordered) {
-      ensureCard(draft, r.player_id);
-      applyScoreRow(draft, r.player_id, r.hole, r.gross, r.source);
+      const key = roundKey(t.id, r.round ?? 1);
+      applyScoreRow(draft, key, r.player_id, r.hole, r.gross, r.source);
     }
     for (const r of snap.cardIn) {
-      draft.cardIn[r.player_id as string] = Boolean(r.is_in);
+      const key = roundKey(t.id, (r.round as number) ?? 1);
+      cardInFor(draft, key)[r.player_id as string] = Boolean(r.is_in);
     }
     for (const r of snap.certifications) {
+      const key = roundKey(t.id, (r.round as number) ?? 1);
       const c = rowToCert(r);
-      draft.certifications[c.playerId] = c;
+      certsFor(draft, key)[c.playerId] = c;
     }
     draft.disputes = snap.disputes.map(rowToDispute);
     draft.corrections = snap.corrections.map(rowToCorrection);

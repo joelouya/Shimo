@@ -38,6 +38,7 @@ export function tournamentToRow(t: Tournament) {
     first_tee: t.firstTee,
     tee_interval: t.teeInterval,
     field_size: t.fieldSize,
+    rounds: t.rounds ?? null,
     correction_window_min: t.correctionWindowMin ?? 15,
     updated_at: new Date().toISOString(),
   };
@@ -66,15 +67,17 @@ export function rowToTournament(r: Record<string, unknown>): Tournament {
     firstTee: (r.first_tee as string) ?? "07:30",
     teeInterval: (r.tee_interval as number) ?? 10,
     fieldSize: (r.field_size as number) ?? 0,
+    rounds: (r.rounds as Tournament["rounds"]) ?? undefined,
     correctionWindowMin: (r.correction_window_min as number) ?? 15,
   };
 }
 
 /* ---- pairings ---- */
 
-export function pairingToRow(tournamentId: string, g: SavedGroup) {
+export function pairingToRow(tournamentId: string, round: number, g: SavedGroup) {
   return {
     tournament_id: tournamentId,
+    round,
     group_id: g.id,
     number: g.number,
     tee_time: g.teeTime,
@@ -121,9 +124,10 @@ export function rowToPlayer(r: Record<string, unknown>): Player {
 
 /* ---- certifications ---- */
 
-export function certToRow(tournamentId: string, c: Certification) {
+export function certToRow(tournamentId: string, round: number, c: Certification) {
   return {
     tournament_id: tournamentId,
+    round,
     player_id: c.playerId,
     marker_id: c.markerId,
     stage: c.stage,
@@ -155,6 +159,7 @@ export function disputeToRow(tournamentId: string, d: Dispute) {
   return {
     id: d.id,
     tournament_id: tournamentId,
+    round: d.round,
     player_id: d.playerId,
     hole_idx: d.holeIdx,
     marker_value: d.markerValue,
@@ -174,6 +179,7 @@ export function rowToDispute(r: Record<string, unknown>): Dispute {
   return {
     id: r.id as string,
     playerId: r.player_id as string,
+    round: (r.round as number) ?? 1,
     holeIdx: r.hole_idx as number,
     markerValue: (r.marker_value as number) ?? null,
     playerValue: (r.player_value as number) ?? null,
@@ -193,6 +199,7 @@ export function correctionToRow(tournamentId: string, c: CorrectionRequest) {
   return {
     id: c.id,
     tournament_id: tournamentId,
+    round: c.round,
     player_id: c.playerId,
     hole_idx: c.holeIdx,
     current_gross: c.currentGross,
@@ -211,6 +218,7 @@ export function rowToCorrection(r: Record<string, unknown>): CorrectionRequest {
   return {
     id: r.id as string,
     playerId: r.player_id as string,
+    round: (r.round as number) ?? 1,
     holeIdx: r.hole_idx as number,
     currentGross: (r.current_gross as number) ?? null,
     proposedGross: r.proposed_gross as number,
@@ -229,6 +237,7 @@ export function auditToRow(a: AuditRecord) {
   return {
     id: a.id,
     tournament_id: a.tournamentId,
+    round: a.round,
     player_id: a.playerId,
     kind: a.kind,
     actor: a.actor,
@@ -247,6 +256,7 @@ export function rowToAudit(r: Record<string, unknown>): AuditRecord {
   return {
     id: r.id as string,
     tournamentId: r.tournament_id as string,
+    round: (r.round as number) ?? 1,
     playerId: r.player_id as string,
     kind: r.kind as AuditRecord["kind"],
     actor: r.actor as string,

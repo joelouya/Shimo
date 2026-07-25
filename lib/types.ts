@@ -63,11 +63,47 @@ export interface Division {
   range: [number, number]; // handicap range inclusive
 }
 
+/**
+ * The cut applied after a round: the field is reduced to the leading `topN`
+ * players and everyone tied with the last of them. Ties are always kept, which
+ * is why a "top 30" cut routinely returns 33 players.
+ */
+export interface CutRule {
+  topN: number;
+}
+
+/**
+ * One round of a tournament. A club monthly medal has exactly one; a
+ * championship has several, and each may be played on a different course, off
+ * different tees, with its own pairings.
+ */
+export interface Round {
+  /** stable within the tournament, e.g. "r1" */
+  id: string;
+  /** 1-based, and the order rounds are played in */
+  number: number;
+  /** e.g. "Round 1" or "Round 2 · Final" */
+  name: string;
+  date: string; // ISO yyyy-mm-dd
+  courseId: string;
+  tees: string;
+  firstTee: string; // "07:30"
+  teeInterval: number; // minutes
+  /** cut applied AFTER this round; absent means play on with a full field */
+  cut?: CutRule | null;
+}
+
 export interface Tournament {
   id: string;
   name: string;
   clubId: string;
+  /**
+   * Round 1's course. Kept in step with `rounds[0]` so tournament cards and
+   * lists have something to show without reaching into the rounds; scoring
+   * always reads the course from the round being played.
+   */
   courseId: string;
+  /** the first round's date, i.e. when the tournament starts */
   date: string; // ISO yyyy-mm-dd
   format: Format;
   entryFee: number; // KES
@@ -82,9 +118,16 @@ export interface Tournament {
   maxPlayers: number;
   regCloses: string;
   handicapAllowance: number; // %
+  /** round 1's first tee, mirrored from `rounds[0]` */
   firstTee: string; // "07:30"
+  /** round 1's tee interval, mirrored from `rounds[0]` */
   teeInterval: number; // minutes
   fieldSize: number;
+  /**
+   * Every round, in order. Always at least one. A tournament created before
+   * multi-round existed is read as a single round by `roundsOf()`.
+   */
+  rounds?: Round[];
   /** minutes after certification during which a player may request a
    *  correction (R&A 2024 time-based "returned" guidance); 0 = off */
   correctionWindowMin?: number;

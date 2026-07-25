@@ -1,4 +1,9 @@
-"use client";
+"use client";import {
+  useRoundScores,
+  useRoundMarkerScores,
+  useRoundCerts,
+} from "@/lib/sim/hooks";
+
 
 /**
  * The certification ceremony, mirroring paper-card attestation exactly:
@@ -342,9 +347,9 @@ export function CertificationCeremony({
   /** the course being played */
   course?: Course;
 } = {}) {
-  const scores = useSim((s) => s.scores);
-  const markerScores = useSim((s) => s.markerScores);
-  const certs = useSim((s) => s.certifications);
+  const scores = useRoundScores();
+  const markerScores = useRoundMarkerScores();
+  const certs = useRoundCerts();
   const roster = useSim((s) => s.roster);
   // resolve names from the roster first so pilot players work, falling back to
   // the seeded field for demo mode
@@ -643,7 +648,7 @@ export function CardReturnedView({
   /** the course being played, for the correction dialog's hole list */
   course?: Course;
 }) {
-  const cert = useSim((s) => s.certifications[me]);
+  const cert = useRoundCerts()[me];
   const record = useSim((s) => {
     for (let i = s.auditLog.length - 1; i >= 0; i--) {
       const r = s.auditLog[i];
@@ -787,7 +792,7 @@ function CorrectionDialog({
   me?: string;
   course?: Course;
 }) {
-  const scores = useSim((s) => s.scores[me]);
+  const scores = useRoundScores()[me];
   const [hole, setHole] = useState("1");
   const [score, setScore] = useState("");
   const [why, setWhy] = useState("");

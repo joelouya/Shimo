@@ -15,7 +15,9 @@ import {
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
-import { useActiveTournament, useMeId, useStandings } from "@/lib/sim/hooks";
+import { useActiveTournament, useMeId, useStandings,
+  useRoundScores
+} from "@/lib/sim/hooks";
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
@@ -76,7 +78,7 @@ function EventTicker() {
 }
 
 function FeaturedGroups() {
-  const scores = useSim((s) => s.scores);
+  const scores = useRoundScores();
   const featured = GROUPS.filter((g) => g.featured);
   return (
     <div className="no-scrollbar -mx-5 mt-4 flex gap-3 overflow-x-auto px-5 pb-1">
@@ -135,8 +137,8 @@ function FeaturedGroups() {
 /* ------------------------------------------------------------------ */
 
 function ExpandedScorecard({ row }: { row: StandingRow }) {
-  const scores = useSim((s) => s.scores);
-  const card = scores[row.player.id];
+  const scores = useRoundScores();
+  const card = scores[row.player.id] ?? [];
   const ph = playingHandicap(row.player.handicap, LIVE_TOURNAMENT.handicapAllowance);
 
   const Nine = ({ from }: { from: number }) => (

@@ -41,6 +41,8 @@ export interface AuditRecord {
   id: string;
   kind: AuditKind;
   tournamentId: string;
+  /** which round of the tournament this entry belongs to (1-based) */
+  round: number;
   playerId: string;
   /** who performed the action: a player id, or "committee" */
   actor: string;
@@ -66,9 +68,16 @@ export async function sha256Hex(input: string): Promise<string> {
     .join("");
 }
 
-/** Canonical payload so the same card always hashes identically. */
+/**
+ * Canonical payload so the same card always hashes identically.
+ *
+ * The round is part of the payload: in a multi-round tournament a player can
+ * legitimately return two identical cards, and those must still seal to
+ * different hashes so one round's signature can never stand in for another's.
+ */
 export function scorePayload(args: {
   tournamentId: string;
+  round: number;
   courseId: string;
   playerId: string;
   markerId: string;
@@ -76,6 +85,7 @@ export function scorePayload(args: {
 }): string {
   return JSON.stringify({
     t: args.tournamentId,
+    r: args.round,
     c: args.courseId,
     p: args.playerId,
     m: args.markerId,

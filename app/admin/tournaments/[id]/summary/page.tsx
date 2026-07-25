@@ -5,18 +5,19 @@ import Link from "next/link";
 import { ArrowLeft, Check, Crown, Printer, Share2, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { clubById, courseById, playerById } from "@/lib/data";
+import { COURSES, clubById, courseById, playerById } from "@/lib/data";
+import { roundKey, roundsOf } from "@/lib/rounds";
 import {
-  computeStandings,
+  cumulativeStandings,
   divisionFor,
-  type StandingRow,
+  type CumulativeRow,
   type ViewMode,
 } from "@/lib/scoring";
 import { allTournaments, useSim } from "@/lib/sim/store";
 import type { Player } from "@/lib/types";
 import { formatDateLong, toPar } from "@/lib/utils";
 
-function scoreLabel(r: StandingRow, mode: ViewMode) {
+function scoreLabel(r: CumulativeRow, mode: ViewMode) {
   if (mode === "points") return `${r.points} pts`;
   if (mode === "net") return toPar(r.netToPar);
   return toPar(r.grossToPar);
@@ -57,15 +58,38 @@ export default function TournamentSummaryPage({
   const t = allTournaments(created).find((x) => x.id === id);
 
   const { overall, divisions } = useMemo(() => {
-    if (!t) return { overall: [] as StandingRow[], divisions: [] as { name: string; rows: StandingRow[] }[] };
-    const groups = pairings[id] ?? [];
-    const fieldIds = groups.flatMap((g) => g.playerIds);
+    if (!t)
+      return {
+        overall: [] as CumulativeRow[],
+        divisions: [] as { name: string; rows: CumulativeRow[] }[],
+      };
+    // the field is everyone who appeared in any round
+    const fieldIds = [
+      ...new Set(
+        roundsOf(t).flatMap((r) =>
+          (pairings[roundKey(t.id, r.number)] ?? []).flatMap((g) => g.playerIds),
+        ),
+      ),
+    ];
     const field = fieldIds
       .map((pid) => roster.find((p) => p.id === pid) ?? safePlayer(pid))
       .filter((p): p is Player => !!p);
     const course = courseById(t.courseId);
     const mode: ViewMode = t.format === "Stableford" ? "points" : "net";
-    const overall = computeStandings(field, scores, course, t.handicapAllowance, mode);
+    const overall = cumulativeStandings(
+      field,
+      roundsOf(t).map((r) => ({
+        round: r.number,
+        scores: scores[roundKey(t.id, r.number)] ?? {},
+        course: COURSES.find((c) => c.id === r.courseId) ?? course,
+      })),
+      t.handicapAllowance,
+      mode,
+      (rnd, pid) =>
+        (pairings[roundKey(t.id, rnd)] ?? []).some((g) =>
+          g.playerIds.includes(pid),
+        ),
+    );
 
     const divs = t.divisions
       .filter((d) => d.name !== "Overall")
@@ -75,7 +99,16 @@ export default function TournamentSummaryPage({
         );
         return {
           name: d.name,
-          rows: computeStandings(inDiv, scores, course, t.handicapAllowance, mode),
+          rows: cumulativeStandings(
+            inDiv,
+            roundsOf(t).map((r) => ({
+              round: r.number,
+              scores: scores[roundKey(t.id, r.number)] ?? {},
+              course: COURSES.find((c) => c.id === r.courseId) ?? course,
+            })),
+            t.handicapAllowance,
+            mode,
+          ),
         };
       })
       .filter((d) => d.rows.length > 0);

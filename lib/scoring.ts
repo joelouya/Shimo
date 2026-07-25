@@ -193,3 +193,190 @@ export function generateGross(
   else gross += 3;
   return Math.max(hole.par - 2, Math.min(hole.par + 5, gross));
 }
+
+/* ------------------------------------------------------------------ */
+/* Multi-round: cumulative standings and the cut                       */
+/* ------------------------------------------------------------------ */
+
+/** One round's cards, with the course that round was played on. */
+export interface RoundCards {
+  round: number;
+  /** playerId -> that player's card for this round */
+  scores: Record<string, HoleScores>;
+  course: Course;
+}
+
+export interface RoundLine {
+  round: number;
+  thru: number;
+  grossTotal: number;
+  grossToPar: number;
+  netToPar: number;
+  points: number;
+  /** the player was not in this round's field, having missed the cut */
+  missed: boolean;
+}
+
+export interface CumulativeRow {
+  player: Player;
+  /** one entry per round, in order */
+  rounds: RoundLine[];
+  /** totals across every round the player actually played */
+  thru: number;
+  grossTotal: number;
+  grossToPar: number;
+  netToPar: number;
+  points: number;
+  hotStreak: number;
+  position: number;
+  tied: boolean;
+  gap: number;
+  /** false once the player has missed a cut; they keep their scores */
+  madeCut: boolean;
+  division?: string;
+}
+
+/** Lower is better in every mode, so one comparator serves all three. */
+function rankKey(
+  r: { points: number; netToPar: number; grossToPar: number },
+  mode: ViewMode,
+) {
+  return mode === "points" ? -r.points : mode === "net" ? r.netToPar : r.grossToPar;
+}
+
+/**
+ * Standings across several rounds. A player's total is the sum of the rounds
+ * they played; a round they missed the cut for contributes nothing and is
+ * marked so the table can show it as such.
+ *
+ * `playedIn` decides who counted in which round: pass the field for each round
+ * (normally its pairings), so a player cut after round 2 is not treated as
+ * having shot nothing in round 3.
+ */
+export function cumulativeStandings(
+  players: Player[],
+  byRound: RoundCards[],
+  allowancePct: number,
+  mode: ViewMode,
+  playedIn?: (round: number, playerId: string) => boolean,
+): CumulativeRow[] {
+  const ordered = [...byRound].sort((a, b) => a.round - b.round);
+
+  const rows: CumulativeRow[] = players.map((player) => {
+    const lines: RoundLine[] = [];
+    let thru = 0;
+    let grossTotal = 0;
+    let grossToPar = 0;
+    let netToPar = 0;
+    let points = 0;
+    let hotStreak = 0;
+
+    for (const rc of ordered) {
+      const inField = playedIn ? playedIn(rc.round, player.id) : true;
+      const card = rc.scores[player.id] ?? [];
+      const st = rowStats(player, card, rc.course, allowancePct);
+      lines.push({
+        round: rc.round,
+        thru: st.thru,
+        grossTotal: st.grossTotal,
+        grossToPar: st.grossToPar,
+        netToPar: st.netToPar,
+        points: st.points,
+        missed: !inField && st.thru === 0,
+      });
+      if (!inField && st.thru === 0) continue;
+      thru += st.thru;
+      grossTotal += st.grossTotal;
+      grossToPar += st.grossToPar;
+      netToPar += st.netToPar;
+      points += st.points;
+      hotStreak = st.hotStreak; // the streak that matters is the current one
+    }
+
+    return {
+      player,
+      rounds: lines,
+      thru,
+      grossTotal,
+      grossToPar,
+      netToPar,
+      points,
+      hotStreak,
+      position: 0,
+      tied: false,
+      gap: 0,
+      madeCut: true,
+    };
+  });
+
+  rows.sort((a, b) => {
+    const d = rankKey(a, mode) - rankKey(b, mode);
+    if (d !== 0) return d;
+    if (b.thru !== a.thru) return b.thru - a.thru;
+    return a.player.name.localeCompare(b.player.name);
+  });
+
+  rows.forEach((r, i) => {
+    r.position =
+      i > 0 && rankKey(r, mode) === rankKey(rows[i - 1], mode)
+        ? rows[i - 1].position
+        : i + 1;
+  });
+  rows.forEach((r) => {
+    r.tied = rows.filter((o) => o.position === r.position).length > 1;
+  });
+  const leader = rows.length ? rankKey(rows[0], mode) : 0;
+  rows.forEach((r) => {
+    r.gap = Math.abs(rankKey(r, mode) - leader);
+  });
+
+  return rows;
+}
+
+export interface CutResult {
+  /** ids that survive the cut */
+  survivors: Set<string>;
+  /** the score at the cut, in the active mode's unit */
+  line: number | null;
+  /** how many made it, ties included, which is usually more than topN */
+  count: number;
+}
+
+/**
+ * Top `topN` and everyone tied with the last of them. Ties are always kept,
+ * which is why a "top 30" cut routinely returns 33 players.
+ *
+ * Only players who have actually returned a score are eligible; someone with
+ * no card cannot make a cut.
+ */
+export function applyCut(
+  rows: CumulativeRow[],
+  topN: number,
+  mode: ViewMode,
+): CutResult {
+  const played = rows.filter((r) => r.thru > 0);
+  if (topN <= 0 || played.length === 0) {
+    return { survivors: new Set(played.map((r) => r.player.id)), line: null, count: played.length };
+  }
+  if (played.length <= topN) {
+    return {
+      survivors: new Set(played.map((r) => r.player.id)),
+      line: rankKey(played[played.length - 1], mode),
+      count: played.length,
+    };
+  }
+  const line = rankKey(played[topN - 1], mode);
+  const survivors = played.filter((r) => rankKey(r, mode) <= line);
+  return {
+    survivors: new Set(survivors.map((r) => r.player.id)),
+    line,
+    count: survivors.length,
+  };
+}
+
+/** The cut line as it reads on a board: "+8" in strokes, "62 pts" in points. */
+export function formatCutLine(line: number | null, mode: ViewMode): string {
+  if (line == null) return "";
+  if (mode === "points") return `${-line} pts`;
+  return line === 0 ? "E" : line > 0 ? `+${line}` : `${line}`;
+}

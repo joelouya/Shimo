@@ -31,7 +31,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { auditTrailCsv } from "@/lib/integrity";
-import { useActiveTournament } from "@/lib/sim/hooks";
+import { useActiveTournament,
+  useRoundScores,
+  useRoundMarkerScores,
+  useRoundCerts
+} from "@/lib/sim/hooks";
 import {
   decideCorrection,
   markCommitteeReview,
@@ -350,8 +354,8 @@ function CorrectionCard({ c, name }: { c: CorrectionRequest; name: string }) {
 
 export function CertificationPanel() {
   const active = useActiveTournament();
-  const certs = useSim((s) => s.certifications);
-  const scores = useSim((s) => s.scores);
+  const certs = useRoundCerts();
+  const scores = useRoundScores();
   const cardIn = useSim((s) => s.cardIn);
   const disputes = useSim((s) => s.disputes);
   const corrections = useSim((s) => s.corrections);

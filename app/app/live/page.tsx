@@ -42,6 +42,9 @@ import {
   useMeId,
   useUserLive,
   playerStats,
+  useRoundScores,
+  useRoundMarkerScores,
+  useRoundCerts
 } from "@/lib/sim/hooks";
 import {
   LIVE_COURSE,
@@ -217,9 +220,9 @@ function PilotLiveTab() {
 function PilotScoring() {
   const active = useActiveTournament()!;
   const me = useMeId();
-  const scores = useSim((s) => s.scores);
-  const markerScores = useSim((s) => s.markerScores);
-  const certs = useSim((s) => s.certifications);
+  const scores = useRoundScores();
+  const markerScores = useRoundMarkerScores();
+  const certs = useRoundCerts();
   const hidden = useSim((s) => s.hideLeaderboard);
 
   const tournament = active.tournament;
@@ -460,8 +463,8 @@ function PilotScoring() {
 }
 
 function DemoLiveScoring() {
-  const scores = useSim((s) => s.scores);
-  const markerScores = useSim((s) => s.markerScores);
+  const scores = useRoundScores();
+  const markerScores = useRoundMarkerScores();
   const attested = useSim((s) => s.attested);
   const hidden = useSim((s) => s.hideLeaderboard);
   const me = useUserLive();

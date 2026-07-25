@@ -24,7 +24,11 @@ import { Switch } from "@/components/ui/switch";
 import { LiveBadge } from "@/components/live-dot";
 import { courseById } from "@/lib/data";
 import { rowStats, handicapSet } from "@/lib/scoring";
-import { useActiveTournament, useSyncStatus } from "@/lib/sim/hooks";
+import { useActiveTournament, useSyncStatus,
+  useRoundScores,
+  useRoundMarkerScores,
+  useRoundCardIn
+} from "@/lib/sim/hooks";
 import { retryFailedOps, setBulkScore, setCardIn, useSim } from "@/lib/sim/store";
 import type { Course, Player } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
@@ -243,8 +247,8 @@ function ScanCardDialog({
 
 export default function BulkScoresPage() {
   const active = useActiveTournament();
-  const scores = useSim((s) => s.scores);
-  const cardIn = useSim((s) => s.cardIn);
+  const scores = useRoundScores();
+  const cardIn = useRoundCardIn();
   const { online, failed } = useSyncStatus();
   const [scanOpen, setScanOpen] = useState(false);
 
