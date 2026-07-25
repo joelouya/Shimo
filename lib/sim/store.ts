@@ -828,7 +828,13 @@ export function enterOwnScore(holeIdx: number, gross: number) {
     queueEcho(draft, { kind: "marker-joe", hole: holeIdx, at: Date.now() + 1700 });
     queueEcho(draft, { kind: "grace", hole: holeIdx, at: Date.now() + 2400 });
     maybeNotifyPosition(draft);
-    enqueueOp(draft, "score", { playerId: DEMO_USER_ID, hole: holeIdx, gross, source: "player" });
+    enqueueOp(draft, "score", {
+      playerId: DEMO_USER_ID,
+      round: draft.liveRound,
+      hole: holeIdx,
+      gross,
+      source: "player",
+    });
   });
 }
 
@@ -838,7 +844,13 @@ export function enterMarkerScore(holeIdx: number, gross: number) {
     ensureCard(draft, MARKER_ID, key);
     markerCardsFor(draft, key)[MARKER_ID][holeIdx] = gross;
     queueEcho(draft, { kind: "self-david", hole: holeIdx, at: Date.now() + 1300 });
-    enqueueOp(draft, "score", { playerId: MARKER_ID, hole: holeIdx, gross, source: "marker" });
+    enqueueOp(draft, "score", {
+      playerId: MARKER_ID,
+      round: draft.liveRound,
+      hole: holeIdx,
+      gross,
+      source: "marker",
+    });
   });
 }
 
