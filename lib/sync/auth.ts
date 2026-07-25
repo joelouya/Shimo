@@ -1,14 +1,19 @@
 "use client";
 
 /**
- * Magic-link (email OTP) auth for pilot players. A golfer signs in with the
- * email the club imported in the roster CSV; a 6-digit code is emailed and
- * verified in-app. We deliberately use the code flow rather than a link
- * redirect — it's the most reliable path inside an installed PWA on a phone,
- * with no deep-link or redirect-URL configuration to get wrong.
+ * Magic-link auth for pilot players. A golfer signs in with the email the club
+ * imported in the roster CSV, and one email covers both routes in:
  *
- * The club's Supabase email template must surface the code — include
- * `{{ .Token }}` in the Magic Link / Confirm-signup template.
+ *   the link  the default Supabase template already contains it. Tapping it
+ *             returns to the app with the session in the URL, which the
+ *             client picks up (detectSessionInUrl). Nothing to configure
+ *             beyond allowing the redirect URL.
+ *   the code  a six-digit token typed into the app. Nicer inside an installed
+ *             PWA, because the player never leaves it, but it only appears in
+ *             the email if the club's template includes `{{ .Token }}`.
+ *
+ * Supporting both means sign-in works out of the box, and gets better if the
+ * club customises the template later.
  */
 
 import type { Session } from "@supabase/supabase-js";
@@ -21,12 +26,20 @@ function normalize(email: string) {
   return email.trim().toLowerCase();
 }
 
-/** Email a 6-digit sign-in code. Creates the auth user on first sign-in. */
+/**
+ * Email a sign-in link and code. Creates the auth user on first sign-in.
+ * `emailRedirectTo` is where the link lands; it must be listed under
+ * Authentication > URL Configuration > Redirect URLs in Supabase.
+ */
 export async function sendLoginCode(email: string): Promise<void> {
   const sb = await supabase();
   const { error } = await sb.auth.signInWithOtp({
     email: normalize(email),
-    options: { shouldCreateUser: true },
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo:
+        typeof window === "undefined" ? undefined : `${window.location.origin}/app`,
+    },
   });
   if (error) throw error;
 }

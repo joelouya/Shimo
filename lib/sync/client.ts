@@ -41,8 +41,11 @@ export function supabase(): Promise<SupabaseClient> {
         // reloads and the JWT rides on every request (for authenticated RLS).
         persistSession: true,
         autoRefreshToken: true,
-        // we verify a 6-digit code in-app, not a URL redirect
-        detectSessionInUrl: false,
+        // Sign-in works two ways, so the club does not have to customise its
+        // email template: tapping the emailed link returns here with the
+        // session in the URL (picked up by this flag), or the player types the
+        // six-digit code if their template includes one.
+        detectSessionInUrl: true,
         storageKey: "shimo-auth",
       },
       realtime: { params: { eventsPerSecond: 10 } },

@@ -207,7 +207,12 @@ function StepBody({
 /* ------------------------------------------------------------------ */
 
 function OnboardingFlow() {
-  const [step, setStep] = useState<Step>("welcome");
+  // A player who signed in by tapping the emailed link comes back on a fresh
+  // page load, so pick the flow up after sign-in rather than starting over.
+  const alreadyMatched = useSim((s) => Boolean(authedPlayerId(s)));
+  const [step, setStep] = useState<Step>(() =>
+    alreadyMatched ? "profile" : "welcome",
+  );
   const [dir, setDir] = useState(1);
   const idx = ORDER.indexOf(step);
 
@@ -460,8 +465,9 @@ function SignIn({
         <>
           <Reveal i={2}>
             <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
-              We sent a code to <span className="font-medium">{email}</span>.
-              Enter it below.
+              Check <span className="font-medium">{email}</span>. Tap the link in
+              that email and you&apos;ll come straight back signed in, or type
+              the six-digit code below if the email shows one.
             </p>
           </Reveal>
           <Reveal i={3}>
