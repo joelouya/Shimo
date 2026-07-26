@@ -62,6 +62,7 @@ export function forceFail() {
 
 /** Every table the pilot state fans out across. */
 export const SYNC_TABLES = [
+  "clubs",
   "tournaments",
   "pairings",
   "players",

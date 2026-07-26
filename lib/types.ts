@@ -7,6 +7,24 @@ export type Format =
 
 export type TournamentStatus = "upcoming" | "live" | "completed" | "cancelled";
 
+/**
+ * What a club can make its own. Everything is optional: a club with none of
+ * it renders in Shimo's own colours, exactly as before.
+ */
+export interface ClubIdentity {
+  clubId: string;
+  logoUrl?: string;
+  /** one brand colour; light and dark tones are derived from it */
+  accent?: string;
+  phone?: string;
+  phoneAlt?: string;
+  whatsapp?: string;
+  email?: string;
+  website?: string;
+  /** show the Shimo credit on generated posters */
+  posterCredit?: boolean;
+}
+
 export interface Club {
   id: string;
   name: string;

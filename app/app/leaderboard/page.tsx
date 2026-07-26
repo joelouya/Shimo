@@ -6,6 +6,7 @@ import { EyeOff, Flame } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ClubCrest, ClubSurface } from "@/components/club-brand";
 import { LiveBadge } from "@/components/live-dot";
 import { LastUpdatedNote, SyncStrip } from "@/components/sync-status";
 import { DEMO_USER_ID, GROUPS, clubById, courseById, playerById } from "@/lib/data";
@@ -506,9 +507,15 @@ export default function LeaderboardPage() {
           </p>
           <LiveBadge />
         </div>
-        <h1 className="mt-2 font-serif text-[28px] leading-tight text-foreground">
-          {active.tournament.name}
-        </h1>
+        <div className="mt-2 flex items-start justify-between gap-3">
+          <h1 className="font-serif text-[28px] leading-tight text-foreground">
+            {active.tournament.name}
+          </h1>
+          <ClubCrest
+            clubId={active.tournament.clubId}
+            className="mt-0.5 size-9 shrink-0 object-contain opacity-90"
+          />
+        </div>
         {!blind && <EventTicker />}
         <LastUpdatedNote />
       </header>

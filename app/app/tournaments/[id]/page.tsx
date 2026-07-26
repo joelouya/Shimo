@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Check, Flag, Lock, MapPin, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ClubCrest, ClubSurface, useClubIdentity } from "@/components/club-brand";
 import { EligibilityTag } from "@/components/golfer/tournament-card";
 import { LiveBadge } from "@/components/live-dot";
 import { clubById, courseById } from "@/lib/data";
@@ -22,6 +23,47 @@ import {
   useSim,
 } from "@/lib/sim/store";
 import { formatDateLong, formatKES } from "@/lib/utils";
+
+/** How to reach the club, from its own identity settings. */
+function ClubContact({ clubId }: { clubId: string }) {
+  const id = useClubIdentity(clubId);
+  const rows = [
+    id.phone && { label: "Phone", value: id.phone, href: `tel:${id.phone}` },
+    id.phoneAlt && { label: "Also", value: id.phoneAlt, href: `tel:${id.phoneAlt}` },
+    id.whatsapp && {
+      label: "WhatsApp",
+      value: id.whatsapp,
+      href: `https://wa.me/${id.whatsapp.replace(/[^0-9]/g, "")}`,
+    },
+    id.email && { label: "Email", value: id.email, href: `mailto:${id.email}` },
+    id.website && {
+      label: "Web",
+      value: id.website,
+      href: id.website.startsWith("http") ? id.website : `https://${id.website}`,
+    },
+  ].filter(Boolean) as { label: string; value: string; href: string }[];
+
+  if (!rows.length) return null;
+  return (
+    <section className="mt-7">
+      <p className="smallcaps mb-3 text-muted-foreground">Contact the club</p>
+      <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+        {rows.map((r, i) => (
+          <a
+            key={r.label}
+            href={r.href}
+            className={`flex items-center justify-between gap-3 px-4 py-3 ${
+              i > 0 ? "border-t border-border/70" : ""
+            }`}
+          >
+            <span className="smallcaps text-muted-foreground">{r.label}</span>
+            <span className="truncate text-[14px] text-clay-deep">{r.value}</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 const FORMAT_EXPLAINERS: Record<string, string> = {
   Stableford:
@@ -69,7 +111,7 @@ export default function TournamentDetailPage({
   return (
     <div>
       {/* hero */}
-      <div className="bg-primary px-5 pb-7 pt-5 text-primary-foreground">
+      <div className="relative bg-primary px-5 pb-7 pt-5 text-primary-foreground">
         <div className="flex items-center justify-between">
           <Link
             href="/app/tournaments"
@@ -93,6 +135,10 @@ export default function TournamentDetailPage({
             <MapPin className="size-3.5" />
             {club.name}, {club.town}
           </p>
+          <ClubCrest
+            clubId={t.clubId}
+            className="absolute right-5 top-5 size-12 rounded-lg object-contain"
+          />
         </motion.div>
       </div>
 
@@ -226,6 +272,8 @@ export default function TournamentDetailPage({
             </p>
           )}
         </section>
+
+        <ClubContact clubId={t.clubId} />
 
         <section className="mt-7">
           <p className="smallcaps mb-3 text-muted-foreground">Prizes</p>

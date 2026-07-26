@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, Crown, Printer, Share2, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ClubCrest, ClubSurface } from "@/components/club-brand";
 import { COURSES, clubById, courseById, playerById } from "@/lib/data";
 import { roundKey, roundsOf } from "@/lib/rounds";
 import {
@@ -159,18 +160,30 @@ export default function TournamentSummaryPage({
       </div>
 
       {/* masthead */}
-      <header className="mt-6 border-b border-border pb-6">
-        <p className="smallcaps text-clay">
-          {isFinal ? "Final results" : "Provisional standings"} · Prizegiving
-        </p>
-        <h1 className="mt-2 font-serif text-[38px] leading-tight text-foreground">
-          {t.name}
-        </h1>
-        <p className="mt-2 text-[15px] text-muted-foreground">
-          {club.name} · {course.name} · {formatDateLong(t.date)} · {t.format} ·{" "}
-          {t.handicapAllowance}% allowance
-        </p>
-      </header>
+      <ClubSurface
+        clubId={t.clubId}
+        as="header"
+        className="mt-6 border-b border-border pb-6"
+      >
+        <div className="flex items-start justify-between gap-5">
+          <div>
+            <p className="smallcaps text-[var(--club-accent,var(--clay))]">
+              {isFinal ? "Final results" : "Provisional standings"} · Prizegiving
+            </p>
+            <h1 className="mt-2 font-serif text-[38px] leading-tight text-foreground">
+              {t.name}
+            </h1>
+            <p className="mt-2 text-[15px] text-muted-foreground">
+              {club.name} · {course.name} · {formatDateLong(t.date)} · {t.format}{" "}
+              · {t.handicapAllowance}% allowance
+            </p>
+          </div>
+          <ClubCrest
+            clubId={t.clubId}
+            className="size-16 shrink-0 object-contain"
+          />
+        </div>
+      </ClubSurface>
 
       {/* champion */}
       {champion && (

@@ -53,8 +53,10 @@ import {
   correctionToRow,
   disputeToRow,
   pairingToRow,
+  clubToRow,
   playerToRow,
   rowToAudit,
+  rowToClub,
   rowToCert,
   rowToCorrection,
   rowToDispute,
@@ -64,7 +66,7 @@ import {
   tournamentToRow,
 } from "@/lib/sync/mappers";
 import type { HydrationSnapshot } from "@/lib/sync/remote";
-import type { HoleScores, Player, Tournament } from "@/lib/types";
+import type { ClubIdentity, HoleScores, Player, Tournament } from "@/lib/types";
 
 const COURSE = COURSES.find((c) => c.id === "muthaiga-main")!;
 const LIVE_T = TOURNAMENTS.find((t) => t.id === LIVE_TOURNAMENT_ID)!;
@@ -285,6 +287,8 @@ export interface SimState {
   locationConsent: "unset" | "granted" | "declined";
   /** which player this device is (pilot); null until picked */
   deviceIdentity: string | null;
+  /** each club's own branding and contact details, by club id */
+  clubIdentity: Record<string, ClubIdentity>;
   /* ---- auth & onboarding (v8 / M2) ---- */
   /** signed-in email (magic link); null when signed out */
   authEmail: string | null;
@@ -407,6 +411,7 @@ export function buildInitialState(): SimState {
     tonePref: "editorial",
     locationConsent: "unset",
     deviceIdentity: readIdentity(),
+    clubIdentity: {},
     authEmail: null,
     authUserId: null,
     onboarded: false,
@@ -491,6 +496,36 @@ let eventSeq = 1;
 let noteSeq = 1;
 const tabId = Math.random().toString(36).slice(2);
 
+/**
+ * Fill in anything a saved state predates.
+ *
+ * State is persisted continuously, so a build that adds a field will read back
+ * state written by the build before it. Without this, the first render after a
+ * deploy crashes on a map that does not exist yet, and only for people who had
+ * used the app before, which is the worst way to find out. Bumping the schema
+ * would work but throws away the club's local data for what is usually one new
+ * optional field.
+ */
+function normalize(saved: SimState): SimState {
+  const base = buildInitialState();
+  const out = { ...base, ...saved } as SimState;
+  // objects and arrays that later code indexes into without checking
+  out.scores ??= base.scores;
+  out.markerScores ??= base.markerScores;
+  out.certifications ??= base.certifications;
+  out.cardIn ??= base.cardIn;
+  out.pairings ??= base.pairings;
+  out.clubIdentity ??= base.clubIdentity;
+  out.disputes ??= [];
+  out.corrections ??= [];
+  out.auditLog ??= [];
+  out.outbox ??= [];
+  out.roster ??= base.roster;
+  out.created ??= [];
+  out.liveRound ||= 1;
+  return out;
+}
+
 function persist(s: SimState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
@@ -514,7 +549,7 @@ function receive(remote: SimState) {
   if (remote.schema !== SCHEMA) return;
   if (remote.v <= simStore.getState().v) return;
   applyingRemote = true;
-  simStore.setState(remote, true);
+  simStore.setState(normalize(remote), true);
   applyingRemote = false;
 }
 
@@ -1681,6 +1716,37 @@ export function setLocationConsent(v: "granted" | "declined") {
   });
 }
 
+/**
+ * Save a club's identity. Everything is optional, so this merges rather than
+ * replaces: a club can set its colour today and its phone numbers next week.
+ */
+export function setClubIdentity(clubId: string, patch: Partial<ClubIdentity>) {
+  mutate((draft) => {
+    const next = { ...(draft.clubIdentity[clubId] ?? { clubId }), ...patch, clubId };
+    draft.clubIdentity[clubId] = next;
+    enqueueEntity(draft, "clubs", clubToRow(next), { conflict: "id" });
+  });
+}
+
+/**
+ * A club's identity, or an empty one if it has not set anything up.
+ *
+ * The empty case is cached per club. A selector must return the same reference
+ * for unchanged state, and a fresh object literal here would make every render
+ * look like a change, which React reports as an infinite getSnapshot loop.
+ */
+const EMPTY_IDENTITY = new Map<string, ClubIdentity>();
+export function clubIdentityOf(s: SimState, clubId: string): ClubIdentity {
+  const found = s.clubIdentity?.[clubId];
+  if (found) return found;
+  let blank = EMPTY_IDENTITY.get(clubId);
+  if (!blank) {
+    blank = { clubId };
+    EMPTY_IDENTITY.set(clubId, blank);
+  }
+  return blank;
+}
+
 export function setDeviceIdentity(playerId: string | null) {
   try {
     if (playerId) localStorage.setItem(IDENTITY_KEY, playerId);
@@ -1944,7 +2010,7 @@ export function startSim() {
       const saved = JSON.parse(raw) as SimState;
       if (saved.schema === SCHEMA) {
         applyingRemote = true;
-        simStore.setState(saved, true);
+        simStore.setState(normalize(saved), true);
         applyingRemote = false;
       }
     }
@@ -2080,6 +2146,11 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
         else list.push(g);
         list.sort((a, b) => a.number - b.number);
         for (const pid of g.playerIds) ensureCard(draft, pid, key);
+        break;
+      }
+      case "clubs": {
+        const c = rowToClub(row);
+        draft.clubIdentity[c.clubId] = { ...draft.clubIdentity[c.clubId], ...c };
         break;
       }
       case "players": {

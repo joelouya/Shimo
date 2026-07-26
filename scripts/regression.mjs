@@ -367,6 +367,49 @@ check("the summary reads as a club would write it",
     minHandicap: 0, maxHandicap: 24, maxAge: 24 }));
 
 /* ------------------------------------------------------------------ */
+section("Club identity and accent contrast");
+const CT = await jiti.import("../lib/contrast.ts");
+
+check("Shimo's own terracotta is accepted", CT.checkAccent("#b84a2e").ok);
+check("a deep club green is accepted", CT.checkAccent("#1e7a4c").ok,
+  CT.checkAccent("#1e7a4c").reason);
+check("a mid blue is accepted", CT.checkAccent("#2b6cb0").ok,
+  CT.checkAccent("#2b6cb0").reason);
+check("a very dark green is accepted", CT.checkAccent("#0b3d2e").ok);
+check("a washed-out pink is refused", !CT.checkAccent("#e91e8c").ok);
+check("a refusal offers a shade that passes", (() => {
+  const r = CT.checkAccent("#e91e8c");
+  return !!r.suggestion && CT.checkAccent(r.suggestion).ok;
+})());
+check("nonsense is refused", !CT.checkAccent("zzz").ok);
+
+check("a dark accent is lightened to clear the navy panels",
+  CT.contrastRatio(CT.accentOnDark("#0b3d2e"), CT.NAVY) >= CT.AA_LARGE,
+  String(CT.contrastRatio(CT.accentOnDark("#0b3d2e"), CT.NAVY)));
+check("every accepted accent clears AA on cream", (() => {
+  for (const hex of ["#b84a2e", "#1e7a4c", "#2b6cb0", "#8a1c3b", "#5b3fa8", "#8a5a12"]) {
+    const r = CT.checkAccent(hex);
+    if (!r.ok || CT.contrastRatio(r.onLight, CT.CREAM) < CT.AA_TEXT) return false;
+  }
+  return true;
+})());
+check("button text flips to navy on a light fill",
+  CT.textOnAccent("#ffd400") === CT.NAVY);
+
+// identity round-trips through the store and queues for sync
+S.setClubIdentity("sigona", { accent: "#1e7a4c", phone: "+254 700 000 000" });
+check("club identity is stored", S.clubIdentityOf(st(), "sigona").accent === "#1e7a4c");
+check("a later edit merges rather than replaces", (() => {
+  S.setClubIdentity("sigona", { email: "golf@sigona.co.ke" });
+  const i = S.clubIdentityOf(st(), "sigona");
+  return i.accent === "#1e7a4c" && i.email === "golf@sigona.co.ke";
+})());
+check("club identity queues for sync",
+  st().outbox.some((o) => o.kind === "entity" && o.payload.table === "clubs"));
+check("a club with no identity returns a stable empty object",
+  S.clubIdentityOf(st(), "karen") === S.clubIdentityOf(st(), "karen"));
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

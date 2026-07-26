@@ -11,7 +11,7 @@ import type {
   Dispute,
   SavedGroup,
 } from "@/lib/sim/store";
-import type { Player, Tournament } from "@/lib/types";
+import type { ClubIdentity, Player, Tournament } from "@/lib/types";
 
 /* ---- tournaments ---- */
 
@@ -280,5 +280,36 @@ export function rowToAudit(r: Record<string, unknown>): AuditRecord {
     handicaps: (r.handicaps as AuditRecord["handicaps"]) ?? undefined,
     appVersion: (r.app_version as string) ?? "",
     detail: (r.detail as string) ?? "",
+  };
+}
+
+/* ---- club identity ---- */
+
+export function clubToRow(c: ClubIdentity) {
+  return {
+    id: c.clubId,
+    logo_url: c.logoUrl ?? null,
+    accent: c.accent ?? null,
+    phone: c.phone ?? null,
+    phone_alt: c.phoneAlt ?? null,
+    whatsapp: c.whatsapp ?? null,
+    email: c.email ?? null,
+    website: c.website ?? null,
+    poster_credit: c.posterCredit ?? true,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function rowToClub(r: Record<string, unknown>): ClubIdentity {
+  return {
+    clubId: r.id as string,
+    logoUrl: (r.logo_url as string) ?? undefined,
+    accent: (r.accent as string) ?? undefined,
+    phone: (r.phone as string) ?? undefined,
+    phoneAlt: (r.phone_alt as string) ?? undefined,
+    whatsapp: (r.whatsapp as string) ?? undefined,
+    email: (r.email as string) ?? undefined,
+    website: (r.website as string) ?? undefined,
+    posterCredit: r.poster_credit == null ? true : Boolean(r.poster_credit),
   };
 }

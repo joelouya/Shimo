@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ClubIdentityCard } from "@/components/admin/club-identity";
 import { CsvImportCard } from "@/components/admin/csv-import";
 import { IS_PILOT } from "@/lib/mode";
 import { resetDemo, reviewIntegrityEntry, useSim } from "@/lib/sim/store";
@@ -213,6 +214,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex flex-col gap-6">
+          <ClubIdentityCard />
           {IS_PILOT && <IntegrityCard />}
           <CsvImportCard />
           {!IS_PILOT && (
