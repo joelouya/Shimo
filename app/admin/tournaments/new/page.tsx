@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -28,12 +28,17 @@ import {
   membershipOf,
 } from "@/lib/eligibility";
 import { makeTier, tiersOf, withPricingSynced } from "@/lib/pricing";
+import { SponsorStrip, tierLabel } from "@/components/sponsor-strip";
+import { uploadSponsorLogo, validateLogo } from "@/lib/sync/storage";
+import { REMOTE_CONFIGURED } from "@/lib/sync/client";
 import type {
   FeeAudience,
   FeeTier,
   Format,
   Membership,
   Round,
+  Sponsor,
+  SponsorTier,
   Tournament,
 } from "@/lib/types";
 import { cn, formatDateLong, formatKES } from "@/lib/utils";
@@ -45,9 +50,10 @@ const STEPS = [
   { n: 4, label: "Entry" },
   { n: 5, label: "Format details" },
   { n: 6, label: "Prizes" },
-  { n: 7, label: "Review & publish" },
+  { n: 7, label: "Sponsors" },
+  { n: 8, label: "Review & publish" },
 ];
-const LAST_STEP = 7;
+const LAST_STEP = 8;
 
 const ALL_FORMATS: Format[] = [
   "Stableford",
@@ -79,6 +85,7 @@ interface Draft {
   splitDivisions: boolean;
   fee: number;
   tiers: FeeTier[];
+  sponsors: Sponsor[];
   maxPlayers: number;
   regOpens: string;
   regCloses: string;
@@ -110,6 +117,7 @@ const INITIAL: Draft = {
   tiers: [
     { id: "standard", label: "Standard entry", amount: 2500, audience: "all" },
   ],
+  sponsors: [],
   maxPlayers: 120,
   regOpens: "2026-07-20",
   regCloses: "2026-08-20",
@@ -144,6 +152,7 @@ function draftFromTournament(t: Tournament): Draft {
     splitDivisions: t.divisions.length > 1,
     fee: t.entryFee,
     tiers: tiersOf(t),
+    sponsors: t.sponsors ?? [],
     maxPlayers: t.maxPlayers,
     regOpens: INITIAL.regOpens,
     regCloses: t.regCloses,
@@ -177,6 +186,127 @@ function Field({
       <Label>{label}</Label>
       {children}
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/** One sponsor: name, billing, and an optional mark. */
+function SponsorRow({
+  sponsor,
+  onChange,
+  onRemove,
+}: {
+  sponsor: Sponsor;
+  onChange: (patch: Partial<Sponsor>) => void;
+  onRemove: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    // wordmarks are often short in one dimension, so the floor is lower here
+    const problem = await validateLogo(file, { minPx: 200 });
+    if (problem) return setError(problem);
+    if (!REMOTE_CONFIGURED) {
+      return setError("Logo upload needs the club's database configured.");
+    }
+    setBusy(true);
+    try {
+      const { url } = await uploadSponsorLogo("muthaiga", sponsor.id, file);
+      onChange({ logoUrl: url });
+    } catch (e) {
+      setError((e as Error).message ?? "The upload failed. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-card/60 p-3">
+      <div className="flex items-start gap-2">
+        <Input
+          className="flex-1"
+          placeholder="Sponsor name, e.g. NCBA"
+          value={sponsor.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+        />
+        <Select
+          value={sponsor.tier ?? "partner"}
+          onValueChange={(v) => onChange({ tier: v as SponsorTier })}
+        >
+          <SelectTrigger className="w-[150px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(["title", "prize", "category", "partner"] as SponsorTier[]).map(
+              (tr) => (
+                <SelectItem key={tr} value={tr}>
+                  {tierLabel(tr)}
+                </SelectItem>
+              ),
+            )}
+          </SelectContent>
+        </Select>
+        <button
+          onClick={onRemove}
+          aria-label={`Remove ${sponsor.name || "sponsor"}`}
+          className="mt-2 rounded p-1 text-muted-foreground hover:text-destructive cursor-pointer"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+
+      <div className="mt-2.5 flex items-center gap-3">
+        <div className="flex h-11 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-secondary/40">
+          {sponsor.logoUrl ? (
+            // the sponsor's own artwork, so Next's optimiser is bypassed
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={sponsor.logoUrl}
+              alt={sponsor.name}
+              className="max-h-full max-w-full object-contain"
+            />
+          ) : (
+            <span className="text-[10px] text-muted-foreground">No mark</span>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          {busy ? "Uploading…" : sponsor.logoUrl ? "Replace mark" : "Upload mark"}
+        </Button>
+        {sponsor.logoUrl && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => onChange({ logoUrl: undefined })}
+          >
+            Remove mark
+          </Button>
+        )}
+      </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        A wide wordmark is fine; Shimo keeps its proportions. Without a mark the
+        name is shown as text.
+      </p>
+      {error && <p className="mt-1.5 text-[12px] text-destructive">{error}</p>}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+        className="hidden"
+        onChange={(e) => {
+          void pick(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
@@ -247,6 +377,30 @@ function CreateTournamentInner() {
       return { ...d, tiers, fee: Math.min(...tiers.map((x) => x.amount)) };
     });
 
+  const updateSponsor = (i: number, patch: Partial<Sponsor>) =>
+    setDraft((d) => ({
+      ...d,
+      sponsors: d.sponsors.map((x, j) => (j === i ? { ...x, ...patch } : x)),
+    }));
+
+  const addSponsor = () =>
+    setDraft((d) => ({
+      ...d,
+      sponsors: [
+        ...d.sponsors,
+        {
+          id: `sp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+          name: "",
+          tier: d.sponsors.some((x) => x.tier === "title")
+            ? ("partner" as const)
+            : ("title" as const),
+        },
+      ],
+    }));
+
+  const removeSponsor = (i: number) =>
+    setDraft((d) => ({ ...d, sponsors: d.sponsors.filter((_, j) => j !== i) }));
+
   const updateRound = (i: number, patch: Partial<Round>) =>
     setDraft((d) => {
       const rounds = d.rounds.map((r, j) => (j === i ? { ...r, ...patch } : r));
@@ -305,6 +459,7 @@ function CreateTournamentInner() {
       format: draft.format,
       entryFee: draft.fee,
       feeTiers: draft.tiers.filter((x) => x.label.trim()),
+      sponsors: draft.sponsors.filter((x) => x.name.trim()),
       status: editing ? editing.status : "upcoming",
       membersOnly: draft.membership === "members",
       membership: draft.membership,
@@ -1062,6 +1217,46 @@ function CreateTournamentInner() {
             )}
 
             {step === 7 && (
+              <div className="flex flex-col gap-4">
+                <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
+                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                    Optional. Sponsors appear on the tournament page, at the foot
+                    of the leaderboard, on the results export and on any poster
+                    you generate. A title sponsor is given the most room.
+                  </p>
+                </div>
+
+                {draft.sponsors.map((sp, i) => (
+                  <SponsorRow
+                    key={sp.id}
+                    sponsor={sp}
+                    onChange={(patch) => updateSponsor(i, patch)}
+                    onRemove={() => removeSponsor(i)}
+                  />
+                ))}
+
+                {draft.sponsors.length === 0 && (
+                  <p className="text-[13.5px] text-muted-foreground">
+                    No sponsors on this event.
+                  </p>
+                )}
+
+                <Button variant="outline" className="w-fit" onClick={addSponsor}>
+                  <Plus className="size-4" />
+                  Add a sponsor
+                </Button>
+
+                {draft.sponsors.some((x) => x.name.trim()) && (
+                  <div className="rounded-xl border border-border bg-card/60 p-4">
+                    <SponsorStrip
+                      sponsors={draft.sponsors.filter((x) => x.name.trim())}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {step === 8 && (
               <div>
                 <div className="flex flex-col divide-y divide-border/60">
                   {[
@@ -1124,6 +1319,15 @@ function CreateTournamentInner() {
                       draft.correctionWindowMin === 0
                         ? "Off"
                         : `${draft.correctionWindowMin} minute window after certification`,
+                    ],
+                    [
+                      "Sponsors",
+                      draft.sponsors.filter((x) => x.name.trim()).length
+                        ? draft.sponsors
+                            .filter((x) => x.name.trim())
+                            .map((x) => `${x.name} (${tierLabel(x.tier).toLowerCase()})`)
+                            .join(" · ")
+                        : "None",
                     ],
                     [
                       "Prizes",

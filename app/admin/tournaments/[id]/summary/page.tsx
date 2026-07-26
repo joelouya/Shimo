@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Crown, Printer, Share2, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClubCrest, ClubSurface } from "@/components/club-brand";
+import { SponsorStrip } from "@/components/sponsor-strip";
 import { COURSES, clubById, courseById, playerById } from "@/lib/data";
 import { roundKey, roundsOf } from "@/lib/rounds";
 import {
@@ -184,6 +185,12 @@ export default function TournamentSummaryPage({
           />
         </div>
       </ClubSurface>
+
+      {t.sponsors?.length ? (
+        <div className="mt-5">
+          <SponsorStrip sponsors={t.sponsors} />
+        </div>
+      ) : null}
 
       {/* champion */}
       {champion && (

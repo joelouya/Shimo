@@ -7,6 +7,7 @@ import { EyeOff, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClubCrest, ClubSurface } from "@/components/club-brand";
+import { SponsorStrip } from "@/components/sponsor-strip";
 import { LiveBadge } from "@/components/live-dot";
 import { LastUpdatedNote, SyncStrip } from "@/components/sync-status";
 import { DEMO_USER_ID, GROUPS, clubById, courseById, playerById } from "@/lib/data";
@@ -610,10 +611,18 @@ export default function LeaderboardPage() {
           ) : (
             <LeaderboardRows mode={mode} division={division} />
           )}
-          <p className="mt-3 pb-2 text-center text-[12px] text-muted-foreground">
+          <p className="mt-3 text-center text-[12px] text-muted-foreground">
             Scores update live as cards are entered ·{" "}
             {active.tournament.handicapAllowance}% allowance
           </p>
+          {active.tournament.sponsors?.length ? (
+            <div className="mt-4 border-t border-border/60 pt-3 pb-2">
+              <SponsorStrip
+                sponsors={active.tournament.sponsors}
+                showTitleLabel={false}
+              />
+            </div>
+          ) : null}
         </>
       )}
     </div>

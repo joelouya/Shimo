@@ -55,7 +55,11 @@ async function squareAndShrink(file: File): Promise<Blob> {
 }
 
 /** Reject early, with a reason a club administrator can act on. */
-export async function validateLogo(file: File): Promise<string | null> {
+export async function validateLogo(
+  file: File,
+  opts: { minPx?: number } = {},
+): Promise<string | null> {
+  const minPx = opts.minPx ?? MIN_SOURCE_PX;
   const ok = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
   if (!ok.includes(file.type))
     return "That file type isn't supported. Use PNG, JPG, WebP or SVG.";
@@ -67,12 +71,58 @@ export async function validateLogo(file: File): Promise<string | null> {
     const bitmap = await createImageBitmap(file);
     const { width, height } = bitmap;
     bitmap.close();
-    if (Math.max(width, height) < MIN_SOURCE_PX)
-      return `That image is ${width}×${height}. It needs to be at least ${MIN_SOURCE_PX}px on its longest side, or it will look soft on a poster.`;
+    if (Math.max(width, height) < minPx)
+      return `That image is ${width}×${height}. It needs to be at least ${minPx}px on its longest side, or it will look soft on a poster.`;
   } catch {
     return "Shimo couldn't read that image. Try exporting it again.";
   }
   return null;
+}
+
+/**
+ * Shrink without squaring, keeping the aspect ratio.
+ *
+ * Club crests are square, but a sponsor's mark is almost always a wide
+ * wordmark. Padding one into a square and then rendering it at a fixed height
+ * would show it far smaller than the crests beside it, which is the opposite
+ * of what a sponsor is paying for.
+ */
+async function shrinkOnly(file: File): Promise<Blob> {
+  if (file.type === "image/svg+xml") return file;
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, TARGET_PX / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return file;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  return new Promise<Blob>((resolve) =>
+    canvas.toBlob((b) => resolve(b ?? file), "image/png"),
+  );
+}
+
+/** Sponsor marks live in the same bucket, filed under the club that owns them. */
+export async function uploadSponsorLogo(
+  clubId: string,
+  sponsorId: string,
+  file: File,
+): Promise<LogoResult> {
+  const sb = await supabase();
+  const blob = await shrinkOnly(file); // wordmarks keep their proportions
+  const ext = file.type === "image/svg+xml" ? "svg" : "png";
+  const path = `${clubId}/sponsors/${sponsorId}-${Date.now().toString(36)}.${ext}`;
+  const { error } = await sb.storage.from("club-assets").upload(path, blob, {
+    contentType: file.type === "image/svg+xml" ? "image/svg+xml" : "image/png",
+    upsert: true,
+  });
+  if (error) throw error;
+  const { data } = sb.storage.from("club-assets").getPublicUrl(path);
+  return { url: data.publicUrl, width: TARGET_PX, height: TARGET_PX };
 }
 
 /** Upload and return the public URL. Overwrites the club's previous logo. */

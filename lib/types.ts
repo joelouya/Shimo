@@ -94,6 +94,16 @@ export interface FeeTier {
   until?: string;
 }
 
+/** Where a sponsor sits in the billing. Title gets the most room. */
+export type SponsorTier = "title" | "prize" | "category" | "partner";
+
+export interface Sponsor {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  tier?: SponsorTier;
+}
+
 export interface Prize {
   place: string;
   prize: string;
@@ -154,6 +164,8 @@ export interface Tournament {
   entryFee: number; // KES
   /** every price on offer; absent means a single "Standard entry" at entryFee */
   feeTiers?: FeeTier[];
+  /** who is backing the event; absent means none */
+  sponsors?: Sponsor[];
   status: TournamentStatus;
   /** mirrored from `membership`; true when the event is members-only */
   membersOnly: boolean;

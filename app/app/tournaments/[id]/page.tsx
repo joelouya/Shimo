@@ -7,6 +7,7 @@ import { ArrowLeft, Check, Flag, Lock, MapPin, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClubCrest, ClubSurface, useClubIdentity } from "@/components/club-brand";
+import { SponsorStrip } from "@/components/sponsor-strip";
 import { EligibilityTag } from "@/components/golfer/tournament-card";
 import { LiveBadge } from "@/components/live-dot";
 import { DEMO_USER_ID, clubById, courseById, playerById } from "@/lib/data";
@@ -205,6 +206,12 @@ export default function TournamentDetailPage({
             · {t.fieldSize} of {t.maxPlayers} entered
           </p>
         </div>
+
+        {t.sponsors?.length ? (
+          <div className="mt-5 rounded-2xl bg-card px-4 py-3.5 shadow-card">
+            <SponsorStrip sponsors={t.sponsors} />
+          </div>
+        ) : null}
 
         <section className="mt-7 rounded-2xl bg-card p-4 shadow-card">
           <p className="smallcaps mb-2 text-muted-foreground">Who may enter</p>
