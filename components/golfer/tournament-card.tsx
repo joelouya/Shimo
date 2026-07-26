@@ -6,6 +6,7 @@ import { Lock } from "lucide-react";
 import { ClubCrest, ClubSurface } from "@/components/club-brand";
 import { clubById } from "@/lib/data";
 import { eligibilityFor, registrationOpen } from "@/lib/eligibility";
+import { priceRange } from "@/lib/pricing";
 import { isMultiRound, roundsOf, tournamentDates } from "@/lib/rounds";
 import type { Tournament } from "@/lib/types";
 import { cn, formatDate, formatKES } from "@/lib/utils";
@@ -34,6 +35,7 @@ export function TournamentCard({ t }: { t: Tournament }) {
   const club = clubById(t.clubId);
   const date = new Date(t.date + "T12:00:00");
   const closed = !registrationOpen(t);
+  const price = priceRange(t);
   const { start, end } = tournamentDates(t);
   const span =
     start === end ? formatDate(start) : `${formatDate(start)} to ${formatDate(end)}`;
@@ -72,7 +74,7 @@ export function TournamentCard({ t }: { t: Tournament }) {
               </span>
             )}
             <span className="rounded-full border border-border px-2.5 py-0.5 text-[10.5px] font-medium text-ink-soft tnum">
-              {formatKES(t.entryFee)}
+              {price.single ? formatKES(price.min) : `From ${formatKES(price.min)}`}
             </span>
             {closed ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[10.5px] font-medium tracking-wide text-muted-foreground">

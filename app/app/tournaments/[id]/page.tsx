@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ClubCrest, ClubSurface, useClubIdentity } from "@/components/club-brand";
 import { EligibilityTag } from "@/components/golfer/tournament-card";
 import { LiveBadge } from "@/components/live-dot";
-import { clubById, courseById } from "@/lib/data";
+import { DEMO_USER_ID, clubById, courseById, playerById } from "@/lib/data";
 import {
   eligibilityFor,
   eligibilitySummary,
@@ -17,6 +17,7 @@ import {
   registrationOpen,
 } from "@/lib/eligibility";
 import { isMultiRound, roundsOf } from "@/lib/rounds";
+import { availableTiers, isTiered, tierFor, tierPhrase } from "@/lib/pricing";
 import {
   allTournaments,
   registerForTournament,
@@ -105,6 +106,9 @@ export default function TournamentDetailPage({
   const eligibility = eligibilityFor(t);
   const isRegistered = t.registered || registrations.includes(t.id);
   const open = registrationOpen(t);
+  const me = playerById(DEMO_USER_ID);
+  const myTier = tierFor(t, me);
+  const tiers = availableTiers(t);
   const canRegister = eligibility.kind === "eligible" && open;
   const closesAt = regClosesAt(t);
 
@@ -149,8 +153,13 @@ export default function TournamentDetailPage({
             <div>
               <p className="smallcaps text-muted-foreground">Entry</p>
               <p className="mt-0.5 font-serif text-2xl text-foreground tnum">
-                {formatKES(t.entryFee)}
+                {formatKES(myTier.amount)}
               </p>
+              {isTiered(t) && (
+                <p className="mt-0.5 text-[11px] text-clay-deep">
+                  You&apos;re getting the {tierPhrase(myTier)}
+                </p>
+              )}
             </div>
             <EligibilityTag t={t} />
           </div>
@@ -167,7 +176,7 @@ export default function TournamentDetailPage({
                 size="lg"
                 onClick={() => registerForTournament(t.id)}
               >
-                Register · {formatKES(t.entryFee)}
+                Register · {formatKES(myTier.amount)}
               </Button>
             ) : (
               <Button className="w-full" variant="secondary" size="lg" disabled>
@@ -272,6 +281,47 @@ export default function TournamentDetailPage({
             </p>
           )}
         </section>
+
+        {isTiered(t) && (
+          <section className="mt-7">
+            <p className="smallcaps mb-3 text-muted-foreground">Entry rates</p>
+            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+              {tiers.map((tier, i) => (
+                <div
+                  key={tier.id}
+                  className={`flex items-center justify-between gap-3 px-4 py-3 ${
+                    i > 0 ? "border-t border-border/70" : ""
+                  } ${tier.id === myTier.id ? "bg-clay-wash/40" : ""}`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-medium text-foreground">
+                      {tier.label}
+                      {tier.id === myTier.id && (
+                        <span className="ml-1.5 text-[11px] font-normal text-clay">
+                          yours
+                        </span>
+                      )}
+                    </p>
+                    {tier.until && (
+                      <p className="text-[11px] text-muted-foreground">
+                        until{" "}
+                        {new Date(tier.until).toLocaleString("en-KE", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <p className="shrink-0 font-serif text-[16px] text-foreground tnum">
+                    {formatKES(tier.amount)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <ClubContact clubId={t.clubId} />
 

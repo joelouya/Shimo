@@ -27,7 +27,15 @@ import {
   membershipLabel,
   membershipOf,
 } from "@/lib/eligibility";
-import type { Format, Membership, Round, Tournament } from "@/lib/types";
+import { makeTier, tiersOf, withPricingSynced } from "@/lib/pricing";
+import type {
+  FeeAudience,
+  FeeTier,
+  Format,
+  Membership,
+  Round,
+  Tournament,
+} from "@/lib/types";
 import { cn, formatDateLong, formatKES } from "@/lib/utils";
 
 const STEPS = [
@@ -70,6 +78,7 @@ interface Draft {
   gender: "open" | "men" | "ladies";
   splitDivisions: boolean;
   fee: number;
+  tiers: FeeTier[];
   maxPlayers: number;
   regOpens: string;
   regCloses: string;
@@ -98,6 +107,9 @@ const INITIAL: Draft = {
   gender: "open",
   splitDivisions: true,
   fee: 2500,
+  tiers: [
+    { id: "standard", label: "Standard entry", amount: 2500, audience: "all" },
+  ],
   maxPlayers: 120,
   regOpens: "2026-07-20",
   regCloses: "2026-08-20",
@@ -131,6 +143,7 @@ function draftFromTournament(t: Tournament): Draft {
     gender: t.ladiesOnly ? "ladies" : "open",
     splitDivisions: t.divisions.length > 1,
     fee: t.entryFee,
+    tiers: tiersOf(t),
     maxPlayers: t.maxPlayers,
     regOpens: INITIAL.regOpens,
     regCloses: t.regCloses,
@@ -217,6 +230,23 @@ function CreateTournamentInner() {
       return next;
     });
 
+  const updateTier = (i: number, patch: Partial<FeeTier>) =>
+    setDraft((d) => {
+      const tiers = d.tiers.map((x, j) => (j === i ? { ...x, ...patch } : x));
+      // the headline price follows the cheapest rate on the sheet
+      return { ...d, tiers, fee: Math.min(...tiers.map((x) => x.amount)) };
+    });
+
+  const addTier = () =>
+    setDraft((d) => ({ ...d, tiers: [...d.tiers, makeTier(d.tiers.length + 1)] }));
+
+  const removeTier = (i: number) =>
+    setDraft((d) => {
+      if (d.tiers.length <= 1) return d;
+      const tiers = d.tiers.filter((_, j) => j !== i);
+      return { ...d, tiers, fee: Math.min(...tiers.map((x) => x.amount)) };
+    });
+
   const updateRound = (i: number, patch: Partial<Round>) =>
     setDraft((d) => {
       const rounds = d.rounds.map((r, j) => (j === i ? { ...r, ...patch } : r));
@@ -274,6 +304,7 @@ function CreateTournamentInner() {
       date: draft.date,
       format: draft.format,
       entryFee: draft.fee,
+      feeTiers: draft.tiers.filter((x) => x.label.trim()),
       status: editing ? editing.status : "upcoming",
       membersOnly: draft.membership === "members",
       membership: draft.membership,
@@ -313,7 +344,7 @@ function CreateTournamentInner() {
     };
     // round 1's date, course and tee times are mirrored onto the tournament so
     // lists and cards never drift from the rounds
-    const synced = withRoundsSynced(t);
+    const synced = withPricingSynced(withRoundsSynced(t));
     setTimeout(() => {
       if (editing) updateTournament(synced);
       else createTournament(synced);
@@ -739,25 +770,107 @@ function CreateTournamentInner() {
 
             {step === 4 && (
               <div className="flex flex-col gap-5">
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Entry fee (KES)">
-                    <Input
-                      type="number"
-                      min={0}
-                      step={100}
-                      value={draft.fee}
-                      onChange={(e) => set("fee", Number(e.target.value))}
-                    />
-                  </Field>
-                  <Field label="Maximum players">
-                    <Input
-                      type="number"
-                      min={1}
-                      value={draft.maxPlayers}
-                      onChange={(e) => set("maxPlayers", Number(e.target.value))}
-                    />
-                  </Field>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label>Entry prices</Label>
+                    <span className="text-[11.5px] text-muted-foreground">
+                      Players are always given the best rate they qualify for.
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {draft.tiers.map((tier, i) => (
+                      <div
+                        key={tier.id}
+                        className="rounded-xl border border-border bg-card/60 p-3"
+                      >
+                        <div className="flex items-start gap-2">
+                          <Input
+                            className="flex-1"
+                            placeholder="Rate name, e.g. Members"
+                            value={tier.label}
+                            onChange={(e) => updateTier(i, { label: e.target.value })}
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            step={100}
+                            className="w-[130px]"
+                            placeholder="KES"
+                            value={tier.amount}
+                            onChange={(e) =>
+                              updateTier(i, { amount: Number(e.target.value) })
+                            }
+                          />
+                          {draft.tiers.length > 1 && (
+                            <button
+                              onClick={() => removeTier(i)}
+                              aria-label={`Remove ${tier.label || "rate"}`}
+                              className="mt-2 rounded p-1 text-muted-foreground hover:text-destructive cursor-pointer"
+                            >
+                              <X className="size-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <Select
+                            value={tier.audience}
+                            onValueChange={(v) =>
+                              updateTier(i, { audience: v as FeeAudience })
+                            }
+                          >
+                            <SelectTrigger className="h-9 text-[13px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Anyone</SelectItem>
+                              <SelectItem value="members">
+                                {club.short} members
+                              </SelectItem>
+                              <SelectItem value="guests">Guests</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="datetime-local"
+                            className="h-9 text-[13px]"
+                            title="Early-bird expiry, optional"
+                            value={tier.until ?? ""}
+                            onChange={(e) =>
+                              updateTier(i, { until: e.target.value || undefined })
+                            }
+                          />
+                        </div>
+                        {tier.until && (
+                          <p className="mt-1.5 text-[11px] text-muted-foreground">
+                            This rate disappears after{" "}
+                            {new Date(tier.until).toLocaleString("en-KE", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            .
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="mt-2 w-fit"
+                    onClick={addTier}
+                  >
+                    <Plus className="size-4" />
+                    Add a rate
+                  </Button>
                 </div>
+                <Field label="Maximum players">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={draft.maxPlayers}
+                    onChange={(e) => set("maxPlayers", Number(e.target.value))}
+                  />
+                </Field>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Registration opens">
                     <Input
@@ -988,7 +1101,14 @@ function CreateTournamentInner() {
                     ],
                     [
                       "Entry",
-                      `${formatKES(draft.fee)} · max ${draft.maxPlayers} players · closes ${new Date(
+                      `${
+                        draft.tiers.length > 1
+                          ? draft.tiers
+                              .filter((x) => x.label.trim())
+                              .map((x) => `${x.label} ${formatKES(x.amount)}`)
+                              .join(", ")
+                          : formatKES(draft.fee)
+                      } · max ${draft.maxPlayers} players · closes ${new Date(
                         draft.regClosesAt,
                       ).toLocaleString("en-KE", {
                         weekday: "short",

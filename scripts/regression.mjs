@@ -410,6 +410,60 @@ check("a club with no identity returns a stable empty object",
   S.clubIdentityOf(st(), "karen") === S.clubIdentityOf(st(), "karen"));
 
 /* ------------------------------------------------------------------ */
+section("Tiered entry pricing");
+const P = await jiti.import("../lib/pricing.ts");
+const priced = {
+  ...baseT, clubId: "sigona", entryFee: 0,
+  feeTiers: [
+    { id: "std",     label: "Standard",    amount: 31250, audience: "all" },
+    { id: "member",  label: "Members",     amount: 23750, audience: "members" },
+    { id: "loyalty", label: "Loyalty",     amount: 26250, audience: "all" },
+    { id: "early",   label: "Early bird",  amount: 21000, audience: "all",
+      until: "2030-01-01T00:00:00Z" },   // long expired
+  ],
+};
+const member = { id:"m", name:"M", clubId:"sigona", handicap:5, gender:"M" };
+const guest  = { id:"g", name:"G", clubId:"karen",  handicap:5, gender:"M" };
+const now = new Date("2030-06-01T00:00:00Z");
+
+check("a single-price event still reads as one tier",
+  P.tiersOf({ ...baseT, entryFee: 2500 }).length === 1);
+check("the implied tier carries the entry fee",
+  P.tiersOf({ ...baseT, entryFee: 2500 })[0].amount === 2500);
+check("an expired early bird drops off the sheet",
+  !P.availableTiers(priced, now).some((x) => x.id === "early"));
+check("a member is given the member rate",
+  P.tierFor(priced, member, now).id === "member",
+  P.tierFor(priced, member, now).id);
+check("a guest cannot take the member rate",
+  P.tierFor(priced, guest, now).id !== "member");
+check("a guest is given the best rate open to them",
+  P.tierFor(priced, guest, now).id === "loyalty",
+  P.tierFor(priced, guest, now).id);
+check("a live early bird beats every other rate", (() => {
+  const early = new Date("2029-01-01T00:00:00Z");
+  return P.tierFor(priced, guest, early).id === "early";
+})());
+check("the card shows the cheapest available price",
+  P.priceRange(priced, now).min === 23750, String(P.priceRange(priced, now).min));
+check("a single-price event is not shown as a range",
+  P.priceRange({ ...baseT, entryFee: 2500 }, now).single);
+check("the headline price follows the sheet",
+  P.withPricingSynced(priced).entryFee === 21000,
+  String(P.withPricingSynced(priced).entryFee));
+check("a tier already named 'rate' is not called a rate twice",
+  P.tierPhrase({ id:"x", label:"Loyalty rate", amount:0, audience:"all" }) === "loyalty rate");
+check("a plain tier name gains the noun",
+  P.tierPhrase({ id:"x", label:"Members", amount:0, audience:"all" }) === "members rate");
+check("an unnamed tier still reads sensibly",
+  P.tierPhrase({ id:"x", label:"", amount:0, audience:"all" }) === "standard rate");
+check("a sheet whose rates have all expired still offers one", (() => {
+  const gone = { ...baseT, entryFee: 0, feeTiers: [
+    { id: "x", label: "Gone", amount: 100, audience: "all", until: "2000-01-01T00:00:00Z" }] };
+  return P.availableTiers(gone, now).length === 1;
+})());
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

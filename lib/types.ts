@@ -76,6 +76,24 @@ export interface Player {
 /** Who may enter, beyond handicap and gender. */
 export type Membership = "members" | "members-guests" | "open";
 
+/** Who an entry price applies to. */
+export type FeeAudience = "all" | "members" | "guests";
+
+/**
+ * One price on the entry sheet. Championships routinely run several: a member
+ * rate, a returning-player loyalty rate, and an early bird that expires before
+ * entries close.
+ */
+export interface FeeTier {
+  id: string;
+  label: string;
+  /** KES */
+  amount: number;
+  audience: FeeAudience;
+  /** ISO datetime this rate stops being available; absent means it runs to the cutoff */
+  until?: string;
+}
+
 export interface Prize {
   place: string;
   prize: string;
@@ -129,7 +147,13 @@ export interface Tournament {
   /** the first round's date, i.e. when the tournament starts */
   date: string; // ISO yyyy-mm-dd
   format: Format;
+  /**
+   * The headline price, mirrored from the cheapest currently-available tier so
+   * lists and cards have a single number. `feeTiers` is the real sheet.
+   */
   entryFee: number; // KES
+  /** every price on offer; absent means a single "Standard entry" at entryFee */
+  feeTiers?: FeeTier[];
   status: TournamentStatus;
   /** mirrored from `membership`; true when the event is members-only */
   membersOnly: boolean;
