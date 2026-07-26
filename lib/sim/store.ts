@@ -1770,7 +1770,10 @@ export function deleteTournament(id: string) {
       );
     }
     draft.created = draft.created.filter((x) => x.id !== id);
-    delete draft.pairings[id];
+    // pairings are filed per round, so clear every round's tee sheet
+    for (const k of Object.keys(draft.pairings)) {
+      if (k === id || k.startsWith(`${id}#`)) delete draft.pairings[k];
+    }
     if (draft.liveTournamentId === id) draft.liveTournamentId = null;
   });
 }
@@ -1905,8 +1908,8 @@ function demoAutoplay() {
   );
   if (holeIdx >= 18) return;
   // wait for echoes on the previous hole before moving on
-  if (holeIdx > 0 && s.markerScores[DEMO_USER_ID][holeIdx - 1] == null) return;
-  if (s.scores[DEMO_USER_ID][holeIdx] == null) {
+  if (holeIdx > 0 && mine[holeIdx - 1] == null) return;
+  if (own[holeIdx] == null) {
     const gross = generateGross(
       COURSE.holes[holeIdx],
       playerById(DEMO_USER_ID).handicap,
@@ -1915,7 +1918,7 @@ function demoAutoplay() {
     );
     enterOwnScore(holeIdx, gross);
   }
-  if (s.markerScores[MARKER_ID][holeIdx] == null) {
+  if ((marks[MARKER_ID] ?? emptyCard())[holeIdx] == null) {
     const gross = generateGross(
       COURSE.holes[holeIdx],
       playerById(MARKER_ID).handicap,
@@ -2142,9 +2145,15 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
     else draft.created.unshift(t);
     if (t.status === "live") draft.liveTournamentId = t.id;
 
-    draft.pairings[t.id] = snap.pairings
-      .map(rowToPairing)
-      .sort((a, b) => a.number - b.number);
+    // one tee sheet per round, filed under that round's key
+    const byRoundPairings: Record<string, SavedGroup[]> = {};
+    for (const row of snap.pairings) {
+      const key = roundKey(t.id, (row.round as number) ?? 1);
+      (byRoundPairings[key] ??= []).push(rowToPairing(row));
+    }
+    for (const [key, groups] of Object.entries(byRoundPairings)) {
+      draft.pairings[key] = groups.sort((a, b) => a.number - b.number);
+    }
 
     for (const r of snap.players) {
       const p = rowToPlayer(r);

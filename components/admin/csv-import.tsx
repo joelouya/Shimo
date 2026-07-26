@@ -21,6 +21,8 @@ interface ParsedRow {
   memberNo: string;
   handicap: number;
   gender: "M" | "F";
+  /** ISO yyyy-mm-dd; only needed for age-restricted events */
+  dob?: string;
 }
 
 function parseCsv(text: string): ParsedRow[] {
@@ -55,6 +57,7 @@ function parseCsv(text: string): ParsedRow[] {
   const iMember = col("member");
   const iHc = col("handicap", "index", "hi");
   const iGender = col("gender", "sex");
+  const iDob = col("date of birth", "dob", "birth");
 
   return lines.slice(1).flatMap((line) => {
     const c = split(line);
@@ -71,9 +74,27 @@ function parseCsv(text: string): ParsedRow[] {
         gender: (iGender >= 0 ? c[iGender] : "M").toUpperCase().startsWith("F")
           ? ("F" as const)
           : ("M" as const),
+        dob: normalizeDob(iDob >= 0 ? c[iDob] : ""),
       },
     ];
   });
+}
+
+/**
+ * Accept the ways a club actually writes a date: 1978-04-12, 12/04/1978 and
+ * 12-04-1978 all mean the same thing. Day first, because that is the local
+ * convention. Anything unparseable is dropped rather than guessed at.
+ */
+function normalizeDob(raw: string): string | undefined {
+  const v = (raw ?? "").trim();
+  if (!v) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const m = v.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) {
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  return undefined;
 }
 
 const TEMPLATE = `first name,last name,email,member number,handicap index,home club,gender,date of birth
@@ -99,6 +120,7 @@ export function CsvImportCard() {
         gender: row.gender,
         email: row.email || undefined,
         memberNo: row.memberNo || undefined,
+        dob: row.dob,
       } satisfies Player);
     }
     setImported(preview.length);

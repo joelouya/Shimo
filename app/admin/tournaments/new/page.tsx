@@ -21,7 +21,13 @@ import { COURSES, clubById, courseById } from "@/lib/data";
 import { IS_PILOT, WIRED_FORMATS } from "@/lib/mode";
 import { createTournament, updateTournament, useSim } from "@/lib/sim/store";
 import { makeRound, roundsOf, withRoundsSynced } from "@/lib/rounds";
-import type { Format, Round, Tournament } from "@/lib/types";
+import {
+  defaultRegClosesAt,
+  eligibilitySummary,
+  membershipLabel,
+  membershipOf,
+} from "@/lib/eligibility";
+import type { Format, Membership, Round, Tournament } from "@/lib/types";
 import { cn, formatDateLong, formatKES } from "@/lib/utils";
 
 const STEPS = [
@@ -55,15 +61,21 @@ interface Draft {
   courseId: string;
   format: Format;
   tees: string;
-  membersOnly: boolean;
+  membership: Membership;
   hcMin: number;
   hcMax: number;
+  ageMin: string;
+  ageMax: string;
+  eligibilityNote: string;
   gender: "open" | "men" | "ladies";
   splitDivisions: boolean;
   fee: number;
   maxPlayers: number;
   regOpens: string;
   regCloses: string;
+  regClosesAt: string;
+  /** true once the admin edits the cutoff, so it stops following round 1 */
+  regClosesTouched?: boolean;
   allowance: number;
   countback: string;
   correctionWindowMin: number;
@@ -77,15 +89,19 @@ const INITIAL: Draft = {
   courseId: "muthaiga-main",
   format: "Stableford",
   tees: "Yellow",
-  membersOnly: false,
+  membership: "open",
   hcMin: 0,
   hcMax: 28,
+  ageMin: "",
+  ageMax: "",
+  eligibilityNote: "",
   gender: "open",
   splitDivisions: true,
   fee: 2500,
   maxPlayers: 120,
   regOpens: "2026-07-20",
   regCloses: "2026-08-20",
+  regClosesAt: defaultRegClosesAt("2026-08-22"),
   allowance: 95,
   countback: "Back 9, then back 6, then back 3",
   correctionWindowMin: 15,
@@ -106,21 +122,33 @@ function draftFromTournament(t: Tournament): Draft {
     courseId: t.courseId,
     format: t.format,
     tees: course.tees,
-    membersOnly: t.membersOnly,
+    membership: membershipOf(t),
     hcMin: t.minHandicap ?? 0,
     hcMax: t.maxHandicap ?? 28,
+    ageMin: t.minAge != null ? String(t.minAge) : "",
+    ageMax: t.maxAge != null ? String(t.maxAge) : "",
+    eligibilityNote: t.eligibilityNote ?? "",
     gender: t.ladiesOnly ? "ladies" : "open",
     splitDivisions: t.divisions.length > 1,
     fee: t.entryFee,
     maxPlayers: t.maxPlayers,
     regOpens: INITIAL.regOpens,
     regCloses: t.regCloses,
+    regClosesAt: t.regClosesAt ?? defaultRegClosesAt(roundsOf(t)[0].date),
     allowance: t.handicapAllowance,
     countback: INITIAL.countback,
     correctionWindowMin: t.correctionWindowMin ?? 15,
     prizes: t.prizes.map((p) => ({ place: p.place, prize: p.prize })),
   };
 }
+
+/** Just enough of a Tournament for eligibilitySummary during the wizard. */
+const INITIAL_T = {
+  id: "", name: "", clubId: "", courseId: "", date: "", format: "Stableford",
+  entryFee: 0, status: "upcoming", membersOnly: false, divisions: [],
+  description: "", prizes: [], maxPlayers: 0, regCloses: "",
+  handicapAllowance: 95, firstTee: "07:30", teeInterval: 10, fieldSize: 0,
+} as unknown as Tournament;
 
 function Field({
   label,
@@ -182,6 +210,10 @@ function CreateTournamentInner() {
         },
         ...rest,
       ];
+      // entries close the evening before round 1, until the admin says otherwise
+      if (patch.date && !d.regClosesTouched) {
+        next.regClosesAt = defaultRegClosesAt(next.date);
+      }
       return next;
     });
 
@@ -243,9 +275,13 @@ function CreateTournamentInner() {
       format: draft.format,
       entryFee: draft.fee,
       status: editing ? editing.status : "upcoming",
-      membersOnly: draft.membersOnly,
+      membersOnly: draft.membership === "members",
+      membership: draft.membership,
       maxHandicap: draft.hcMax < 28 ? draft.hcMax : undefined,
       minHandicap: draft.hcMin > 0 ? draft.hcMin : undefined,
+      minAge: draft.ageMin.trim() ? Number(draft.ageMin) : undefined,
+      maxAge: draft.ageMax.trim() ? Number(draft.ageMax) : undefined,
+      eligibilityNote: draft.eligibilityNote.trim() || undefined,
       ladiesOnly: draft.gender === "ladies",
       divisions: draft.splitDivisions
         ? [
@@ -264,7 +300,8 @@ function CreateTournamentInner() {
           : [{ place: "Winner", prize: "Pro shop credit + club honours" }];
       })(),
       maxPlayers: draft.maxPlayers,
-      regCloses: draft.regCloses,
+      regCloses: draft.regClosesAt.slice(0, 10),
+      regClosesAt: draft.regClosesAt,
       handicapAllowance: draft.allowance,
       firstTee: editing?.firstTee ?? "07:30",
       teeInterval: editing?.teeInterval ?? 10,
@@ -589,18 +626,28 @@ function CreateTournamentInner() {
 
             {step === 3 && (
               <div className="flex flex-col gap-5">
-                <div className="flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3.5">
-                  <div>
-                    <Label className="text-foreground">Members only</Label>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      Restrict entries to {club.short} members
-                    </p>
-                  </div>
-                  <Switch
-                    checked={draft.membersOnly}
-                    onCheckedChange={(v) => set("membersOnly", v)}
-                  />
-                </div>
+                <Field
+                  label="Who may enter"
+                  hint={`Guests are anyone outside ${club.short}.`}
+                >
+                  <Select
+                    value={draft.membership}
+                    onValueChange={(v) => set("membership", v as Membership)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(["members", "members-guests", "open"] as Membership[]).map(
+                        (m) => (
+                          <SelectItem key={m} value={m}>
+                            {membershipLabel(m)}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </Field>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Handicap minimum">
                     <Input
@@ -621,6 +668,45 @@ function CreateTournamentInner() {
                     />
                   </Field>
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Minimum age" hint="Leave blank for no limit.">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="Any"
+                      value={draft.ageMin}
+                      onChange={(e) => set("ageMin", e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label="Maximum age"
+                    hint={
+                      draft.ageMax.trim()
+                        ? `Reads as "under ${Number(draft.ageMax) + 1}" on the card.`
+                        : "Leave blank for no limit."
+                    }
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="Any"
+                      value={draft.ageMax}
+                      onChange={(e) => set("ageMax", e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <Field
+                  label="Anything else"
+                  hint="Shown on the card word for word. The club judges it, so it never blocks an entry."
+                >
+                  <Input
+                    placeholder="e.g. Past champions only, Kenya residents"
+                    value={draft.eligibilityNote}
+                    onChange={(e) => set("eligibilityNote", e.target.value)}
+                  />
+                </Field>
                 <Field label="Entry restriction">
                   <Select
                     value={draft.gender}
@@ -680,11 +766,20 @@ function CreateTournamentInner() {
                       onChange={(e) => set("regOpens", e.target.value)}
                     />
                   </Field>
-                  <Field label="Registration closes">
+                  <Field
+                    label="Registration closes"
+                    hint="Date and time. Entries lock the moment this passes; the desk can still add or remove players."
+                  >
                     <Input
-                      type="date"
-                      value={draft.regCloses}
-                      onChange={(e) => set("regCloses", e.target.value)}
+                      type="datetime-local"
+                      value={draft.regClosesAt}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          regClosesAt: e.target.value,
+                          regClosesTouched: true,
+                        }))
+                      }
                     />
                   </Field>
                 </div>
@@ -875,17 +970,17 @@ function CreateTournamentInner() {
                     ["Format", `${draft.format} · ${draft.allowance}% allowance`],
                     [
                       "Eligibility",
-                      [
-                        draft.membersOnly ? "Members only" : "Open entry",
-                        draft.gender === "ladies"
-                          ? "Ladies only"
-                          : draft.gender === "men"
-                            ? "Men only"
-                            : null,
-                        `HC ${draft.hcMin}–${draft.hcMax}`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · "),
+                      eligibilitySummary({
+                        ...INITIAL_T,
+                        membership: draft.membership,
+                        membersOnly: draft.membership === "members",
+                        ladiesOnly: draft.gender === "ladies",
+                        minHandicap: draft.hcMin > 0 ? draft.hcMin : undefined,
+                        maxHandicap: draft.hcMax < 28 ? draft.hcMax : undefined,
+                        minAge: draft.ageMin.trim() ? Number(draft.ageMin) : undefined,
+                        maxAge: draft.ageMax.trim() ? Number(draft.ageMax) : undefined,
+                        eligibilityNote: draft.eligibilityNote.trim() || undefined,
+                      }),
                     ],
                     [
                       "Divisions",
@@ -893,7 +988,15 @@ function CreateTournamentInner() {
                     ],
                     [
                       "Entry",
-                      `${formatKES(draft.fee)} · max ${draft.maxPlayers} players · closes ${formatDateLong(draft.regCloses)}`,
+                      `${formatKES(draft.fee)} · max ${draft.maxPlayers} players · closes ${new Date(
+                        draft.regClosesAt,
+                      ).toLocaleString("en-KE", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}`,
                     ],
                     ["Ties", draft.countback],
                     [

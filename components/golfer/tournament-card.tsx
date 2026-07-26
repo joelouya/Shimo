@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Lock } from "lucide-react";
 
 import { clubById } from "@/lib/data";
-import { eligibilityFor } from "@/lib/eligibility";
+import { eligibilityFor, registrationOpen } from "@/lib/eligibility";
+import { isMultiRound, roundsOf, tournamentDates } from "@/lib/rounds";
 import type { Tournament } from "@/lib/types";
 import { cn, formatDate, formatKES } from "@/lib/utils";
 
@@ -28,6 +29,10 @@ export function EligibilityTag({ t }: { t: Tournament }) {
 export function TournamentCard({ t }: { t: Tournament }) {
   const club = clubById(t.clubId);
   const date = new Date(t.date + "T12:00:00");
+  const closed = !registrationOpen(t);
+  const { start, end } = tournamentDates(t);
+  const span =
+    start === end ? formatDate(start) : `${formatDate(start)} to ${formatDate(end)}`;
   return (
     <Link
       href={`/app/tournaments/${t.id}`}
@@ -47,17 +52,34 @@ export function TournamentCard({ t }: { t: Tournament }) {
             {t.name}
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {club.name} · {formatDate(t.date)}
+            {club.name} · {span}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <span className="rounded-full border border-border px-2.5 py-0.5 text-[10.5px] font-medium text-ink-soft">
               {t.format}
             </span>
+            {isMultiRound(t) && (
+              <span className="rounded-full border border-border px-2.5 py-0.5 text-[10.5px] font-medium text-ink-soft">
+                {roundsOf(t).length} rounds
+              </span>
+            )}
             <span className="rounded-full border border-border px-2.5 py-0.5 text-[10.5px] font-medium text-ink-soft tnum">
               {formatKES(t.entryFee)}
             </span>
-            <EligibilityTag t={t} />
+            {closed ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[10.5px] font-medium tracking-wide text-muted-foreground">
+                <Lock className="size-2.5" />
+                Registration closed
+              </span>
+            ) : (
+              <EligibilityTag t={t} />
+            )}
           </div>
+          {t.eligibilityNote?.trim() && (
+            <p className="mt-1.5 text-[11px] italic text-muted-foreground">
+              {t.eligibilityNote.trim()}
+            </p>
+          )}
         </div>
       </div>
     </Link>

@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { EligibilityTag } from "@/components/golfer/tournament-card";
 import { LiveBadge } from "@/components/live-dot";
 import { clubById, courseById } from "@/lib/data";
-import { eligibilityFor } from "@/lib/eligibility";
+import {
+  eligibilityFor,
+  eligibilitySummary,
+  regClosesAt,
+  registrationOpen,
+} from "@/lib/eligibility";
+import { isMultiRound, roundsOf } from "@/lib/rounds";
 import {
   allTournaments,
   registerForTournament,
@@ -56,7 +62,9 @@ export default function TournamentDetailPage({
   const totalYards = course.holes.reduce((a, h) => a + h.yards, 0);
   const eligibility = eligibilityFor(t);
   const isRegistered = t.registered || registrations.includes(t.id);
-  const canRegister = eligibility.kind === "eligible" && t.status === "upcoming";
+  const open = registrationOpen(t);
+  const canRegister = eligibility.kind === "eligible" && open;
+  const closesAt = regClosesAt(t);
 
   return (
     <div>
@@ -118,15 +126,69 @@ export default function TournamentDetailPage({
             ) : (
               <Button className="w-full" variant="secondary" size="lg" disabled>
                 <Lock className="size-3.5" />
-                {eligibility.label}
+                {!open && t.status === "upcoming"
+                  ? "Registration closed"
+                  : eligibility.label}
               </Button>
             )}
           </div>
           <p className="mt-2.5 text-center text-[11px] text-muted-foreground">
-            Registration closes {formatDateLong(t.regCloses)} · {t.fieldSize} of{" "}
-            {t.maxPlayers} entered
+            {open ? (
+              <>
+                Registration closes{" "}
+                {closesAt.toLocaleString("en-KE", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </>
+            ) : (
+              <>Registration closed</>
+            )}{" "}
+            · {t.fieldSize} of {t.maxPlayers} entered
           </p>
         </div>
+
+        <section className="mt-7 rounded-2xl bg-card p-4 shadow-card">
+          <p className="smallcaps mb-2 text-muted-foreground">Who may enter</p>
+          <p className="text-[15px] leading-relaxed text-ink-soft">
+            {eligibilitySummary(t)}
+          </p>
+        </section>
+
+        {isMultiRound(t) && (
+          <section className="mt-7">
+            <p className="smallcaps mb-3 text-muted-foreground">
+              {roundsOf(t).length} rounds
+            </p>
+            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+              {roundsOf(t).map((r, i) => (
+                <div
+                  key={r.id}
+                  className={`flex items-center justify-between gap-3 px-4 py-3 ${
+                    i > 0 ? "border-t border-border/70" : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-medium text-foreground">
+                      {r.name}
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground">
+                      {formatDateLong(r.date)} · first tee {r.firstTee}
+                    </p>
+                  </div>
+                  {r.cut && (
+                    <span className="shrink-0 rounded-full bg-clay-wash px-2.5 py-0.5 text-[10.5px] font-medium text-clay-deep">
+                      cut to {r.cut.topN}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="mt-7">
           <p className="smallcaps mb-2 text-muted-foreground">About this event</p>

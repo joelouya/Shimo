@@ -51,7 +51,12 @@ export interface Player {
   phone?: string;
   email?: string;
   memberNo?: string;
+  /** ISO yyyy-mm-dd. Only needed for age-restricted events (juniors, seniors). */
+  dob?: string;
 }
+
+/** Who may enter, beyond handicap and gender. */
+export type Membership = "members" | "members-guests" | "open";
 
 export interface Prize {
   place: string;
@@ -108,15 +113,29 @@ export interface Tournament {
   format: Format;
   entryFee: number; // KES
   status: TournamentStatus;
+  /** mirrored from `membership`; true when the event is members-only */
   membersOnly: boolean;
+  /** members only, members and their guests, or open to all */
+  membership?: Membership;
   maxHandicap?: number;
   minHandicap?: number;
   ladiesOnly?: boolean;
+  /** age limits on the day of the first round, e.g. juniors under 25 */
+  minAge?: number;
+  maxAge?: number;
+  /**
+   * Anything the structured rules cannot express, shown verbatim on the
+   * tournament card: "Past champions only", "Kenya residents".
+   */
+  eligibilityNote?: string;
   divisions: Division[];
   description: string;
   prizes: Prize[];
   maxPlayers: number;
+  /** date part of `regClosesAt`, kept for lists and cards */
   regCloses: string;
+  /** ISO datetime entries close; defaults to 24h before the first round */
+  regClosesAt?: string;
   handicapAllowance: number; // %
   /** round 1's first tee, mirrored from `rounds[0]` */
   firstTee: string; // "07:30"

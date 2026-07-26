@@ -276,6 +276,97 @@ check("every score op carries a round",
   st().outbox.filter((o) => o.kind === "score").every((o) => o.payload.round != null));
 
 /* ------------------------------------------------------------------ */
+section("Round-keyed housekeeping");
+// hydration must file each round's tee sheet under its own key, not the bare
+// tournament id, or a joining device sees no pairings at all
+S.hydrateFromSnapshot({
+  tournament: {
+    id: "t-hyd", club_id: "sigona", course_id: "sigona-main", name: "Hydrated",
+    date: "2030-01-01", format: "Stroke Play", status: "live",
+    members_only: false, divisions: [], description: "", prizes: [],
+    max_players: 0, reg_closes: "", handicap_allowance: 100,
+    first_tee: "07:00", tee_interval: 10, field_size: 0,
+    rounds: [1, 2].map((n) => ({ id: `r${n}`, number: n, name: `Round ${n}`,
+      date: "2030-01-0" + n, courseId: "sigona-main", tees: "White",
+      firstTee: "07:00", teeInterval: 10, cut: null })),
+  },
+  pairings: [
+    { tournament_id: "t-hyd", round: 1, group_id: "g1", number: 1,
+      tee_time: "07:00", player_ids: ["p-a", "p-b"] },
+    { tournament_id: "t-hyd", round: 2, group_id: "g1", number: 1,
+      tee_time: "07:30", player_ids: ["p-b", "p-a"] },
+  ],
+  players: [], scores: [], cardIn: [], certifications: [],
+  disputes: [], corrections: [], audit: [],
+});
+check("hydration files round 1's tee sheet under its own key",
+  (st().pairings[roundKey("t-hyd", 1)] ?? []).length === 1);
+check("hydration files round 2's separately",
+  (st().pairings[roundKey("t-hyd", 2)] ?? [])[0]?.teeTime === "07:30",
+  JSON.stringify(st().pairings[roundKey("t-hyd", 2)]));
+check("hydration does not file pairings under the bare tournament id",
+  !st().pairings["t-hyd"]);
+
+// deleting a tournament must clear every round's tee sheet
+S.deleteTournament("t-hyd");
+check("delete clears every round's pairings",
+  !Object.keys(st().pairings).some((k) => k.startsWith("t-hyd")),
+  Object.keys(st().pairings).filter((k) => k.startsWith("t-hyd")).join(","));
+
+/* ------------------------------------------------------------------ */
+section("Registration cutoff and eligibility");
+const E = await jiti.import("../lib/eligibility.ts");
+const baseT = {
+  ...T, id: "t-elig", status: "upcoming",
+  rounds: [{ id: "r1", number: 1, name: "Round 1", date: "2030-06-10",
+             courseId: "sigona-main", tees: "White", firstTee: "07:00",
+             teeInterval: 10, cut: null }],
+  date: "2030-06-10", regCloses: "", regClosesAt: undefined,
+};
+
+check("cutoff defaults to the day before round 1",
+  E.regClosesAt(baseT).toISOString().slice(0, 10) === "2030-06-09",
+  E.regClosesAt(baseT).toISOString());
+check("registration is open well before the cutoff",
+  E.registrationOpen(baseT, new Date("2030-06-01T09:00:00Z")));
+check("registration closes after the cutoff",
+  !E.registrationOpen(baseT, new Date("2030-06-09T23:00:00Z")));
+check("an explicit cutoff wins",
+  E.regClosesAt({ ...baseT, regClosesAt: "2030-06-05T18:00:00" })
+    .toISOString().slice(0, 10) === "2030-06-05");
+check("a live tournament is never open for entries",
+  !E.registrationOpen({ ...baseT, status: "live" }, new Date("2030-06-01")));
+
+const junior = { id: "j", name: "J", clubId: "sigona", handicap: 5,
+                 gender: "M", dob: "2010-06-11" };  // turns 20 the day after
+check("age is judged on the first round's date",
+  E.ageAt(junior.dob, "2030-06-10") === 19, String(E.ageAt(junior.dob, "2030-06-10")));
+check("a junior passes an under-25 limit",
+  E.eligibilityForPlayer({ ...baseT, maxAge: 24 }, junior).kind === "eligible");
+check("an over-age player is blocked",
+  E.eligibilityForPlayer({ ...baseT, maxAge: 18 }, junior).kind === "limit");
+check("a member without a date of birth is never age-blocked",
+  E.eligibilityForPlayer({ ...baseT, maxAge: 10 },
+    { ...junior, dob: undefined }).kind === "eligible");
+check("a handicap floor blocks a better player",
+  E.eligibilityForPlayer({ ...baseT, minHandicap: 10 }, junior).kind === "limit");
+check("members-only blocks another club",
+  E.eligibilityForPlayer({ ...baseT, membership: "members" },
+    { ...junior, clubId: "karen" }).kind === "locked");
+check("members-and-guests admits another club",
+  E.eligibilityForPlayer({ ...baseT, membership: "members-guests" },
+    { ...junior, clubId: "karen" }).kind === "eligible");
+check("a custom note never blocks an entry",
+  E.eligibilityForPlayer({ ...baseT, eligibilityNote: "Past champions only" },
+    junior).kind === "eligible");
+check("the summary reads as a club would write it",
+  E.eligibilitySummary({ ...baseT, membership: "members-guests",
+    minHandicap: 0, maxHandicap: 24, maxAge: 24 }) ===
+  "Members and guests · HC 0 to 24 · Under 25",
+  E.eligibilitySummary({ ...baseT, membership: "members-guests",
+    minHandicap: 0, maxHandicap: 24, maxAge: 24 }));
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),
