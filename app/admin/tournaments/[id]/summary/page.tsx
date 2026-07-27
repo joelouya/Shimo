@@ -2,7 +2,15 @@
 
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Crown, Printer, Share2, Trophy } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Crown,
+  Image as ImageIcon,
+  Printer,
+  Share2,
+  Trophy,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClubCrest, ClubSurface } from "@/components/club-brand";
@@ -153,6 +161,12 @@ export default function TournamentSummaryPage({
         </Link>
         <div className="flex items-center gap-2">
           <SharePublicBoard tournamentId={t.id} />
+          <Button variant="outline" asChild>
+            <Link href={`/admin/tournaments/${t.id}/poster`}>
+              <ImageIcon className="size-4" />
+              Results poster
+            </Link>
+          </Button>
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="size-4" />
             Print

@@ -464,6 +464,115 @@ check("a sheet whose rates have all expired still offers one", (() => {
 })());
 
 /* ------------------------------------------------------------------ */
+section("Poster specs");
+const PS = await jiti.import("../lib/poster/spec.ts");
+
+const posterT = {
+  ...T,
+  id: "t-poster",
+  name: "Kenya Amateur Strokeplay Championship",
+  format: "Stroke Play",
+  date: "2030-08-06",
+  maxPlayers: 96,
+  entryFee: 6500,
+  membership: "open",
+  prizes: [
+    { place: "Winner", prize: "The Kenya Cup" },
+    { place: "Runner-up", prize: "KES 20,000" },
+    { place: "Best gross", prize: "A dozen balls" },
+    { place: "Nearest the pin", prize: "A putter" },
+    { place: "Longest drive", prize: "A driver" },
+  ],
+  sponsors: [{ id: "s1", name: "NCBA", tier: "title" }],
+  rounds: [
+    { id: "r1", number: 1, name: "Round 1", date: "2030-08-06",
+      courseId: "sigona-main", tees: "Blue", firstTee: "07:00", teeInterval: 8, cut: null },
+    { id: "r2", number: 2, name: "Round 2", date: "2030-08-07",
+      courseId: "sigona-main", tees: "Blue", firstTee: "07:00", teeInterval: 8, cut: { topN: 30 } },
+    { id: "r3", number: 3, name: "Final round", date: "2030-08-08",
+      courseId: "sigona-main", tees: "Blue", firstTee: "08:30", teeInterval: 10, cut: null },
+  ],
+};
+
+const fx = PS.fixtureSpec(posterT, { clubId: posterT.clubId }, new Date("2030-07-01"));
+check("a fixture poster names the tournament", fx.title === posterT.name);
+check("54 holes are counted from the rounds",
+  fx.eyebrow === "stroke play · 54 holes", fx.eyebrow);
+check("a date range collapses the repeated month",
+  fx.dateLine === "6 to 8 August 2030", fx.dateLine);
+check("one date per round appears in the schedule",
+  fx.schedule.length === 3, String(fx.schedule.length));
+check("the cut is stated in words",
+  /top 30 and ties/.test(fx.cut ?? ""), fx.cut);
+check("prizes are capped at what fits",
+  fx.prizes.length === 4, String(fx.prizes.length));
+check("a single round does not repeat the date beside the tee time", (() => {
+  const one = PS.fixtureSpec({ ...posterT, rounds: undefined, firstTee: "07:30" },
+    { clubId: posterT.clubId }, new Date("2030-07-01"));
+  return one.schedule.length === 1 && one.schedule[0].value === "07:30";
+})());
+check("a one-day event states the weekday", (() => {
+  const one = PS.fixtureSpec({ ...posterT, rounds: undefined },
+    { clubId: posterT.clubId }, new Date("2030-07-01"));
+  return /^Tuesday/.test(one.dateLine);
+})());
+check("a club with no contact details gets no contact block",
+  (fx.contacts ?? []).length === 0);
+check("contact details are carried through when set", (() => {
+  const withContact = PS.fixtureSpec(posterT,
+    { clubId: posterT.clubId, phone: "+254 700 000 000", email: "a@b.com",
+      website: "https://sigona.co.ke" }, new Date("2030-07-01"));
+  return withContact.contacts.length === 3 &&
+    withContact.contacts[2] === "sigona.co.ke"; // the scheme is dropped
+})());
+check("the Shimo credit is on unless the club turns it off",
+  fx.credit === true &&
+  PS.fixtureSpec(posterT, { clubId: posterT.clubId, posterCredit: false },
+    new Date("2030-07-01")).credit === false);
+check("sponsors ride along to the poster",
+  fx.sponsors?.[0]?.tier === "title");
+
+const rowsOf = (n, tieTop) =>
+  Array.from({ length: n }, (_, i) => ({
+    player: { id: `p${i}`, name: `Player ${i}`, clubId: posterT.clubId, handicap: 10, gender: "M" },
+    rounds: [], thru: 54, grossTotal: 220 + i, grossToPar: 4 + i, netToPar: -6 + i,
+    points: 100 - i, hotStreak: 0, position: tieTop && i < 2 ? 1 : i + 1,
+    tied: tieTop ? i < 2 : false, gap: 0, madeCut: true,
+  }));
+
+const res = PS.resultsSpec(posterT, { clubId: posterT.clubId }, rowsOf(24), "net");
+check("a results poster shows ten players",
+  res.rows.length === 10, String(res.rows.length));
+check("the whole field is counted in the small print",
+  /24 played/.test(res.note), res.note);
+check("a finished event with a clear winner names a champion",
+  res.heroLabel === "Champion", String(res.heroLabel));
+check("a shared lead is not called a champion",
+  PS.resultsSpec(posterT, { clubId: posterT.clubId }, rowsOf(24, true), "net")
+    .heroLabel === undefined);
+check("standings still in progress name no champion",
+  PS.resultsSpec(posterT, { clubId: posterT.clubId }, rowsOf(24), "net",
+    { provisional: true }).heroLabel === undefined);
+check("a provisional board says so",
+  PS.resultsSpec(posterT, { clubId: posterT.clubId }, rowsOf(24), "net",
+    { provisional: true }).eyebrow === "Provisional standings");
+check("ties are marked in the position column",
+  PS.resultsSpec(posterT, { clubId: posterT.clubId }, rowsOf(24, true), "net")
+    .rows[0].pos === "T1");
+check("stableford posts points and no stroke total",
+  (() => {
+    const pts = PS.resultsSpec(posterT, { clubId: posterT.clubId }, rowsOf(24), "points");
+    return pts.scoreLabel === "Points" && pts.rows[0].total === undefined;
+  })());
+check("stroke play posts the score against par and the total",
+  res.scoreLabel === "Net" && res.rows[0].total === "220");
+check("a board shorter than ten shows what there is",
+  PS.resultsSpec(posterT, { clubId: posterT.clubId }, rowsOf(3), "net").rows.length === 3);
+check("the file name is safe to save",
+  PS.posterFileName(fx) === "shimo-kenya-amateur-strokeplay-championship-fixture.png",
+  PS.posterFileName(fx));
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

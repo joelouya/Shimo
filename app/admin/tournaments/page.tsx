@@ -7,6 +7,7 @@ import {
   ArrowRight,
   ClipboardList,
   Flag,
+  Image as ImageIcon,
   Pencil,
   Plus,
   Trash2,
@@ -119,6 +120,12 @@ function TournamentRow({
               </Button>
             )}
             <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/tournaments/${t.id}/poster`}>
+                <ImageIcon className="size-3" />
+                Poster
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
               <Link href={`/admin/tournaments/${t.id}/pairings`}>
                 <Users className="size-3" />
                 Pairings & tee times
@@ -142,6 +149,12 @@ function TournamentRow({
                 {t.result?.winner ?? "·"}
               </span>
             </p>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/tournaments/${t.id}/poster`}>
+                <ImageIcon className="size-3" />
+                Poster
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href={`/admin/tournaments/${t.id}/summary`}>
                 <ClipboardList className="size-3" />
