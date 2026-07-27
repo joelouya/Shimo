@@ -4,8 +4,11 @@
     {
       "name": "shimo-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "runtimeArgs": [
+        "run",
+        "dev:pilot"
+      ],
+      "port": 3001
     }
   ]
 }

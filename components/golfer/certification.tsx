@@ -285,7 +285,12 @@ function DisputeDialog({
   raisedBy?: string;
 }) {
   const [reason, setReason] = useState("");
-  useEffect(() => setReason(""), [holeIdx]);
+  // each hole gets a fresh box: reset as the dialog changes hole, not after
+  const [reasonFor, setReasonFor] = useState(holeIdx);
+  if (reasonFor !== holeIdx) {
+    setReasonFor(holeIdx);
+    setReason("");
+  }
   return (
     <Dialog open={holeIdx != null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
@@ -675,7 +680,9 @@ export function CardReturnedView({
     );
   }
 
-  const certifiedAt = cert?.playerCertifiedAt ?? Date.now();
+  // without a recorded certification the window is measured from this tick,
+  // which is what reading the clock here amounted to
+  const certifiedAt = cert?.playerCertifiedAt ?? now;
   // the window the club actually configured for this event, not the demo one
   const windowMin = correctionWindowMin ?? 15;
   const deadline = certifiedAt + windowMin * 60_000;

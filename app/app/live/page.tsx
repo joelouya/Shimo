@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -761,7 +761,12 @@ function PlayerEntry({
   onPick: (g: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  useEffect(() => setEditing(false), [gross]);
+  // a new score closes the picker: adjust as the score arrives, not after
+  const [editedGross, setEditedGross] = useState(gross);
+  if (editedGross !== gross) {
+    setEditedGross(gross);
+    setEditing(false);
+  }
 
   return (
     <div className="rounded-2xl bg-card p-4 shadow-card">
@@ -836,6 +841,110 @@ function PlayerEntry({
 
 /* ------------------------------------------------------------------ */
 
+/** Total of the holes played in a stretch, or null if none of them are in. */
+function sumRange(arr: (number | null)[], from: number, to: number) {
+  let s = 0;
+  let any = false;
+  for (let i = from; i < to; i++) {
+    if (arr[i] != null) {
+      s += arr[i]!;
+      any = true;
+    }
+  }
+  return any ? s : null;
+}
+
+function ScorecardRow({
+  i,
+  selected,
+  joeCard,
+  joeMarkerView,
+  davidCard,
+  ptsArr,
+  discrepancies,
+}: {
+  i: number;
+  selected: number;
+  joeCard: (number | null)[];
+  joeMarkerView: (number | null)[];
+  davidCard: (number | null)[];
+  ptsArr: (number | null)[];
+  discrepancies: number[];
+}) {
+  const h = LIVE_COURSE.holes[i];
+  const isDisc = discrepancies.includes(i);
+  return (
+    <tr
+      className={cn(
+        "border-t border-border/60",
+        i === selected && "bg-secondary/50",
+        isDisc && "bg-amber-wash/70",
+      )}
+    >
+      <td className="py-1.5 pl-4 text-left text-[12.5px] font-medium text-foreground tnum">
+        {h.hole}
+      </td>
+      <td className="text-center text-[11.5px] text-muted-foreground tnum">{h.par}</td>
+      <td className="text-center text-[11.5px] text-muted-foreground tnum">{h.si}</td>
+      <td className="text-center text-[11.5px] text-muted-foreground tnum">{h.yards}</td>
+      <td className="text-center">
+        <ScoreCell gross={joeCard[i]} par={h.par} />
+        {isDisc && (
+          <span className="ml-0.5 align-middle text-[9px] text-amber-flag">
+            ({joeMarkerView[i]})
+          </span>
+        )}
+      </td>
+      <td className="text-center text-[12px] font-medium text-clay-deep tnum">
+        {ptsArr[i] ?? ""}
+      </td>
+      <td className="pr-4 text-center">
+        <ScoreCell gross={davidCard[i]} par={h.par} dim />
+      </td>
+    </tr>
+  );
+}
+
+function ScorecardTotalRow({
+  label,
+  from,
+  to,
+  joeCard,
+  ptsArr,
+  davidCard,
+}: {
+  label: string;
+  from: number;
+  to: number;
+  joeCard: (number | null)[];
+  ptsArr: (number | null)[];
+  davidCard: (number | null)[];
+}) {
+  return (
+    <tr className="border-t border-border bg-secondary/40">
+      <td className="py-1.5 pl-4 text-left text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+        {label}
+      </td>
+      <td className="text-center text-[11.5px] text-muted-foreground tnum">
+        {LIVE_COURSE.holes.slice(from, to).reduce((a, h) => a + h.par, 0)}
+      </td>
+      <td />
+      <td className="text-center text-[11.5px] text-muted-foreground tnum">
+        {LIVE_COURSE.holes.slice(from, to).reduce((a, h) => a + h.yards, 0)}
+      </td>
+      <td className="text-center text-[13px] font-semibold text-foreground tnum">
+        {sumRange(joeCard, from, to) ?? "·"}
+      </td>
+      <td className="text-center text-[12.5px] font-semibold text-clay-deep tnum">
+        {sumRange(ptsArr, from, to) ?? ""}
+      </td>
+      <td className="pr-4 text-center text-[13px] font-medium text-ink-soft tnum">
+        {sumRange(davidCard, from, to) ?? "·"}
+      </td>
+    </tr>
+  );
+}
+
 function DualScorecard({
   selected,
   joeCard,
@@ -854,77 +963,7 @@ function DualScorecard({
       ? null
       : stablefordPoints(LIVE_COURSE.holes[i], joeCard[i]!, JOE_PH);
 
-  const sum = (arr: (number | null)[], from: number, to: number) => {
-    let s = 0;
-    let any = false;
-    for (let i = from; i < to; i++) {
-      if (arr[i] != null) {
-        s += arr[i]!;
-        any = true;
-      }
-    }
-    return any ? s : null;
-  };
   const ptsArr = LIVE_COURSE.holes.map((_, i) => joePts(i));
-
-  const Row = ({ i }: { i: number }) => {
-    const h = LIVE_COURSE.holes[i];
-    const isDisc = discrepancies.includes(i);
-    return (
-      <tr
-        className={cn(
-          "border-t border-border/60",
-          i === selected && "bg-secondary/50",
-          isDisc && "bg-amber-wash/70",
-        )}
-      >
-        <td className="py-1.5 pl-4 text-left text-[12.5px] font-medium text-foreground tnum">
-          {h.hole}
-        </td>
-        <td className="text-center text-[11.5px] text-muted-foreground tnum">{h.par}</td>
-        <td className="text-center text-[11.5px] text-muted-foreground tnum">{h.si}</td>
-        <td className="text-center text-[11.5px] text-muted-foreground tnum">{h.yards}</td>
-        <td className="text-center">
-          <ScoreCell gross={joeCard[i]} par={h.par} />
-          {isDisc && (
-            <span className="ml-0.5 align-middle text-[9px] text-amber-flag">
-              ({joeMarkerView[i]})
-            </span>
-          )}
-        </td>
-        <td className="text-center text-[12px] font-medium text-clay-deep tnum">
-          {ptsArr[i] ?? ""}
-        </td>
-        <td className="pr-4 text-center">
-          <ScoreCell gross={davidCard[i]} par={h.par} dim />
-        </td>
-      </tr>
-    );
-  };
-
-  const TotalRow = ({ label, from, to }: { label: string; from: number; to: number }) => (
-    <tr className="border-t border-border bg-secondary/40">
-      <td className="py-1.5 pl-4 text-left text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-        {label}
-      </td>
-      <td className="text-center text-[11.5px] text-muted-foreground tnum">
-        {LIVE_COURSE.holes.slice(from, to).reduce((a, h) => a + h.par, 0)}
-      </td>
-      <td />
-      <td className="text-center text-[11.5px] text-muted-foreground tnum">
-        {LIVE_COURSE.holes.slice(from, to).reduce((a, h) => a + h.yards, 0)}
-      </td>
-      <td className="text-center text-[13px] font-semibold text-foreground tnum">
-        {sum(joeCard, from, to) ?? "·"}
-      </td>
-      <td className="text-center text-[12.5px] font-semibold text-clay-deep tnum">
-        {sum(ptsArr, from, to) ?? ""}
-      </td>
-      <td className="pr-4 text-center text-[13px] font-medium text-ink-soft tnum">
-        {sum(davidCard, from, to) ?? "·"}
-      </td>
-    </tr>
-  );
 
   return (
     <div className="mt-5 overflow-hidden rounded-2xl bg-card pb-1 shadow-card">
@@ -950,14 +989,53 @@ function DualScorecard({
         </thead>
         <tbody>
           {Array.from({ length: 9 }, (_, i) => (
-            <Row key={i} i={i} />
+            <ScorecardRow
+              key={i}
+              i={i}
+              selected={selected}
+              joeCard={joeCard}
+              joeMarkerView={joeMarkerView}
+              davidCard={davidCard}
+              ptsArr={ptsArr}
+              discrepancies={discrepancies}
+            />
           ))}
-          <TotalRow label="Out" from={0} to={9} />
+          <ScorecardTotalRow
+            label="Out"
+            from={0}
+            to={9}
+            joeCard={joeCard}
+            ptsArr={ptsArr}
+            davidCard={davidCard}
+          />
           {Array.from({ length: 9 }, (_, i) => (
-            <Row key={i + 9} i={i + 9} />
+            <ScorecardRow
+              key={i + 9}
+              i={i + 9}
+              selected={selected}
+              joeCard={joeCard}
+              joeMarkerView={joeMarkerView}
+              davidCard={davidCard}
+              ptsArr={ptsArr}
+              discrepancies={discrepancies}
+            />
           ))}
-          <TotalRow label="In" from={9} to={18} />
-          <TotalRow label="Total" from={0} to={18} />
+          <ScorecardTotalRow
+            label="In"
+            from={9}
+            to={18}
+            joeCard={joeCard}
+            ptsArr={ptsArr}
+            davidCard={davidCard}
+          />
+          <ScorecardTotalRow
+            label="Total"
+            from={0}
+            to={18}
+            joeCard={joeCard}
+            ptsArr={ptsArr}
+            davidCard={davidCard}
+          />
         </tbody>
       </table>
     </div>

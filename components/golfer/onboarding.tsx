@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 import { Logo, LogoMark } from "@/components/logo";
+import { useInstallKind } from "@/components/pwa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { clubById } from "@/lib/data";
@@ -328,7 +329,7 @@ function SignIn({
   onMatched: () => void;
   onSkip: () => void;
 }) {
-  const [phase, setPhase] = useState<"email" | "code" | "nomatch">("email");
+  const [phase, setPhase] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -337,11 +338,14 @@ function SignIn({
   const authEmail = useSim((s) => s.authEmail);
   const matchId = useSim(authedPlayerId);
 
-  // once a session lands, route by whether the email is on the roster
+  // Signed in but not on the roster. This is a reading of the session rather
+  // than a step of its own, so it holds for as long as that is true and
+  // clears itself when the session goes.
+  const noMatch = Boolean(authEmail) && !matchId;
+
+  // once a session lands on a roster player, the flow moves on
   useEffect(() => {
-    if (!authEmail) return;
-    if (matchId) onMatched();
-    else setPhase("nomatch");
+    if (authEmail && matchId) onMatched();
   }, [authEmail, matchId, onMatched]);
 
   const send = async () => {
@@ -371,7 +375,7 @@ function SignIn({
     }
   };
 
-  if (phase === "nomatch") {
+  if (noMatch) {
     return (
       <StepBody icon={<ShieldCheck className="size-6" />} title="Almost there">
         <Reveal i={2}>
@@ -696,6 +700,47 @@ function SignatureSetup({ onNext }: { onNext: () => void }) {
   );
 }
 
+/** One permission the app can ask for, and where the asking has got to. */
+function PermissionRow({
+  icon,
+  title,
+  body,
+  state,
+  onAsk,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  state: "idle" | "granted" | "denied";
+  onAsk: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-ink-soft">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-medium text-foreground">{title}</p>
+        <p className="text-[12px] leading-snug text-muted-foreground">{body}</p>
+      </div>
+      {state === "granted" ? (
+        <motion.span
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.35, ease: EASE }}
+          className="flex items-center gap-1 text-[12px] text-clay-deep"
+        >
+          <Check className="size-3.5" /> On
+        </motion.span>
+      ) : (
+        <Button variant="outline" size="sm" onClick={onAsk}>
+          {state === "denied" ? "Retry" : "Allow"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function Permissions({ onNext }: { onNext: () => void }) {
   const [notif, setNotif] = useState<"idle" | "granted" | "denied">("idle");
   const [loc, setLoc] = useState<"idle" | "granted" | "denied">("idle");
@@ -721,44 +766,6 @@ function Permissions({ onNext }: { onNext: () => void }) {
     }
   };
 
-  const Row = ({
-    icon,
-    title,
-    body,
-    state,
-    onAsk,
-  }: {
-    icon: React.ReactNode;
-    title: string;
-    body: string;
-    state: "idle" | "granted" | "denied";
-    onAsk: () => void;
-  }) => (
-    <div className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-ink-soft">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-medium text-foreground">{title}</p>
-        <p className="text-[12px] leading-snug text-muted-foreground">{body}</p>
-      </div>
-      {state === "granted" ? (
-        <motion.span
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.35, ease: EASE }}
-          className="flex items-center gap-1 text-[12px] text-clay-deep"
-        >
-          <Check className="size-3.5" /> On
-        </motion.span>
-      ) : (
-        <Button variant="outline" size="sm" onClick={onAsk}>
-          {state === "denied" ? "Retry" : "Allow"}
-        </Button>
-      )}
-    </div>
-  );
-
   return (
     <StepBody icon={<BellRing className="size-6" />} title="Stay in the loop">
       <Reveal i={2}>
@@ -768,14 +775,14 @@ function Permissions({ onNext }: { onNext: () => void }) {
       </Reveal>
       <Reveal i={3}>
         <div className="mt-5 flex flex-col gap-2.5">
-          <Row
+          <PermissionRow
             icon={<BellRing className="size-4" />}
             title="Notifications"
             body="Tee-time reminders and position changes"
             state={notif}
             onAsk={askNotif}
           />
-          <Row
+          <PermissionRow
             icon={<MapPin className="size-4" />}
             title="Location"
             body="Confirms you signed your card at the course"
@@ -797,21 +804,7 @@ function Permissions({ onNext }: { onNext: () => void }) {
 }
 
 function InstallStep({ onNext }: { onNext: () => void }) {
-  const [kind, setKind] = useState<"native" | "ios" | "installed" | "other">("other");
-
-  useEffect(() => {
-    try {
-      const standalone =
-        window.matchMedia("(display-mode: standalone)").matches ||
-        (navigator as { standalone?: boolean }).standalone === true;
-      if (standalone) return setKind("installed");
-      if (window.__shimoInstallEvent) return setKind("native");
-      if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return setKind("ios");
-      const onInstallable = () => setKind("native");
-      window.addEventListener("shimo-installable", onInstallable);
-      return () => window.removeEventListener("shimo-installable", onInstallable);
-    } catch {}
-  }, []);
+  const kind = useInstallKind();
 
   return (
     <StepBody icon={<Smartphone className="size-6" />} title="Keep it one tap away">

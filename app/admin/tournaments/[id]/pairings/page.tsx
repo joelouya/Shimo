@@ -106,8 +106,15 @@ export default function PairingsPage({
   const [groups, setGroups] = useState<DraftGroup[]>([]);
   const [firstTee, setFirstTee] = useState(roundInfo?.firstTee ?? "07:30");
 
-  // load the round's saved pairings when the round changes
-  useEffect(() => {
+  /*
+   * Load the round's saved pairings when the round changes. Adjusting during
+   * render rather than after it means the round being opened is the first tee
+   * sheet drawn — the previous round's groups are never briefly on screen,
+   * and autosave never sees the gap between the two.
+   */
+  const [loadedRound, setLoadedRound] = useState<number | null>(null);
+  if (loadedRound !== round) {
+    setLoadedRound(round);
     if (saved?.length) {
       setGroups(saved.map((g) => ({ id: g.id, playerIds: [...g.playerIds] })));
     } else if (isCaptains && round === 1) {
@@ -118,8 +125,7 @@ export default function PairingsPage({
       );
     }
     if (roundInfo) setFirstTee(roundInfo.firstTee);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [round]);
+  }
   const [exported, setExported] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 

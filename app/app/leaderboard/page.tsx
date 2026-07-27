@@ -141,12 +141,16 @@ function FeaturedGroups() {
 
 /* ------------------------------------------------------------------ */
 
-function ExpandedScorecard({ row }: { row: StandingRow }) {
-  const scores = useRoundScores();
-  const card = scores[row.player.id] ?? [];
-  const ph = playingHandicap(row.player.handicap, LIVE_TOURNAMENT.handicapAllowance);
-
-  const Nine = ({ from }: { from: number }) => (
+function Nine({
+  from,
+  card,
+  ph,
+}: {
+  from: number;
+  card: (number | null)[];
+  ph: number;
+}) {
+  return (
     <div className="grid grid-cols-[3.4rem_repeat(9,minmax(0,1fr))] gap-y-1 text-center">
       <span className="smallcaps text-[8px] text-muted-foreground self-center text-left pl-1">
         {from === 0 ? "Out" : "In"}
@@ -200,12 +204,18 @@ function ExpandedScorecard({ row }: { row: StandingRow }) {
       })}
     </div>
   );
+}
+
+function ExpandedScorecard({ row }: { row: StandingRow }) {
+  const scores = useRoundScores();
+  const card = scores[row.player.id] ?? [];
+  const ph = playingHandicap(row.player.handicap, LIVE_TOURNAMENT.handicapAllowance);
 
   return (
     <div className="flex flex-col gap-2.5 rounded-xl bg-secondary/50 p-3">
-      <Nine from={0} />
+      <Nine from={0} card={card} ph={ph} />
       <div className="h-px bg-border/70" />
-      <Nine from={9} />
+      <Nine from={9} card={card} ph={ph} />
     </div>
   );
 }
