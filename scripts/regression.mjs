@@ -573,6 +573,94 @@ check("the file name is safe to save",
   PS.posterFileName(fx));
 
 /* ------------------------------------------------------------------ */
+section("TV trust gates");
+const TR = await jiti.import("../lib/tv/trust.ts");
+const COOL = { cooldownMs: 120_000 };
+const t0 = 1_000_000;
+
+const row = (source, hole, gross, at) => ({
+  round: 1, playerId: "p1", hole, gross, source, at,
+});
+
+check("a figure only the player has entered is not announceable",
+  TR.settledHoles([row("player", 0, 3, t0)], {}, COOL, t0 + 999_999).length === 0);
+check("a figure only the marker has entered is not announceable",
+  TR.settledHoles([row("marker", 0, 3, t0)], {}, COOL, t0 + 999_999).length === 0);
+check("player and marker disagreeing is silence, not a guess",
+  TR.settledHoles([row("player", 0, 3, t0), row("marker", 0, 4, t0)], {}, COOL,
+    t0 + 999_999).length === 0);
+check("agreed figures still wait out the cool-down",
+  TR.settledHoles([row("player", 0, 3, t0), row("marker", 0, 3, t0)], {}, COOL,
+    t0 + 60_000).length === 0);
+check("an agreed figure is announceable once it has settled",
+  TR.settledHoles([row("player", 0, 3, t0), row("marker", 0, 3, t0)], {}, COOL,
+    t0 + 120_000).length === 1);
+check("the cool-down runs from the later of the two entries", (() => {
+  const rows = [row("player", 0, 3, t0), row("marker", 0, 3, t0 + 60_000)];
+  return TR.settledHoles(rows, {}, COOL, t0 + 120_000).length === 0 &&
+         TR.settledHoles(rows, {}, COOL, t0 + 180_000).length === 1;
+})());
+check("an edit inside the window restarts the wait", (() => {
+  // the player corrects their own entry a minute in, and both now agree on 4
+  const rows = [row("player", 0, 3, t0), row("marker", 0, 4, t0),
+                row("player", 0, 4, t0 + 60_000)];
+  return TR.settledHoles(rows, {}, COOL, t0 + 120_000).length === 0 &&
+         TR.settledHoles(rows, {}, COOL, t0 + 181_000)[0].gross === 4;
+})());
+check("a desk card is not announceable until it is published",
+  TR.settledHoles([row("desk", 0, 3, t0)], {}, COOL, t0 + 999_999).length === 0);
+check("a published desk card needs no cool-down",
+  TR.settledHoles([row("desk", 0, 3, t0)], { 1: { p1: true } }, COOL, t0).length === 1);
+check("a desk entry overrides a disputed live pair", (() => {
+  const rows = [row("player", 0, 3, t0), row("marker", 0, 5, t0), row("desk", 0, 4, t0)];
+  const out = TR.settledHoles(rows, { 1: { p1: true } }, COOL, t0);
+  return out.length === 1 && out[0].gross === 4 && out[0].via === "desk";
+})());
+check("a card is complete only at eighteen holes",
+  !TR.cardComplete(Array(17).fill(0)) && TR.cardComplete(Array(18).fill(0)));
+
+const par4 = { hole: 1, par: 4, si: 1, yards: 400 };
+const par3Hard = { hole: 5, par: 3, si: 2, yards: 190 };
+const low = { id: "a", name: "A", clubId: "c", handicap: 5, gender: "M" };
+const high = { id: "b", name: "B", clubId: "c", handicap: 28, gender: "M" };
+const G = { aceApprovalHandicap: 20 };
+
+check("a course record always waits for the club to confirm it",
+  !TR.judge({ kind: "course-record", player: low, cfg: G }).auto);
+const mid = { id: "c", name: "C", clubId: "c", handicap: 15, gender: "M" };
+check("an ace from a low handicap goes straight to air",
+  TR.judge({ kind: "ace", player: low, hole: par3Hard, gross: 1, cfg: G }).auto);
+check("an ace from a high handicap waits",
+  !TR.judge({ kind: "ace", player: high, hole: par3Hard, gross: 1, cfg: G }).auto);
+check("an eagle from a low handicap is impressive, not implausible",
+  TR.judge({ kind: "eagle", player: low, hole: par4, gross: 2, cfg: G }).auto,
+  TR.judge({ kind: "eagle", player: low, hole: par4, gross: 2, cfg: G }).reason);
+check("the same eagle from a twenty-eight waits for a human",
+  !TR.judge({ kind: "eagle", player: high, hole: par4, gross: 2, cfg: G }).auto);
+check("a mid handicap eagle on the hardest hole waits",
+  !TR.judge({ kind: "eagle", player: mid, hole: par4, gross: 2, cfg: G }).auto);
+check("the same mid handicap eagle on an easy hole does not",
+  TR.judge({ kind: "eagle", player: mid, hole: { hole: 9, par: 5, si: 14, yards: 480 },
+    gross: 3, cfg: G }).auto);
+check("the held announcement says why, in words an admin can act on",
+  /28 handicap/.test(
+    TR.judge({ kind: "eagle", player: high, hole: par4, gross: 2, cfg: G }).reason ?? ""));
+check("an albatross is always confirmed first, from any handicap",
+  !TR.judge({ kind: "other", player: low, hole: { hole: 9, par: 5, si: 8, yards: 500 },
+    gross: 2, cfg: G }).auto);
+check("a gross birdie is never held, from any handicap", (() => {
+  return [low, mid, high].every((p) =>
+    TR.judge({ kind: "other", player: p, hole: par4, gross: 3, cfg: G }).auto);
+})());
+check("receiving shots does not make a player's good hole suspicious", (() => {
+  // the bug this replaced: judged against par-plus-shots, a 28 handicap's
+  // ordinary birdie on stroke index 1 scored as implausible as a scratch eagle
+  return TR.judge({ kind: "other", player: high, hole: par4, gross: 3, cfg: G }).auto;
+})());
+check("a par is never held",
+  TR.judge({ kind: "other", player: high, hole: par4, gross: 4, cfg: G }).auto);
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),
