@@ -164,6 +164,12 @@ export interface Tournament {
   entryFee: number; // KES
   /** every price on offer; absent means a single "Standard entry" at entryFee */
   feeTiers?: FeeTier[];
+  /**
+   * How TV mode should talk about this field. Auto-detected from the spread of
+   * handicaps at creation and overridable by the club, because the same format
+   * wants different coverage at a championship and at a Saturday medal.
+   */
+  fieldProfile?: "championship" | "club" | "stableford" | "team";
   /** who is backing the event; absent means none */
   sponsors?: Sponsor[];
   status: TournamentStatus;

@@ -661,6 +661,350 @@ check("a par is never held",
   TR.judge({ kind: "other", player: high, hole: par4, gross: 4, cfg: G }).auto);
 
 /* ------------------------------------------------------------------ */
+section("TV moment detection");
+const DT = await jiti.import("../lib/tv/detect.ts");
+const tvCourse = COURSES[0];
+const G2 = { aceApprovalHandicap: 20 };
+
+const scratch = { id: "s1", name: "Scratch", clubId: "c", handicap: 2, gender: "M" };
+const bogey = { id: "b1", name: "Bogey", clubId: "c", handicap: 24, gender: "M" };
+
+/** a settled card from an array of 18 gross figures */
+const card = (grosses, at = 5000) =>
+  grosses.map((g, i) => ({ round: 1, playerId: "x", hole: i, gross: g, settledAt: at + i, via: "dual" }));
+
+const parCard = () => tvCourse.holes.map((h) => h.par);
+
+const moments = (player, grosses, profile = "championship") =>
+  DT.momentsForCard({
+    player, round: 1, holes: card(grosses).map((h) => ({ ...h, playerId: player.id })),
+    course: tvCourse, allowancePct: 100, profile, cfg: G2, records: [],
+  });
+
+check("an ace is detected", (() => {
+  const g = parCard(); const i = tvCourse.holes.findIndex((h) => h.par === 3);
+  g[i] = 1;
+  return moments(scratch, g).some((m) => m.kind === "ace");
+})());
+check("an ace crowds out every other reading of that hole", (() => {
+  const g = parCard(); const i = tvCourse.holes.findIndex((h) => h.par === 3);
+  g[i] = 1;
+  const onHole = moments(scratch, g).filter((m) => m.hole === i);
+  return onHole.length === 1 && onHole[0].kind === "ace";
+})());
+check("an eagle is detected", (() => {
+  const g = parCard(); const i = tvCourse.holes.findIndex((h) => h.par === 5);
+  g[i] = 3;
+  return moments(scratch, g).some((m) => m.kind === "eagle");
+})());
+check("an eagle from a high handicap carries its hold reason", (() => {
+  const g = parCard(); const i = tvCourse.holes.findIndex((h) => h.par === 5);
+  g[i] = 3;
+  const m = moments(bogey, g).find((x) => x.kind === "eagle");
+  return Boolean(m?.holdReason);
+})());
+check("a championship does not manufacture net eagles", (() => {
+  const g = parCard(); g[tvCourse.holes.findIndex((h) => h.si === 1)] -= 1;
+  return !moments(bogey, g, "championship").some((m) => m.kind === "net-eagle");
+})());
+check("a club medal finds the net eagle a gross-only board would miss", (() => {
+  // a birdie on a hole where a 24 receives two shots is a net eagle
+  const i = tvCourse.holes.findIndex((h) => h.si <= 2);
+  const g = parCard(); g[i] -= 1;
+  return moments(bogey, g, "club").some((m) => m.kind === "net-eagle" && m.hole === i);
+})());
+check("a streak needs three in a row", (() => {
+  const g = parCard(); g[0] -= 1; g[1] -= 1;
+  const two = moments(scratch, g).filter((m) => m.kind === "streak");
+  g[2] -= 1;
+  const three = moments(scratch, g).filter((m) => m.kind === "streak");
+  return two.length === 0 && three.length === 1;
+})());
+check("a broken run does not carry over", (() => {
+  const g = parCard(); g[0] -= 1; g[1] -= 1; g[3] -= 1; g[4] -= 1;
+  return moments(scratch, g).filter((m) => m.kind === "streak").length === 0;
+})());
+check("a run of five is its own moment", (() => {
+  const g = parCard(); for (let i = 0; i < 5; i++) g[i] -= 1;
+  return moments(scratch, g).filter((m) => m.kind === "streak").length === 2;
+})());
+check("an incomplete card produces no round-in", (() => {
+  const holes = card(parCard()).slice(0, 17).map((h) => ({ ...h, playerId: scratch.id }));
+  return !DT.momentsForCard({ player: scratch, round: 1, holes, course: tvCourse,
+    allowancePct: 100, profile: "championship", cfg: G2, records: [] })
+    .some((m) => m.kind === "round-in");
+})());
+check("a complete card always says round in",
+  moments(scratch, parCard()).some((m) => m.kind === "round-in"));
+check("level par counts as a finish worth noting",
+  moments(scratch, parCard()).some((m) => m.kind === "finish"));
+check("a round over par is not announced as a finish", (() => {
+  const g = parCard(); g[0] += 4;
+  return !moments(scratch, g, "championship").some((m) => m.kind === "finish");
+})());
+check("a course record is detected and always held", (() => {
+  const g = parCard();
+  const out = DT.momentsForCard({
+    player: scratch, round: 1, holes: card(g).map((h) => ({ ...h, playerId: scratch.id })),
+    course: tvCourse, allowancePct: 100, profile: "championship", cfg: G2, tee: "White",
+    records: [{ courseId: tvCourse.id, tee: "White", strokes: tvCourse.par + 1,
+                holder: "Old Hand", year: 1998 }],
+  });
+  const rec = out.find((m) => m.kind === "course-record");
+  return Boolean(rec) && Boolean(rec.holdReason);
+})());
+check("a record off other tees is not the record being chased", (() => {
+  const out = DT.momentsForCard({
+    player: scratch, round: 1, holes: card(parCard()).map((h) => ({ ...h, playerId: scratch.id })),
+    course: tvCourse, allowancePct: 100, profile: "championship", cfg: G2, tee: "White",
+    records: [{ courseId: tvCourse.id, tee: "Red", strokes: tvCourse.par + 1,
+                holder: "Old Hand", year: 1998 }],
+  });
+  return !out.some((m) => m.kind === "course-record");
+})());
+check("every fact key is unique on one card", (() => {
+  const g = parCard(); g[0] -= 1; g[1] -= 1; g[2] -= 1;
+  const keys = moments(scratch, g).map((m) => m.factKey);
+  return new Set(keys).size === keys.length;
+})());
+
+const board = (ids) => ids.map((playerId, i) => ({ playerId, position: i + 1 }));
+check("a lead change is detected",
+  DT.momentsForBoard({ before: board(["a", "b"]), after: board(["b", "a"]),
+    nameOf: (id) => id, round: 1, at: 1 }).some((m) => m.kind === "lead-change"));
+check("a lead change names who is being displaced",
+  DT.momentsForBoard({ before: board(["a", "b"]), after: board(["b", "a"]),
+    nameOf: (id) => id === "a" ? "Alice" : "Bob", round: 1, at: 1 })
+    .find((m) => m.kind === "lead-change").data.outgoing === "Alice");
+check("a board that has not moved says nothing",
+  DT.momentsForBoard({ before: board(["a", "b"]), after: board(["a", "b"]),
+    nameOf: (id) => id, round: 1, at: 1 }).length === 0);
+check("the first leader of the day is not a lead change",
+  DT.momentsForBoard({ before: [], after: board(["a"]), nameOf: (id) => id,
+    round: 1, at: 1 }).length === 0);
+check("a real climb into the top ten is a mover", (() => {
+  const before = board(Array.from({ length: 20 }, (_, i) => `p${i}`));
+  const after = [{ playerId: "p15", position: 6 }, ...board(["a"])];
+  return DT.momentsForBoard({ before, after, nameOf: (id) => id, round: 1, at: 1 })
+    .some((m) => m.kind === "mover" && m.playerId === "p15");
+})());
+check("a one-place shuffle is not a mover", (() => {
+  const before = board(Array.from({ length: 20 }, (_, i) => `p${i}`));
+  const after = [{ playerId: "p11", position: 10 }];
+  return !DT.momentsForBoard({ before, after, nameOf: (id) => id, round: 1, at: 1 })
+    .some((m) => m.kind === "mover");
+})());
+check("an ace outranks everything else on the queue",
+  DT.PRIORITY.ace > DT.PRIORITY["course-record"] &&
+  DT.PRIORITY["course-record"] > DT.PRIORITY.eagle &&
+  DT.PRIORITY.eagle > DT.PRIORITY["round-in"]);
+
+/* ------------------------------------------------------------------ */
+section("TV producer");
+const PR = await jiti.import("../lib/tv/producer.ts");
+
+const tvC = COURSES[0];
+const tvPlayers = [
+  { id: "p1", name: "Alice Wanjiru", clubId: "sigona", handicap: 4, gender: "F" },
+  { id: "p2", name: "Ben Otieno", clubId: "sigona", handicap: 6, gender: "M" },
+];
+const tvT = {
+  ...T, id: "t-tv", clubId: "sigona", courseId: tvC.id, format: "Stroke Play",
+  handicapAllowance: 100, fieldProfile: "championship", status: "live",
+  rounds: [{ id: "r1", number: 1, name: "Round 1", date: "2030-01-01",
+             courseId: tvC.id, tees: "White", firstTee: "07:00",
+             teeInterval: 10, cut: null }],
+};
+const snap = (rows, at, extra = {}) => ({
+  at, tournament: tvT, course: tvC, players: tvPlayers, round: 1, rows,
+  published: {}, fieldByRound: { 1: ["p1", "p2"] },
+  identity: { clubId: "sigona" }, records: [], online: true, ...extra,
+});
+/** both parties agree on `gross` at time `at` */
+const pair = (pid, hole, gross, at) => [
+  { round: 1, playerId: pid, hole, gross, source: "player", at },
+  { round: 1, playerId: pid, hole, gross, source: "marker", at },
+];
+const eagleHole = tvC.holes.findIndex((h) => h.par === 5);
+const eagleRows = (pid, at) => pair(pid, eagleHole, tvC.holes[eagleHole].par - 2, at);
+
+const S0 = PR.initialState({ cooldownMs: 120_000, spacingMs: 15_000 });
+
+check("nothing is queued while a figure is still cooling down", (() => {
+  const s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 60_000);
+  return s.queue.length === 0 && s.pending.length === 0;
+})());
+
+const settledState = PR.reduce(S0,
+  { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+check("a settled eagle reaches the queue",
+  settledState.queue.some((a) => a.kind === "eagle"), String(settledState.queue.length));
+check("the announcement is dressed for the screen", (() => {
+  const a = settledState.queue.find((x) => x.kind === "eagle");
+  return a.headline === "Eagle" && a.subject === "Alice Wanjiru" && /par 5/.test(a.line);
+})());
+check("the board stays up until the queue's slot is due", (() => {
+  const s = PR.reduce({ ...settledState, nextSlotAt: 200_000 }, { type: "tick" }, 130_000);
+  return s.mode === "leaderboard" && s.playing === null;
+})());
+
+const playing = PR.reduce(settledState, { type: "tick" }, 130_000);
+check("the eagle takes the screen once its slot arrives",
+  playing.mode === "announcement" && playing.playing.item.kind === "eagle");
+check("an eagle holds the screen for six seconds",
+  playing.playing.until - 130_000 === 6_000);
+check("what is playing has left the queue and been remembered",
+  playing.queue.length === 0 && playing.announced.includes(playing.playing.item.factKey));
+check("it appears in the history the panel shows",
+  playing.history[0].text === "Eagle — Alice Wanjiru");
+
+check("an animation is never cut short by a new snapshot", (() => {
+  const mid = PR.reduce(playing,
+    { type: "snapshot", snapshot: snap(eagleRows("p2", 0), 131_000) }, 133_000);
+  const still = PR.reduce(mid, { type: "tick" }, 133_000);
+  return still.mode === "announcement" && still.playing.item.subject === "Alice Wanjiru";
+})());
+check("the board returns when the announcement has run its course", (() => {
+  const done = PR.reduce(playing, { type: "tick" }, 136_000);
+  return done.mode === "leaderboard" && done.playing === null;
+})());
+check("a gap is enforced before the next announcement", (() => {
+  const done = PR.reduce(playing, { type: "tick" }, 136_000);
+  return done.nextSlotAt === 136_000 + 15_000;
+})());
+check("nothing cascades: two eagles do not play back to back", (() => {
+  let s = PR.reduce(S0, { type: "snapshot",
+    snapshot: snap([...eagleRows("p1", 0), ...eagleRows("p2", 0)], 0) }, 130_000);
+  s = PR.reduce(s, { type: "tick" }, 130_000);          // first plays
+  s = PR.reduce(s, { type: "tick" }, 136_100);          // it ends
+  const tooSoon = PR.reduce(s, { type: "tick" }, 140_000);
+  const later = PR.reduce(s, { type: "tick" }, 152_000);
+  return tooSoon.mode === "leaderboard" && later.mode === "announcement";
+})());
+check("the same fact is never announced twice", (() => {
+  let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+  s = PR.reduce(s, { type: "tick" }, 130_000);
+  s = PR.reduce(s, { type: "tick" }, 137_000);
+  s = PR.reduce(s, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 138_000) }, 138_000);
+  return s.queue.length === 0;
+})());
+
+check("an implausible moment is held, not queued", (() => {
+  const hacker = [{ id: "p1", name: "High Handicap", clubId: "sigona", handicap: 28, gender: "M" },
+                  tvPlayers[1]];
+  const s = PR.reduce(S0, { type: "snapshot",
+    snapshot: { ...snap(eagleRows("p1", 0), 0), players: hacker } }, 130_000);
+  return s.pending.length === 1 && s.queue.length === 0 && Boolean(s.pending[0].holdReason);
+})());
+check("a held moment does not reach the screen on its own", (() => {
+  const hacker = [{ id: "p1", name: "High Handicap", clubId: "sigona", handicap: 28, gender: "M" },
+                  tvPlayers[1]];
+  let s = PR.reduce(S0, { type: "snapshot",
+    snapshot: { ...snap(eagleRows("p1", 0), 0), players: hacker } }, 130_000);
+  s = PR.reduce(s, { type: "tick" }, 200_000);
+  return s.mode === "leaderboard";
+})());
+check("approving a held moment sends it to air", (() => {
+  const hacker = [{ id: "p1", name: "High Handicap", clubId: "sigona", handicap: 28, gender: "M" },
+                  tvPlayers[1]];
+  let s = PR.reduce(S0, { type: "snapshot",
+    snapshot: { ...snap(eagleRows("p1", 0), 0), players: hacker } }, 130_000);
+  s = PR.reduce(s, { type: "approve", id: s.pending[0].id }, 131_000);
+  s = PR.reduce(s, { type: "tick" }, 131_000);
+  return s.mode === "announcement" && s.pending.length === 0;
+})());
+check("rejecting a held moment silences it for good", (() => {
+  const hacker = [{ id: "p1", name: "High Handicap", clubId: "sigona", handicap: 28, gender: "M" },
+                  tvPlayers[1]];
+  let s = PR.reduce(S0, { type: "snapshot",
+    snapshot: { ...snap(eagleRows("p1", 0), 0), players: hacker } }, 130_000);
+  s = PR.reduce(s, { type: "reject", id: s.pending[0].id }, 131_000);
+  // the same fact is still true on the next snapshot, and must not come back
+  s = PR.reduce(s, { type: "snapshot",
+    snapshot: { ...snap(eagleRows("p1", 0), 132_000), players: hacker } }, 132_000);
+  s = PR.reduce(s, { type: "tick" }, 200_000);
+  return s.pending.length === 0 && s.queue.length === 0 && s.mode === "leaderboard";
+})());
+check("a queued announcement can be cancelled before it airs", (() => {
+  let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+  s = PR.reduce(s, { type: "cancel", id: s.queue[0].id }, 130_500);
+  s = PR.reduce(s, { type: "tick" }, 200_000);
+  return s.queue.length === 0 && s.mode === "leaderboard";
+})());
+
+check("a correction inside the window is never seen at all", (() => {
+  // both agreed on an eagle, then both corrected to a par a minute later
+  const rows = [...eagleRows("p1", 0), ...pair("p1", eagleHole, tvC.holes[eagleHole].par, 60_000)];
+  const s = PR.reduce(S0, { type: "snapshot", snapshot: snap(rows, 60_000) }, 190_000);
+  return !s.queue.some((a) => a.kind === "eagle") && s.pending.length === 0;
+})());
+check("a disagreement mid-cooldown holds everything back", (() => {
+  const rows = [...eagleRows("p1", 0),
+    { round: 1, playerId: "p1", hole: eagleHole, gross: 5, source: "marker", at: 30_000 }];
+  const s = PR.reduce(S0, { type: "snapshot", snapshot: snap(rows, 30_000) }, 300_000);
+  return s.queue.length === 0 && s.pending.length === 0;
+})());
+
+check("quiet mode keeps the board up and drops the backlog", (() => {
+  let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+  s = PR.reduce(s, { type: "config", patch: { quiet: true } }, 130_100);
+  s = PR.reduce(s, { type: "tick" }, 200_000);
+  return s.queue.length === 0 && s.mode === "leaderboard" &&
+    s.history.some((h) => h.kind === "quiet-on");
+})());
+check("leaving quiet mode does not replay what was silenced", (() => {
+  let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+  s = PR.reduce(s, { type: "config", patch: { quiet: true } }, 130_100);
+  s = PR.reduce(s, { type: "config", patch: { quiet: false } }, 200_000);
+  s = PR.reduce(s, { type: "tick" }, 200_100);
+  return s.mode === "leaderboard";
+})());
+check("quiet mode interrupts nothing that is already on screen", (() => {
+  let s = PR.reduce(settledState, { type: "tick" }, 130_000);
+  s = PR.reduce(s, { type: "config", patch: { quiet: true } }, 131_000);
+  return s.playing === null; // cleared, board restored, room stops being interrupted
+})());
+
+check("a retraction congratulates forward and never looks back", (() => {
+  const s = PR.reduce(S0, { type: "retract", player: "Ben Otieno" }, 100_000);
+  const a = s.queue[0];
+  return a.kind === "retraction" && a.subject === "Congratulations to Ben Otieno" &&
+    !/wrong|error|false|incorrect/i.test(a.headline + a.subject);
+})());
+check("a retraction waits a minute so it reads as routine", (() => {
+  let s = PR.reduce(S0, { type: "retract", player: "Ben Otieno" }, 100_000);
+  const early = PR.reduce(s, { type: "tick" }, 120_000);
+  const later = PR.reduce(s, { type: "tick" }, 165_000);
+  return early.mode === "leaderboard" && later.mode === "announcement";
+})());
+check("the test button puts something on screen for the admin", (() => {
+  let s = PR.reduce(S0, { type: "test" }, 100_000);
+  s = PR.reduce(s, { type: "tick" }, 100_000);
+  return s.mode === "announcement" && s.playing.item.headline === "Test";
+})());
+check("skip cuts the current item and returns the board", (() => {
+  let s = PR.reduce(settledState, { type: "tick" }, 130_000);
+  s = PR.reduce(s, { type: "skip" }, 131_000);
+  s = PR.reduce(s, { type: "tick" }, 131_000);
+  return s.mode === "leaderboard";
+})());
+check("higher priority takes the screen first", (() => {
+  const aceHole = tvC.holes.findIndex((h) => h.par === 3);
+  const rows = [...eagleRows("p2", 0), ...pair("p1", aceHole, 1, 0)];
+  let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(rows, 0) }, 130_000);
+  s = PR.reduce(s, { type: "tick" }, 130_000);
+  return s.playing.item.kind === "ace";
+})());
+check("the producer only counts settled figures when reading the board", (() => {
+  // p2 alone claims a huge lead; unconfirmed, so no lead change is announced
+  const rows = [...pair("p1", 0, 3, 0),
+    { round: 1, playerId: "p2", hole: 0, gross: 2, source: "player", at: 0 }];
+  let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(rows, 0) }, 130_000);
+  s = PR.reduce(s, { type: "snapshot", snapshot: snap(rows, 131_000) }, 131_000);
+  return !s.queue.some((a) => a.kind === "lead-change");
+})());
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

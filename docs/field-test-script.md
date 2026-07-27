@@ -66,6 +66,34 @@ the printed card. Check two more holes at random.
       sign out at the course.
 - [ ] 1 laptop or tablet for the desk
 
+### 1.4a First run: onboarding motion
+
+**Do this on a real Android handset, on at least two of the four phones, and
+on the slowest one you have.** This is the one check in this document that
+cannot be done anywhere else. The browser used for automated checks reports
+itself as hidden and runs no animation frames at all, so every transition in
+Shimo measures as frozen there whether it is working or not. A phone is the
+only honest test.
+
+Watch the seven onboarding steps go past on first launch. You are not looking
+for a list of features, you are looking for whether it feels like one story or
+seven screens.
+
+| # | Step | PASS |
+|---|---|---|
+| O1 | Launch for the first time | Welcome step fades up, the seven progress ticks sit at the top with the first one filled |
+| O2 | Tap **Get started** | The outgoing step slides left as the incoming one arrives from the right; they **overlap**, the layout never jumps, and the frame around them never flickers |
+| O3 | Watch any single step settle | Icon, then heading, then body, each following the last by a beat. Not all at once, not one visibly late |
+| O4 | Go back a step | Travel reverses direction, right to left |
+| O5 | Watch the progress ticks | Each fills left to right as you advance. No snapping |
+| O6 | The whole run, start to finish | No step ever lands part-faded and stays there |
+
+- [ ] Nothing stutters or drops frames on the slowest handset. Note the model:
+      ______________________
+- [ ] O6 in particular: a step stuck at partial opacity is a real bug and the
+      one failure mode this flow has had before. Record which step and what you
+      tapped to reach it.
+
 ### 1.5 The tournament
 
 Create it on the desk device:

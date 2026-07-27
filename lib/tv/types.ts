@@ -200,4 +200,10 @@ export interface ProducerState {
   config: ProducerConfig;
   /** the last snapshot seen, so detection can diff against it */
   lastAt: number;
+  /**
+   * The settled board as of the previous snapshot, so a lead change is a
+   * comparison rather than a guess. Absent on the first snapshot, which is why
+   * the day's first leader is not announced as having taken the lead.
+   */
+  boardBefore?: { playerId: string; position: number }[];
 }
