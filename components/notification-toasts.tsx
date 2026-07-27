@@ -12,12 +12,13 @@ import { useSim, type AppNotification } from "@/lib/sim/store";
 export function NotificationToasts() {
   const notifications = useSim((s) => s.notifications);
   const [visible, setVisible] = useState<AppNotification[]>([]);
-  const mountTs = useRef(Date.now());
+  // read once, on the first render, rather than on every one
+  const [mountTs] = useState(() => Date.now());
   const shown = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     const fresh = notifications.filter(
-      (n) => n.ts > mountTs.current && !shown.current.has(n.id),
+      (n) => n.ts > mountTs && !shown.current.has(n.id),
     );
     if (!fresh.length) return;
     fresh.forEach((n) => shown.current.add(n.id));
@@ -28,7 +29,7 @@ export function NotificationToasts() {
         5200,
       ),
     );
-  }, [notifications]);
+  }, [notifications, mountTs]);
 
   return (
     <div className="pointer-events-none absolute inset-x-3 top-3 z-50 flex flex-col gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 
@@ -93,20 +93,51 @@ function isStandalone() {
   );
 }
 
-export function InstallPrompt() {
-  const [kind, setKind] = useState<"none" | "native" | "ios">("none");
+export type InstallKind = "installed" | "native" | "ios" | "other";
 
-  useEffect(() => {
+/**
+ * How this device can install Shimo. The platform owns the answer — the
+ * display mode, the user agent, and the install event stashed by PwaBoot —
+ * so it is read rather than copied into state. It stays a subscription
+ * because `beforeinstallprompt` often lands after the screen has painted.
+ */
+function subscribeInstallable(onChange: () => void) {
+  window.addEventListener("shimo-installable", onChange);
+  return () => window.removeEventListener("shimo-installable", onChange);
+}
+
+function readInstallKind(): InstallKind {
+  try {
+    if (isStandalone()) return "installed";
+    if (window.__shimoInstallEvent) return "native";
+    if (isIos()) return "ios";
+  } catch {}
+  return "other";
+}
+
+export function useInstallKind() {
+  return useSyncExternalStore(
+    subscribeInstallable,
+    readInstallKind,
+    () => "other" as const,
+  );
+}
+
+export function InstallPrompt() {
+  const installable = useInstallKind();
+  // the club member already said no on this device
+  const [dismissed, setDismissed] = useState(() => {
     try {
-      if (isStandalone() || localStorage.getItem("shimo-install-dismissed"))
-        return;
-      if (window.__shimoInstallEvent) setKind("native");
-      else if (isIos()) setKind("ios");
-      const onInstallable = () => setKind("native");
-      window.addEventListener("shimo-installable", onInstallable);
-      return () => window.removeEventListener("shimo-installable", onInstallable);
-    } catch {}
-  }, []);
+      return Boolean(localStorage.getItem("shimo-install-dismissed"));
+    } catch {
+      return true;
+    }
+  });
+
+  const kind =
+    dismissed || (installable !== "native" && installable !== "ios")
+      ? "none"
+      : installable;
 
   if (kind === "none") return null;
 
@@ -114,7 +145,7 @@ export function InstallPrompt() {
     try {
       localStorage.setItem("shimo-install-dismissed", "1");
     } catch {}
-    setKind("none");
+    setDismissed(true);
   };
 
   return (

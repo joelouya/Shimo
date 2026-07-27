@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -326,13 +326,12 @@ function CreateTournamentInner() {
   const [publishing, setPublishing] = useState(false);
   const [loadedEdit, setLoadedEdit] = useState(false);
 
-  // prefill once the tournament being edited is available from the store
-  useEffect(() => {
-    if (editing && !loadedEdit) {
-      setDraft(draftFromTournament(editing));
-      setLoadedEdit(true);
-    }
-  }, [editing, loadedEdit]);
+  // prefill once the tournament being edited is available from the store,
+  // before the empty form is ever painted
+  if (editing && !loadedEdit) {
+    setLoadedEdit(true);
+    setDraft(draftFromTournament(editing));
+  }
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }));

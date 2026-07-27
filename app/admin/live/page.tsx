@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -326,18 +326,19 @@ export default function LiveOpsPage() {
   const [reviewing, setReviewing] = useState<OpsFlag | null>(null);
   const [ending, setEnding] = useState(false);
   const [advancing, setAdvancing] = useState(false);
-  const [tab, setTab] = useState("course");
+  // deep link: /admin/live#certification opens the Committee tab. Read on the
+  // first render — this page only ever renders on the client, behind SimGate.
+  const [tab, setTab] = useState(() =>
+    typeof window !== "undefined" && window.location.hash === "#certification"
+      ? "certs"
+      : "course",
+  );
   const openItems = useSim(
     (s) =>
       s.disputes.filter((d) => d.status === "open").length +
       s.corrections.filter((c) => c.status === "pending").length,
   );
   const active = useActiveTournament();
-
-  // deep link: /admin/live#certification opens the Committee tab
-  useEffect(() => {
-    if (window.location.hash === "#certification") setTab("certs");
-  }, []);
 
   // pilot mode never alerts pace flags during play — they live in
   // Settings > Integrity instead

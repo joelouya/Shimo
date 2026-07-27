@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { startSim } from "@/lib/sim/store";
 
+/** Mounted-ness flips exactly once, so there is nothing to subscribe to. */
+const neverChanges = () => () => {};
+
 export function useMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  return useSyncExternalStore(
+    neverChanges,
+    () => true,
+    () => false,
+  );
 }
 
 /**
