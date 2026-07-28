@@ -20,11 +20,12 @@
  */
 
 import { cumulativeStandings, type ViewMode } from "@/lib/scoring";
-import { COURSES } from "@/lib/data";
+import { clubById, COURSES } from "@/lib/data";
 import { roundsOf } from "@/lib/rounds";
 import type { Course } from "@/lib/types";
 import { isNetFirst, momentsForBoard, momentsForCard, type Moment } from "./detect";
 import { settledHoles, type SettledHole } from "./trust";
+import { nextFeature } from "./features";
 import type {
   Announcement,
   HistoryEntry,
@@ -92,6 +93,7 @@ export function initialState(config?: Partial<ProducerConfig>): ProducerState {
     announced: [],
     nextSlotAt: 0,
     nextFeatureAt: 0,
+    featureTurn: 0,
     history: [],
     config: { ...DEFAULT_CONFIG, ...config },
     lastAt: 0,
@@ -138,16 +140,42 @@ export function standingsFrom(
   }));
 
   const rows = cumulativeStandings(
-    snapshot.players,
+    snapshot.players ?? [],
     byRound,
     t.handicapAllowance,
     modeOf(snapshot),
-    (rnd, pid) => (snapshot.fieldByRound[rnd] ?? []).includes(pid),
+    (rnd, pid) => ((snapshot.fieldByRound ?? {})[rnd] ?? []).includes(pid),
   );
   // a player who has not played a hole yet is not in the running
   return rows
     .filter((r) => r.thru > 0)
     .map((r) => ({ playerId: r.player.id, position: r.position }));
+}
+
+/**
+ * The board as the screen shows it: every figure posted, not only the settled
+ * ones. Features describe the afternoon rather than celebrate a moment, so
+ * they read the same board a member is looking at.
+ */
+export function boardRows(snapshot: TvSnapshot, settled: SettledHole[]) {
+  void settled;
+  const t = snapshot.tournament;
+  const cards: Record<number, Record<string, (number | null)[]>> = {};
+  for (const r of snapshot.rows ?? []) {
+    if (r.source === "marker") continue;
+    ((cards[r.round] ??= {})[r.playerId] ??= Array(18).fill(null))[r.hole] = r.gross;
+  }
+  return cumulativeStandings(
+    snapshot.players ?? [],
+    roundsOf(t).map((r) => ({
+      round: r.number,
+      scores: cards[r.number] ?? {},
+      course: COURSES.find((c) => c.id === r.courseId) ?? snapshot.course,
+    })),
+    t.handicapAllowance,
+    modeOf(snapshot),
+    (rnd, pid) => ((snapshot.fieldByRound ?? {})[rnd] ?? []).includes(pid),
+  ).filter((r) => r.thru > 0);
 }
 
 /* ------------------------------------------------------------------ */
@@ -171,7 +199,7 @@ export function dress(
   snapshot: TvSnapshot,
   now: number,
 ): Announcement | null {
-  const player = snapshot.players.find((p) => p.id === m.playerId);
+  const player = (snapshot.players ?? []).find((p) => p.id === m.playerId);
   if (!player) return null;
   // A visitor's club is worth naming; the host club is not, since every other
   // name on the screen belongs to it too. Join only what there is, or the
@@ -254,7 +282,10 @@ export function dress(
 
 function clubShort(snapshot: TvSnapshot, clubId: string) {
   // the club running the event is unremarkable; a visitor's club is the story
-  return clubId === snapshot.tournament.clubId ? "" : clubId;
+  if (!clubId || clubId === snapshot.tournament.clubId) return "";
+  // and it is named, not keyed: "royal-nairobi" is a database row, "Royal
+  // Nairobi" is what the room calls it
+  return clubById(clubId).short || clubById(clubId).name || "";
 }
 
 /* ------------------------------------------------------------------ */
@@ -464,7 +495,7 @@ function onSnapshot(
 ): ProducerState {
   const state = applyDecisions(base, snapshot, now);
   const cfg = state.config;
-  const settled = settledHoles(snapshot.rows, snapshot.published, cfg, now);
+  const settled = settledHoles(snapshot.rows ?? [], snapshot.published ?? {}, cfg, now);
 
   // group settled holes by player and round
   const cards = new Map<string, SettledHole[]>();
@@ -476,7 +507,7 @@ function onSnapshot(
   }
 
   const found: Moment[] = [];
-  const byId = new Map(snapshot.players.map((p) => [p.id, p] as const));
+  const byId = new Map((snapshot.players ?? []).map((p) => [p.id, p] as const));
   for (const [k, holes] of cards) {
     const [roundStr, playerId] = k.split(":");
     const player = byId.get(playerId);
@@ -492,7 +523,7 @@ function onSnapshot(
         allowancePct: snapshot.tournament.handicapAllowance,
         profile: snapshot.tournament.fieldProfile ?? "club",
         cfg,
-        records: snapshot.records,
+        records: snapshot.records ?? [],
         tee: r?.tees,
       }),
     );
@@ -538,6 +569,7 @@ function onSnapshot(
       pending: [],
       boardBefore: after,
       lastAt: snapshot.at,
+      lastSnapshot: snapshot,
       nextFeatureAt: state.nextFeatureAt || now + cfg.featureEveryMs,
     };
   }
@@ -574,7 +606,7 @@ function onSnapshot(
    * anything wrong. The member who was congratulated is in the room.
    */
   const vanished = state.materialShown.filter((k) => !trueNow.has(k));
-  const leader = snapshot.players.find((p) => p.id === after[0]?.playerId);
+  const leader = (snapshot.players ?? []).find((p) => p.id === after[0]?.playerId);
   const update: Announcement[] =
     vanished.length > 0 && leader
       ? [
@@ -601,6 +633,7 @@ function onSnapshot(
     materialShown: state.materialShown.filter((k) => trueNow.has(k)),
     boardBefore: after,
     lastAt: snapshot.at,
+    lastSnapshot: snapshot,
     // the first snapshot sets the feature clock, so nothing fires immediately
     nextFeatureAt: state.nextFeatureAt || now + cfg.featureEveryMs,
   };
@@ -646,6 +679,47 @@ function onTick(state: ProducerState, now: number): ProducerState {
         nextFeatureAt: Math.max(state.nextFeatureAt, now + cfg.featureEveryMs),
       };
     }
+  }
+
+  /*
+   * Nothing to announce. Every so often, put up something about the tournament
+   * instead of leaving the board on for the twentieth minute running. Features
+   * never compete with announcements: this only runs once the queue is empty
+   * and the screen is free, and playing an announcement pushes the next feature
+   * a full interval away.
+   */
+  if (
+    now >= state.nextFeatureAt &&
+    state.lastSnapshot &&
+    state.queue.length === 0
+  ) {
+    const settled = settledHoles(
+      state.lastSnapshot.rows ?? [],
+      state.lastSnapshot.published ?? {},
+      cfg,
+      now,
+    );
+    const card = nextFeature(
+      {
+        snapshot: state.lastSnapshot,
+        settled,
+        standings: boardRows(state.lastSnapshot, settled),
+        cfg,
+        now,
+      },
+      state.featureTurn,
+    );
+    // A tournament with nothing to say yet gets its board back and is asked
+    // again at the next interval, rather than being given an empty card.
+    if (!card) return { ...state, nextFeatureAt: now + cfg.featureEveryMs };
+    return {
+      ...state,
+      mode: "feature",
+      playing: { type: "feature", item: card, until: now + card.durationMs },
+      featureTurn: state.featureTurn + 1,
+      nextFeatureAt: now + card.durationMs + cfg.featureEveryMs,
+      history: note(state, { at: now, kind: card.kind, text: card.title }),
+    };
   }
 
   return state;

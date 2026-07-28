@@ -17,6 +17,7 @@ import { use, useEffect, useMemo, useReducer, useState } from "react";
 
 import { TvBoard, TvEmpty, TvFrame } from "@/components/tv/board";
 import { TvAnnouncement, playChime } from "@/components/tv/announcement";
+import { TvFeature } from "@/components/tv/feature";
 import { COURSES } from "@/lib/data";
 import { accentOnDark, DEFAULT_ACCENT, normalizeHex } from "@/lib/contrast";
 import { roundsOf } from "@/lib/rounds";
@@ -98,7 +99,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
     if (!snapshot) return [];
     const t = snapshot.tournament;
     const cards: Record<number, Record<string, (number | null)[]>> = {};
-    for (const r of snapshot.rows) {
+    for (const r of snapshot.rows ?? []) {
       if (r.source === "marker") continue; // a marker's copy is not published
       ((cards[r.round] ??= {})[r.playerId] ??= Array(18).fill(null))[r.hole] =
         r.gross;
@@ -112,7 +113,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
       })),
       t.handicapAllowance,
       modeOf(snapshot),
-      (rnd, pid) => (snapshot.fieldByRound[rnd] ?? []).includes(pid),
+      (rnd, pid) => ((snapshot.fieldByRound ?? {})[rnd] ?? []).includes(pid),
     ).filter((r) => r.thru > 0);
   }, [snapshot]);
 
@@ -142,6 +143,8 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
           item={playing.item}
           accent={accent}
         />
+      ) : playing?.type === "feature" ? (
+        <TvFeature key={playing.item.id} item={playing.item} accent={accent} />
       ) : rows.length === 0 ? (
         <TvEmpty snapshot={snapshot} />
       ) : (

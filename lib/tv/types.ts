@@ -81,6 +81,8 @@ export interface TvSnapshot {
   published: Record<number, Record<string, boolean>>;
   /** round -> the field of that round, so a cut player is not counted */
   fieldByRound: Record<number, string[]>;
+  /** this round's groups, in order, for the group tracker */
+  groups: { number: number; teeTime: string; playerIds: string[] }[];
   identity: ClubIdentity;
   records: CourseRecord[];
   /** every decision the club has made about this tournament, oldest first */
@@ -217,10 +219,18 @@ export interface ProducerState {
   nextSlotAt: number;
   /** when the next feature interlude is due */
   nextFeatureAt: number;
+  /** how many features have been shown, so the rotation advances */
+  featureTurn: number;
   history: HistoryEntry[];
   config: ProducerConfig;
   /** the last snapshot seen, so detection can diff against it */
   lastAt: number;
+  /**
+   * The snapshot itself, kept so a feature can be built on a tick without one
+   * having just arrived. Features are shown in the quiet stretches, which are
+   * exactly the stretches where no new snapshot is bringing anything.
+   */
+  lastSnapshot?: TvSnapshot;
   /** the highest decision id already folded in, so none is applied twice */
   appliedDecision: number;
   /**

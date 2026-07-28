@@ -818,7 +818,8 @@ const tvT = {
 const snap = (rows, at, extra = {}) => ({
   at, tournament: tvT, course: tvC, players: tvPlayers, round: 1, rows,
   published: {}, fieldByRound: { 1: ["p1", "p2"] },
-  identity: { clubId: "sigona" }, records: [], decisions: [], online: true, ...extra,
+  identity: { clubId: "sigona" }, records: [], decisions: [], groups: [],
+  online: true, ...extra,
 });
 /** both parties agree on `gross` at time `at` */
 const pair = (pid, hole, gross, at) => [
@@ -1309,6 +1310,151 @@ section("Corrections");
     s = PR.reduce(s, { type: "snapshot",
       snapshot: snap([...pair("p1", 0, 3, 0), ...pair("p2", 0, 2, 0)], 132_000) }, 132_000);
     return had && s.queue.some((a) => a.kind === "lead-change");
+  })());
+}
+
+/* ------------------------------------------------------------------ */
+section("Feature interludes");
+{
+  // a field of eight with a full spread of settled holes, so most kinds have
+  // something to say
+  const many = Array.from({ length: 8 }, (_, i) => ({
+    id: `f${i}`, name: `Player ${i}`, clubId: "sigona",
+    handicap: 4 + i * 3, gender: "M",
+  }));
+  const rowsFor = (n) => {
+    const out = [];
+    many.forEach((p, pi) => {
+      for (let h = 0; h < n; h++) {
+        const gross = tvC.holes[h].par + ((pi + h) % 3 === 0 ? -1 : (pi + h) % 3 === 1 ? 0 : 1);
+        for (const source of ["player", "marker"])
+          out.push({ round: 1, playerId: p.id, hole: h, gross, source, at: 0 });
+      }
+    });
+    return out;
+  };
+  const bigSnap = (at, extra = {}) => ({
+    ...snap(rowsFor(9), at), players: many,
+    fieldByRound: { 1: many.map((p) => p.id) },
+    groups: [
+      { number: 1, teeTime: "07:30", playerIds: many.slice(0, 4).map((p) => p.id) },
+      { number: 2, teeTime: "07:40", playerIds: many.slice(4).map((p) => p.id) },
+    ],
+    ...extra,
+  });
+
+  const CFG = { featureEveryMs: 90_000, spacingMs: 15_000, cooldownMs: 120_000 };
+  let s = PR.reduce(PR.initialState(CFG),
+    { type: "snapshot", snapshot: bigSnap(0) }, 130_000);
+
+  check("no feature fires the moment the screen comes on", (() => {
+    const t = PR.reduce(s, { type: "tick" }, 130_000);
+    return t.mode !== "feature";
+  })());
+
+  // drain the announcements the seeded card produces
+  let t = 130_000;
+  for (let i = 0; i < 40; i++) {
+    t += 5_000;
+    s = PR.reduce(s, { type: "tick" }, t);
+  }
+  check("a feature appears once the interval has passed and nothing is queued",
+    s.mode === "feature" || s.history.some((h) => /spotlight|hole|group|day|head/i.test(h.kind)),
+    s.mode);
+
+  check("a feature holds the screen then gives it back", (() => {
+    let x = s;
+    // find one playing
+    for (let i = 0; i < 60 && x.mode !== "feature"; i++) { t += 5_000; x = PR.reduce(x, { type: "tick" }, t); }
+    if (x.mode !== "feature") return false;
+    const until = x.playing.until;
+    const after = PR.reduce(x, { type: "tick" }, until + 1);
+    s = after;
+    return after.mode === "leaderboard";
+  })());
+
+  check("the rotation moves on rather than repeating one card", (() => {
+    const kinds = new Set();
+    let x = s, u = t;
+    for (let i = 0; i < 200; i++) {
+      u += 5_000;
+      x = PR.reduce(x, { type: "tick" }, u);
+      if (x.mode === "feature") kinds.add(x.playing.item.kind);
+    }
+    return kinds.size >= 3;
+  })(), "");
+
+  check("an announcement always wins the screen over a feature", (() => {
+    // a due feature and a waiting eagle at the same instant
+    let x = PR.reduce(PR.initialState(CFG),
+      { type: "snapshot", snapshot: bigSnap(0, { rows: [...rowsFor(9), ...eagleRows("f0", 0)] }) },
+      130_000);
+    x = { ...x, nextFeatureAt: 0 };
+    x = PR.reduce(x, { type: "tick" }, 130_000);
+    return x.mode === "announcement";
+  })());
+
+  check("quiet mode shows no features either", (() => {
+    let x = PR.reduce(PR.initialState({ ...CFG, quiet: true }),
+      { type: "snapshot", snapshot: bigSnap(0) }, 130_000);
+    x = { ...x, nextFeatureAt: 0 };
+    for (let i = 0; i < 10; i++) x = PR.reduce(x, { type: "tick" }, 130_000 + i * 10_000);
+    return x.mode === "leaderboard";
+  })());
+
+  check("a tournament with nothing to say yet is not given an empty card", (() => {
+    let x = PR.reduce(PR.initialState(CFG), { type: "snapshot", snapshot: snap([], 0) }, 1000);
+    x = { ...x, nextFeatureAt: 0 };
+    x = PR.reduce(x, { type: "tick" }, 1000);
+    return x.mode === "leaderboard" && x.nextFeatureAt > 1000;
+  })());
+
+  check("a snapshot missing any optional collection cannot stop the screen", (() => {
+    // this has bitten twice: once on decisions, once on groups. Every optional
+    // collection is now read through a default, and this holds that line.
+    const optional = ["decisions", "groups", "records", "rows", "players",
+                      "published", "fieldByRound"];
+    return optional.every((field) => {
+      try {
+        const bare = { ...bigSnap(0) };
+        delete bare[field];
+        let x = PR.reduce(PR.initialState(CFG), { type: "snapshot", snapshot: bare }, 130_000);
+        x = { ...x, nextFeatureAt: 0 };
+        PR.reduce(x, { type: "tick" }, 130_000);
+        return true;
+      } catch {
+        console.log(`       (crashed without ${field})`);
+        return false;
+      }
+    });
+  })());
+
+  const FE = await jiti.import("../lib/tv/features.ts");
+  check("the same snapshot and turn always produce the same card", (() => {
+    const settled = TR.settledHoles(rowsFor(9), {}, { cooldownMs: 0 }, 999_999);
+    const ctx = { snapshot: bigSnap(0), settled,
+      standings: PR.boardRows(bigSnap(0), settled), cfg: PR.initialState(CFG).config, now: 1 };
+    const a = FE.nextFeature(ctx, 3);
+    const b = FE.nextFeature(ctx, 3);
+    return JSON.stringify(a) === JSON.stringify(b);
+  })());
+  check("a club message is only offered when the club wrote one", (() => {
+    const settled = TR.settledHoles(rowsFor(9), {}, { cooldownMs: 0 }, 999_999);
+    const base = { snapshot: bigSnap(0), settled,
+      standings: PR.boardRows(bigSnap(0), settled), now: 1 };
+    const none = FE.nextFeature({ ...base, cfg: { ...PR.initialState(CFG).config, messages: [] } }, 6);
+    const some = FE.nextFeature({ ...base,
+      cfg: { ...PR.initialState(CFG).config, messages: ["Prizegiving at 6pm in the main bar"] } }, 6);
+    return none?.kind !== "message" && some?.kind === "message" &&
+      some.title === "Prizegiving at 6pm in the main bar";
+  })());
+  check("only sponsors billed above a mention get their own moment", (() => {
+    const settled = TR.settledHoles(rowsFor(9), {}, { cooldownMs: 0 }, 999_999);
+    const withPartner = bigSnap(0, { tournament: { ...tvT,
+      sponsors: [{ id: "s9", name: "A Partner", tier: "partner" }] } });
+    const ctx = { snapshot: withPartner, settled,
+      standings: PR.boardRows(withPartner, settled), cfg: PR.initialState(CFG).config, now: 1 };
+    return FE.nextFeature(ctx, 5)?.kind !== "sponsor";
   })());
 }
 

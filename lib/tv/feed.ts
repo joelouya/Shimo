@@ -96,6 +96,14 @@ export function useTvFeed(tournamentId: string): TvFeed {
           (fieldByRound[rnd] ??= []).push(...((g.player_ids as string[]) ?? []));
         }
         const fieldIds = new Set(Object.values(fieldByRound).flat());
+        const groupRows = ((pairings.data ?? []) as Record<string, unknown>[])
+          .filter((g) => ((g.round as number) ?? 1) === 1)
+          .map((g) => ({
+            number: (g.number as number) ?? 0,
+            teeTime: (g.tee_time as string) ?? "",
+            playerIds: (g.player_ids as string[]) ?? [],
+          }))
+          .sort((a, b) => a.number - b.number);
         const roster = (players.data ?? [])
           .map(rowToPlayer)
           .filter((p) => fieldIds.has(p.id));
@@ -148,6 +156,7 @@ export function useTvFeed(tournamentId: string): TvFeed {
           rows,
           published,
           fieldByRound,
+          groups: groupRows,
           identity,
           records: recordsOf(identity),
           decisions: (decisions.data ?? []).map((d) => ({
