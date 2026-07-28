@@ -20,8 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { LiveBadge } from "@/components/live-dot";
+import { PublishButton } from "@/components/admin/publish-card";
 import { courseById } from "@/lib/data";
 import { rowStats, handicapSet } from "@/lib/scoring";
 import { useActiveTournament, useSyncStatus,
@@ -29,7 +29,7 @@ import { useActiveTournament, useSyncStatus,
   useRoundMarkerScores,
   useRoundCardIn
 } from "@/lib/sim/hooks";
-import { retryFailedOps, setBulkScore, setCardIn, useSim } from "@/lib/sim/store";
+import { retryFailedOps, setBulkScore, useSim } from "@/lib/sim/store";
 import type { Course, Player } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
 
@@ -122,6 +122,8 @@ interface RowProps {
   scores: (number | null)[];
   scoresKey: string;
   cardIn: boolean;
+  tournamentId: string;
+  round: number;
   course: Course;
   allowance: number;
   isStableford: boolean;
@@ -133,6 +135,8 @@ const PlayerRow = memo(
     player,
     scores,
     cardIn,
+    tournamentId,
+    round,
     course,
     allowance,
     isStableford,
@@ -185,11 +189,12 @@ const PlayerRow = memo(
           className="sticky right-0 z-10 w-16 px-3 text-center"
           style={{ background: cardIn ? "#F5ECE3" : "var(--background)" }}
         >
-          <Switch
-            tabIndex={-1}
-            checked={cardIn}
-            onCheckedChange={(on) => setCardIn(player.id, on)}
-            aria-label={`Mark ${player.name}'s card in`}
+          <PublishButton
+            player={player}
+            published={cardIn}
+            thru={st.thru}
+            tournamentId={tournamentId}
+            round={round}
           />
         </td>
       </tr>
@@ -249,6 +254,7 @@ export default function BulkScoresPage() {
   const active = useActiveTournament();
   const scores = useRoundScores();
   const cardIn = useRoundCardIn();
+  const liveRound = useSim((s) => s.liveRound);
   const { online, failed } = useSyncStatus();
   const [scanOpen, setScanOpen] = useState(false);
 
@@ -400,6 +406,8 @@ export default function BulkScoresPage() {
                 byId={byId}
                 scores={scores}
                 cardIn={cardIn}
+                tournamentId={tournament.id}
+                round={liveRound}
                 course={course}
                 allowance={tournament.handicapAllowance}
                 isStableford={isStableford}
@@ -430,6 +438,8 @@ function GroupRows({
   byId,
   scores,
   cardIn,
+  tournamentId,
+  round,
   course,
   allowance,
   isStableford,
@@ -441,6 +451,8 @@ function GroupRows({
   byId: Map<string, Player>;
   scores: Record<string, (number | null)[]>;
   cardIn: Record<string, boolean>;
+  tournamentId: string;
+  round: number;
   course: Course;
   allowance: number;
   isStableford: boolean;
@@ -471,6 +483,8 @@ function GroupRows({
           scores={scores[p.id] ?? []}
           scoresKey={scoresKeyFor(p.id)}
           cardIn={Boolean(cardIn[p.id])}
+          tournamentId={tournamentId}
+          round={round}
           course={course}
           allowance={allowance}
           isStableford={isStableford}

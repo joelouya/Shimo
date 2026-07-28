@@ -1005,6 +1005,48 @@ check("the producer only counts settled figures when reading the board", (() => 
 })());
 
 /* ------------------------------------------------------------------ */
+section("Desk publish gate");
+{
+  const before = st().auditLog.length;
+  const pid = st().roster[0].id;
+  S.publishCard(pid, { by: "Peter Kamau" });
+  const snap = st();
+  const rec = snap.auditLog[snap.auditLog.length - 1];
+  check("publishing a card writes an audit record",
+    snap.auditLog.length === before + 1 && rec.kind === "card-published");
+  check("the record names who did it and who it was done for",
+    rec.actor === "Peter Kamau" &&
+    /Score entered by Peter Kamau on behalf of /.test(rec.detail), rec.detail);
+  check("the card is marked in for the live round",
+    S.roundCardIn(snap)[pid] === true);
+  check("a published card is announceable to the producer", (() => {
+    const rows = [{ round: snap.liveRound, playerId: pid, hole: 0, gross: 4,
+                    source: "desk", at: 1000 }];
+    const pub = { [snap.liveRound]: { [pid]: true } };
+    return TR.settledHoles(rows, pub, { cooldownMs: 120_000 }, 1000).length === 1;
+  })());
+
+  S.publishCard(pid, { by: "Peter Kamau", photo: "t/1/p-1.png" });
+  const withPhoto = st().auditLog.at(-1);
+  check("a photographed card says so in the record",
+    /card photographed/.test(withPhoto.detail), withPhoto.detail);
+
+  S.unpublishCard(pid, { by: "Peter Kamau", reason: "wrong player" });
+  const snap2 = st();
+  check("withdrawing takes the card back out",
+    S.roundCardIn(snap2)[pid] !== true);
+  check("withdrawing records why, not just that",
+    /withdrawn by Peter Kamau: wrong player/.test(snap2.auditLog.at(-1).detail),
+    snap2.auditLog.at(-1).detail);
+  check("a withdrawn card stops being announceable", (() => {
+    const rows = [{ round: snap2.liveRound, playerId: pid, hole: 0, gross: 4,
+                    source: "desk", at: 1000 }];
+    return TR.settledHoles(rows, { [snap2.liveRound]: { [pid]: false } },
+      { cooldownMs: 120_000 }, 1000).length === 0;
+  })());
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

@@ -282,6 +282,8 @@ export interface SimState {
   corrections: CorrectionRequest[];
   userPin: string | null;
   adminPin: string | null;
+  /** who is on the desk, named on every card they publish */
+  deskName: string | null;
   signMethod: SignMethod;
   tonePref: "editorial" | "classic";
   locationConsent: "unset" | "granted" | "declined";
@@ -407,6 +409,7 @@ export function buildInitialState(): SimState {
     corrections: [],
     userPin: null,
     adminPin: null,
+    deskName: null,
     signMethod: "pin",
     tonePref: "editorial",
     locationConsent: "unset",
@@ -1013,21 +1016,101 @@ export function setBulkScore(pid: string, holeIdx: number, gross: number | null)
   });
 }
 
-export function setCardIn(pid: string, on: boolean) {
+/**
+ * Publish a desk-entered card.
+ *
+ * Deliberately a second act rather than a switch. Typing eighteen numbers on
+ * behalf of someone who is not standing there is an ordinary afternoon at the
+ * desk; saying "this card is returned" is a claim the club is making, and it
+ * is the claim the television is allowed to act on. So it is confirmed with a
+ * PIN, attributed to whoever is on the desk, and written to the audit log with
+ * the player named as the person it was done for.
+ *
+ * `photo` is a storage path for a photograph of the paper card, if one was
+ * attached. Optional, and worth encouraging: it is the only thing that settles
+ * an argument about a card the player never touched.
+ */
+export function publishCard(
+  pid: string,
+  opts: { by: string; photo?: string } = { by: "desk" },
+) {
   mutate((draft) => {
-    cardInFor(draft, liveKey(draft))[pid] = on;
+    const t = activeTournamentOf(draft);
+    cardInFor(draft, liveKey(draft))[pid] = true;
+    const now = new Date().toISOString();
     enqueueEntity(
       draft,
       "card_in",
       {
-        tournament_id: activeTournamentOf(draft).id,
+        tournament_id: t.id,
         round: draft.liveRound,
         player_id: pid,
-        is_in: on,
-        updated_at: new Date().toISOString(),
+        is_in: true,
+        published_by: opts.by,
+        published_at: now,
+        card_photo: opts.photo ?? null,
+        updated_at: now,
       },
       { conflict: "tournament_id,round,player_id" },
     );
+    pushAudit(draft, {
+      kind: "card-published",
+      tournamentId: t.id,
+      round: draft.liveRound,
+      playerId: pid,
+      actor: opts.by,
+      ts: Date.now(),
+      detail:
+        `Score entered by ${opts.by} on behalf of ${playerName(draft, pid)}` +
+        (opts.photo ? ", card photographed" : ""),
+    });
+  });
+}
+
+/**
+ * Take a published card back.
+ *
+ * Kept separate and audited with its reason, because the interesting question
+ * afterwards is never that a card was withdrawn but why. Withdrawing does not
+ * un-announce anything: what the television has already said is handled by the
+ * producer, quietly, and never by contradicting itself on screen.
+ */
+export function unpublishCard(pid: string, opts: { by: string; reason: string }) {
+  mutate((draft) => {
+    const t = activeTournamentOf(draft);
+    cardInFor(draft, liveKey(draft))[pid] = false;
+    const now = new Date().toISOString();
+    enqueueEntity(
+      draft,
+      "card_in",
+      {
+        tournament_id: t.id,
+        round: draft.liveRound,
+        player_id: pid,
+        is_in: false,
+        updated_at: now,
+      },
+      { conflict: "tournament_id,round,player_id" },
+    );
+    pushAudit(draft, {
+      kind: "card-published",
+      tournamentId: t.id,
+      round: draft.liveRound,
+      playerId: pid,
+      actor: opts.by,
+      ts: Date.now(),
+      detail: `Card withdrawn by ${opts.by}: ${opts.reason}`,
+    });
+  });
+}
+
+function playerName(draft: SimState, pid: string) {
+  return draft.roster.find((p) => p.id === pid)?.name ?? pid;
+}
+
+export function setDeskName(name: string) {
+  mutate((d) => {
+    d.deskName = name.trim() || null;
   });
 }
 

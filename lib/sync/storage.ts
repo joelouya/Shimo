@@ -145,3 +145,41 @@ export async function uploadClubLogo(
   const { data } = sb.storage.from("club-assets").getPublicUrl(path);
   return { url: data.publicUrl, width: TARGET_PX, height: TARGET_PX };
 }
+
+/**
+ * A photograph of a paper card, kept as evidence against the card it belongs to.
+ *
+ * Private bucket, unlike crests and sponsor marks. A photograph of a scorecard
+ * is a different kind of object from a club logo: it carries a player's
+ * handwriting and usually two signatures, and it exists to settle a dispute. A
+ * crest is published on purpose; a member's signature is not, and a guessable
+ * public URL is the wrong default for it even though the scores themselves are
+ * on a public board. Reads are short-lived signed URLs, minted by the club's
+ * own admin screens.
+ */
+export async function uploadCardPhoto(
+  tournamentId: string,
+  round: number,
+  playerId: string,
+  file: File,
+): Promise<string> {
+  const sb = await supabase();
+  const blob = await shrinkOnly(file); // a card is wider than it is tall
+  const path = `${tournamentId}/${round}/${playerId}-${Date.now().toString(36)}.png`;
+  const { error } = await sb.storage.from("card-evidence").upload(path, blob, {
+    contentType: "image/png",
+    upsert: false, // evidence is written once, never quietly replaced
+  });
+  if (error) throw error;
+  return path;
+}
+
+/** A link to a card photograph that expires. Admin screens only. */
+export async function signedCardPhoto(path: string, seconds = 300) {
+  const sb = await supabase();
+  const { data, error } = await sb.storage
+    .from("card-evidence")
+    .createSignedUrl(path, seconds);
+  if (error) throw error;
+  return data.signedUrl;
+}

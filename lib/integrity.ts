@@ -28,6 +28,7 @@ export interface GpsFix {
 }
 
 export type AuditKind =
+  | "card-published"
   | "marker-attested"
   | "player-certified"
   | "card-returned" // the full integrity record
