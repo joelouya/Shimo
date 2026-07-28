@@ -1167,6 +1167,56 @@ section("Producer decisions from the panel");
 }
 
 /* ------------------------------------------------------------------ */
+section("Producer over a long session");
+{
+  /*
+   * The property a clubhouse screen actually has to have: it is switched on in
+   * the morning and left alone. Everything below drives one producer instance
+   * through hours of snapshots rather than starting fresh each time, because
+   * that is the case a page reload would hide.
+   */
+  const hours = (h) => 130_000 + h * 3_600_000;
+  let s = PR.reduce(S0, { type: "snapshot", snapshot: snap([], hours(0)) }, hours(0));
+
+  // an hour of nothing at all
+  for (let m = 1; m <= 12; m++) {
+    const t = hours(0) + m * 300_000;
+    s = PR.reduce(s, { type: "snapshot", snapshot: snap([], t) }, t);
+    s = PR.reduce(s, { type: "tick" }, t);
+  }
+  check("an hour with no scores leaves the board alone",
+    s.mode === "leaderboard" && s.queue.length === 0 && s.playing === null);
+
+  // a fact appears three hours in
+  const late = hours(3);
+  s = PR.reduce(s, { type: "snapshot",
+    snapshot: snap(eagleRows("p1", late - 300_000), late) }, late);
+  check("a moment appearing hours later is still found",
+    s.queue.some((a) => a.kind === "eagle"), String(s.queue.length));
+  s = PR.reduce(s, { type: "tick" }, late);
+  check("and it still reaches the screen",
+    s.mode === "announcement" && s.playing.item.kind === "eagle");
+  s = PR.reduce(s, { type: "tick" }, late + 7_000);
+  check("and the board comes back after it",
+    s.mode === "leaderboard");
+
+  // the same snapshot repeating for another hour must stay silent
+  for (let m = 1; m <= 12; m++) {
+    const t = late + m * 300_000;
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: snap(eagleRows("p1", late - 300_000), t) }, t);
+    s = PR.reduce(s, { type: "tick" }, t);
+  }
+  check("a fact that is still true is not announced again",
+    s.mode === "leaderboard" && s.queue.length === 0);
+
+  check("the history does not grow without bound", s.history.length <= 60,
+    String(s.history.length));
+  check("what has been announced is remembered across the whole day",
+    s.announced.length > 0);
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),
