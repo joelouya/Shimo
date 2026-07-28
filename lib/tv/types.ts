@@ -224,6 +224,13 @@ export interface ProducerState {
   /** the highest decision id already folded in, so none is applied twice */
   appliedDecision: number;
   /**
+   * Facts that were both material and actually shown. Kept so that if one of
+   * them stops being true — a corrected card, a marker who now disagrees — the
+   * screen can acknowledge that the board has moved without ever saying what
+   * changed or who it belonged to.
+   */
+  materialShown: string[];
+  /**
    * The settled board as of the previous snapshot, so a lead change is a
    * comparison rather than a guess. Absent on the first snapshot, which is why
    * the day's first leader is not announced as having taken the lead.

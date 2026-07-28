@@ -34,6 +34,27 @@ import type {
 } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 
+/**
+ * Kinds re-derived from the card on every snapshot.
+ *
+ * These can stop being true: a card is corrected, or a marker changes their
+ * entry and the two no longer agree. Anything here that vanishes must be
+ * pulled back out of the queue before it airs.
+ *
+ * Lead changes and movers are not in the list. They describe a moment the
+ * board passed through rather than a fact about a card, so they are not
+ * re-derived and must not be pruned for failing to reappear.
+ */
+const DURABLE = new Set([
+  "ace", "eagle", "net-eagle", "streak", "finish", "round-in", "course-record",
+]);
+
+/**
+ * The ones worth acknowledging if they are later undone. All rare, so the
+ * soft update card that follows stays rare too.
+ */
+const MATERIAL = new Set(["ace", "eagle", "net-eagle", "course-record"]);
+
 /** How long each kind holds the screen. */
 export const DURATION: Record<string, number> = {
   ace: 10_000,
@@ -75,6 +96,7 @@ export function initialState(config?: Partial<ProducerConfig>): ProducerState {
     config: { ...DEFAULT_CONFIG, ...config },
     lastAt: 0,
     appliedDecision: 0,
+    materialShown: [],
   };
 }
 
@@ -520,8 +542,22 @@ function onSnapshot(
     };
   }
 
-  const queue = [...state.queue];
-  const pending = [...state.pending];
+  /*
+   * A correction arrives as an absence: the card no longer produces the eagle
+   * it produced a minute ago, because a figure was changed or because the two
+   * entries have stopped agreeing. Nothing announces a correction, so this is
+   * where one is noticed.
+   */
+  const trueNow = new Set(found.map((m) => m.factKey));
+  const stillTrue = (a: Announcement) =>
+    !DURABLE.has(a.kind) || trueNow.has(a.factKey);
+
+  // Anything waiting that is no longer true is dropped before it can air. This
+  // is the quiet, best case for a correction: it was caught in the seconds
+  // between being found and being shown, and nobody ever saw it.
+  const queue = state.queue.filter(stillTrue);
+  const pending = state.pending.filter(stillTrue);
+
   for (const m of fresh) {
     const a = dress(m, snapshot, now);
     if (!a) continue;
@@ -529,10 +565,40 @@ function onSnapshot(
     else queue.push(a);
   }
 
+  /*
+   * The harder case: it had already been on the screen. The board has
+   * reshuffled underneath by itself, so the only question is whether to
+   * acknowledge it, and the answer is a short forward-looking card half a
+   * minute later. It names the player now leading, never the correction, never
+   * the player whose moment it was, and nothing about it suggests anyone did
+   * anything wrong. The member who was congratulated is in the room.
+   */
+  const vanished = state.materialShown.filter((k) => !trueNow.has(k));
+  const leader = snapshot.players.find((p) => p.id === after[0]?.playerId);
+  const update: Announcement[] =
+    vanished.length > 0 && leader
+      ? [
+          {
+            id: `leaderboard-update:${now}`,
+            kind: "leaderboard-update",
+            priority: 15,
+            durationMs: DURATION["leaderboard-update"],
+            headline: "Leaderboard update",
+            subject: leader.name,
+            detail: "Leading",
+            factKey: `leaderboard-update:${now}`,
+            // half a minute later, so it reads as a routine refresh rather
+            // than as a reaction to whatever just happened
+            queuedAt: now + 30_000,
+          },
+        ]
+      : [];
+
   return {
     ...state,
-    queue,
+    queue: [...queue, ...update],
     pending,
+    materialShown: state.materialShown.filter((k) => trueNow.has(k)),
     boardBefore: after,
     lastAt: snapshot.at,
     // the first snapshot sets the feature clock, so nothing fires immediately
@@ -568,6 +634,9 @@ function onTick(state: ProducerState, now: number): ProducerState {
         playing: { type: "announcement", item: next, until: now + next.durationMs },
         queue: remaining,
         announced: [...state.announced, next.factKey],
+        materialShown: MATERIAL.has(next.kind)
+          ? [...state.materialShown, next.factKey]
+          : state.materialShown,
         history: note(state, {
           at: now,
           kind: next.kind,

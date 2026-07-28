@@ -1217,6 +1217,102 @@ section("Producer over a long session");
 }
 
 /* ------------------------------------------------------------------ */
+section("Corrections");
+{
+  const par = tvC.holes[eagleHole].par;
+  // both agreed on an eagle at t0; both later agree it was a par
+  const corrected = (at) => [
+    ...eagleRows("p1", 0),
+    ...pair("p1", eagleHole, par, at),
+  ];
+
+  check("a correction before anything was queued is never seen", (() => {
+    const s = PR.reduce(S0, { type: "snapshot", snapshot: snap(corrected(60_000), 60_000) },
+      190_000);
+    return s.queue.length === 0 && s.pending.length === 0;
+  })());
+
+  check("a correction pulls a queued announcement before it airs", (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+    const queued = s.queue.length === 1;
+    // the desk fixes it while it is still waiting its turn
+    s = PR.reduce(s, { type: "snapshot", snapshot: snap(corrected(130_500), 131_000) }, 260_000);
+    s = PR.reduce(s, { type: "tick" }, 260_000);
+    return queued && s.queue.length === 0 && s.mode === "leaderboard";
+  })());
+
+  check("a correction pulls a held announcement too", (() => {
+    const held = [{ id: "p1", name: "High Handicap", clubId: "sigona", handicap: 28, gender: "M" },
+                  tvPlayers[1]];
+    let s = PR.reduce(S0, { type: "snapshot",
+      snapshot: { ...snap(eagleRows("p1", 0), 0), players: held } }, 130_000);
+    const wasHeld = s.pending.length === 1;
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: { ...snap(corrected(130_500), 131_000), players: held } }, 260_000);
+    return wasHeld && s.pending.length === 0;
+  })());
+
+  check("an animation already running is never cut short by a correction", (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+    s = PR.reduce(s, { type: "tick" }, 130_000);           // the eagle is on screen
+    s = PR.reduce(s, { type: "snapshot", snapshot: snap(corrected(130_500), 131_000) }, 132_000);
+    const mid = PR.reduce(s, { type: "tick" }, 132_000);
+    return mid.mode === "announcement" && mid.playing.item.kind === "eagle";
+  })());
+
+  const afterAir = (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+    s = PR.reduce(s, { type: "tick" }, 130_000);
+    s = PR.reduce(s, { type: "tick" }, 137_000);           // it has finished
+    return PR.reduce(s, { type: "snapshot", snapshot: snap(corrected(140_000), 141_000) }, 270_000);
+  })();
+
+  check("a correction after it aired never says a correction happened", (() => {
+    const words = afterAir.queue.map((a) =>
+      [a.headline, a.subject, a.detail, a.line].join(" ")).join(" ");
+    return !/correct|wrong|error|false|mistake|void|disqual/i.test(words);
+  })());
+  check("the board is acknowledged with one soft forward-looking card",
+    afterAir.queue.length === 1 && afterAir.queue[0].kind === "leaderboard-update",
+    JSON.stringify(afterAir.queue.map((a) => a.kind)));
+  check("that card names whoever is leading now, not whose moment it was",
+    afterAir.queue[0].subject !== "Alice Wanjiru" || afterAir.queue[0].detail === "Leading");
+  check("it waits half a minute so it reads as routine", (() => {
+    const soon = PR.reduce(afterAir, { type: "tick" }, 271_000);
+    const later = PR.reduce(afterAir, { type: "tick" }, 305_000);
+    return soon.mode === "leaderboard" && later.mode === "announcement";
+  })());
+  check("the acknowledgement is sent once, not on every later snapshot", (() => {
+    let s = afterAir;
+    for (const t of [280_000, 300_000, 320_000]) {
+      s = PR.reduce(s, { type: "snapshot", snapshot: snap(corrected(140_000), t) }, t);
+    }
+    return s.queue.filter((a) => a.kind === "leaderboard-update").length === 1;
+  })());
+
+  check("a marker who changes their mind pulls the moment quietly", (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+    // the marker now disagrees: the figure is in dispute, so it stops being true
+    const disputed = [...eagleRows("p1", 0),
+      { round: 1, playerId: "p1", hole: eagleHole, gross: par, source: "marker", at: 130_500 }];
+    s = PR.reduce(s, { type: "snapshot", snapshot: snap(disputed, 131_000) }, 260_000);
+    s = PR.reduce(s, { type: "tick" }, 260_000);
+    return s.queue.length === 0 && s.mode === "leaderboard";
+  })());
+
+  check("a lead change is not pruned for failing to happen twice", (() => {
+    // board moments describe a moment passed through, not a fact on a card
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(pair("p1", 0, 3, 0), 0) }, 130_000);
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: snap([...pair("p1", 0, 3, 0), ...pair("p2", 0, 2, 0)], 131_000) }, 131_000);
+    const had = s.queue.some((a) => a.kind === "lead-change");
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: snap([...pair("p1", 0, 3, 0), ...pair("p2", 0, 2, 0)], 132_000) }, 132_000);
+    return had && s.queue.some((a) => a.kind === "lead-change");
+  })());
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),
