@@ -74,6 +74,7 @@ export function initialState(config?: Partial<ProducerConfig>): ProducerState {
     history: [],
     config: { ...DEFAULT_CONFIG, ...config },
     lastAt: 0,
+    appliedDecision: 0,
   };
 }
 
@@ -361,11 +362,85 @@ export function reduce(
   }
 }
 
-function onSnapshot(
+/**
+ * Fold in whatever the club has decided since the last snapshot.
+ *
+ * Decisions arrive as an append-only list rather than as commands, so a screen
+ * that was asleep, offline or only just switched on catches up by replaying
+ * what it missed. Applied in id order, and only once: the highest id seen is
+ * remembered, which is what stops a poll that returns the same rows from
+ * approving the same announcement forty times.
+ */
+function applyDecisions(
   state: ProducerState,
   snapshot: TvSnapshot,
   now: number,
 ): ProducerState {
+  let next = state;
+  // Tolerate a snapshot without them. A feed that failed to read one optional
+  // table, or an older client, must not be able to stop the screen.
+  for (const d of snapshot.decisions ?? []) {
+    if (d.id <= next.appliedDecision) continue;
+    switch (d.kind) {
+      case "approve":
+      case "reject":
+      case "cancel": {
+        // The panel decides about a fact, not about a message: it may be
+        // holding a different copy of the same announcement, so match on the
+        // fact key rather than on an id minted locally.
+        const held = next.pending.find((a) => a.factKey === d.factKey);
+        const queued = next.queue.find((a) => a.factKey === d.factKey);
+        const target = held ?? queued;
+        if (d.kind === "approve" && held) {
+          next = reduce(next, { type: "approve", id: held.id }, now);
+        } else if (d.kind === "reject" && held) {
+          next = reduce(next, { type: "reject", id: held.id }, now);
+        } else if (d.kind === "cancel" && queued) {
+          next = reduce(next, { type: "cancel", id: queued.id }, now);
+        } else if (!target && d.factKey) {
+          /*
+           * The decision arrived before this screen had detected the fact, or
+           * after it had already played. Either way, remember it as settled so
+           * that a rejection made on the panel a moment early still lands when
+           * detection catches up.
+           */
+          if (d.kind !== "approve")
+            next = { ...next, announced: [...next.announced, d.factKey] };
+        }
+        break;
+      }
+      case "quiet":
+        next = reduce(
+          next,
+          { type: "config", patch: { quiet: Boolean(d.payload?.on) } },
+          now,
+        );
+        break;
+      case "retract":
+        next = reduce(
+          next,
+          { type: "retract", player: String(d.payload?.player ?? "") },
+          now,
+        );
+        break;
+      case "test":
+        next = reduce(next, { type: "test" }, now);
+        break;
+      case "skip":
+        next = reduce(next, { type: "skip" }, now);
+        break;
+    }
+    next = { ...next, appliedDecision: d.id };
+  }
+  return next;
+}
+
+function onSnapshot(
+  base: ProducerState,
+  snapshot: TvSnapshot,
+  now: number,
+): ProducerState {
+  const state = applyDecisions(base, snapshot, now);
   const cfg = state.config;
   const settled = settledHoles(snapshot.rows, snapshot.published, cfg, now);
 
@@ -419,6 +494,31 @@ function onSnapshot(
     ...state.pending.map((a) => a.factKey),
   ]);
   const fresh = found.filter((m) => !known.has(m.factKey));
+
+  /*
+   * In quiet mode, facts are consumed rather than collected.
+   *
+   * Clearing the queue when the switch is thrown is not enough on its own:
+   * detection runs against the whole card every time, so the same eagle is
+   * found again on the very next snapshot and the queue refills behind the
+   * admin's back. They would then turn announcements back on an hour later and
+   * be handed the hour, which is precisely what they used the switch to avoid.
+   *
+   * So while quiet, everything found is marked as though it had been shown.
+   * The room is not interrupted now and is not interrupted retrospectively
+   * later; only what happens after the switch goes back is announced.
+   */
+  if (cfg.quiet) {
+    return {
+      ...state,
+      announced: [...state.announced, ...fresh.map((m) => m.factKey)],
+      queue: [],
+      pending: [],
+      boardBefore: after,
+      lastAt: snapshot.at,
+      nextFeatureAt: state.nextFeatureAt || now + cfg.featureEveryMs,
+    };
+  }
 
   const queue = [...state.queue];
   const pending = [...state.pending];

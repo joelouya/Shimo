@@ -25,7 +25,7 @@ import { COURSES } from "@/lib/data";
 import { roundsOf } from "@/lib/rounds";
 import { rowToClub, rowToPlayer, rowToTournament } from "@/lib/sync/mappers";
 import { REMOTE_CONFIGURED, supabase } from "@/lib/sync/client";
-import type { CourseRecord, ScoreRow, TvSnapshot } from "./types";
+import type { CourseRecord, ScoreRow, TvDecision, TvSnapshot } from "./types";
 
 export type FeedStatus =
   | "loading"
@@ -67,13 +67,19 @@ export function useTvFeed(tournamentId: string): TvFeed {
     const load = async () => {
       try {
         const sb = await supabase();
-        const [t, pairings, players, scores, cardIn, clubs] = await Promise.all([
+        const [t, pairings, players, scores, cardIn, clubs, decisions] =
+          await Promise.all([
           sb.from("tournaments").select("*").eq("id", tournamentId).maybeSingle(),
           sb.from("pairings").select("*").eq("tournament_id", tournamentId),
           sb.from("players").select("*"),
           sb.from("scores").select("*").eq("tournament_id", tournamentId),
           sb.from("card_in").select("*").eq("tournament_id", tournamentId),
           sb.from("clubs").select("*"),
+          sb
+            .from("tv_decisions")
+            .select("*")
+            .eq("tournament_id", tournamentId)
+            .order("id", { ascending: true }),
         ]);
         if (cancelled) return;
         if (!t.data) {
@@ -144,6 +150,14 @@ export function useTvFeed(tournamentId: string): TvFeed {
           fieldByRound,
           identity,
           records: recordsOf(identity),
+          decisions: (decisions.data ?? []).map((d) => ({
+            id: d.id as number,
+            kind: d.kind as TvDecision["kind"],
+            factKey: (d.fact_key ?? undefined) as string | undefined,
+            payload: (d.payload ?? {}) as TvDecision["payload"],
+            actor: (d.actor ?? "") as string,
+            at: millis(d.created_at),
+          })),
           online: true,
         };
         held.current = snapshot;
@@ -181,6 +195,16 @@ export function useTvFeed(tournamentId: string): TvFeed {
             event: "*",
             schema: "public",
             table: "card_in",
+            filter: `tournament_id=eq.${tournamentId}`,
+          },
+          () => void load(),
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "tv_decisions",
             filter: `tournament_id=eq.${tournamentId}`,
           },
           () => void load(),

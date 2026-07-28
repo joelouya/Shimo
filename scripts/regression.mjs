@@ -818,7 +818,7 @@ const tvT = {
 const snap = (rows, at, extra = {}) => ({
   at, tournament: tvT, course: tvC, players: tvPlayers, round: 1, rows,
   published: {}, fieldByRound: { 1: ["p1", "p2"] },
-  identity: { clubId: "sigona" }, records: [], online: true, ...extra,
+  identity: { clubId: "sigona" }, records: [], decisions: [], online: true, ...extra,
 });
 /** both parties agree on `gross` at time `at` */
 const pair = (pid, hole, gross, at) => [
@@ -1043,6 +1043,126 @@ section("Desk publish gate");
                     source: "desk", at: 1000 }];
     return TR.settledHoles(rows, { [snap2.liveRound]: { [pid]: false } },
       { cooldownMs: 120_000 }, 1000).length === 0;
+  })());
+}
+
+/* ------------------------------------------------------------------ */
+section("Producer decisions from the panel");
+{
+  const dec = (id, kind, extra = {}) => ({ id, kind, at: 1000, ...extra });
+  const held = [{ id: "p1", name: "High Handicap", clubId: "sigona", handicap: 28, gender: "M" },
+                tvPlayers[1]];
+  const heldSnap = (at, decisions = []) =>
+    ({ ...snap(eagleRows("p1", 0), at), players: held, decisions });
+
+  check("a snapshot with no decisions at all does not stop the screen", (() => {
+    const bare = { ...snap(eagleRows("p1", 0), 0) };
+    delete bare.decisions;
+    return PR.reduce(S0, { type: "snapshot", snapshot: bare }, 130_000).queue.length === 1;
+  })());
+
+  check("approving from the panel puts the held moment on", (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: heldSnap(0) }, 130_000);
+    const fk = s.pending[0].factKey;
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: heldSnap(131_000, [dec(1, "approve", { factKey: fk })]) }, 131_000);
+    return s.pending.length === 0 && s.queue.length === 1;
+  })());
+  check("rejecting from the panel silences it for good", (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: heldSnap(0) }, 130_000);
+    const fk = s.pending[0].factKey;
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: heldSnap(131_000, [dec(1, "reject", { factKey: fk })]) }, 131_000);
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: heldSnap(140_000, [dec(1, "reject", { factKey: fk })]) }, 140_000);
+    return s.pending.length === 0 && s.queue.length === 0;
+  })());
+  check("the same decision replayed is applied only once", (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: heldSnap(0) }, 130_000);
+    const fk = s.pending[0].factKey;
+    const ds = [dec(1, "approve", { factKey: fk })];
+    s = PR.reduce(s, { type: "snapshot", snapshot: heldSnap(131_000, ds) }, 131_000);
+    s = PR.reduce(s, { type: "snapshot", snapshot: heldSnap(132_000, ds) }, 132_000);
+    s = PR.reduce(s, { type: "snapshot", snapshot: heldSnap(133_000, ds) }, 133_000);
+    return s.queue.length === 1;
+  })());
+  check("a rejection that arrives before the fact is detected still lands", (() => {
+    // the panel rejected it on its own copy a moment earlier
+    const fk = "eagle:1:p1:" + eagleHole;
+    let s = PR.reduce(S0, { type: "snapshot",
+      snapshot: { ...snap([], 0), players: held, decisions: [dec(1, "reject", { factKey: fk })] } },
+      1_000);
+    s = PR.reduce(s, { type: "snapshot", snapshot: heldSnap(131_000,
+      [dec(1, "reject", { factKey: fk })]) }, 131_000);
+    return s.pending.length === 0 && s.queue.length === 0;
+  })());
+  check("quiet from the panel reaches the screen", (() => {
+    let s = PR.reduce(S0, { type: "snapshot",
+      snapshot: snap(eagleRows("p1", 0), 0, { decisions: [dec(1, "quiet", { payload: { on: true } })] }) },
+      130_000);
+    s = PR.reduce(s, { type: "tick" }, 200_000);
+    return s.config.quiet === true && s.mode === "leaderboard" && s.queue.length === 0;
+  })());
+  check("nothing piles up behind quiet mode", (() => {
+    // detection runs against the whole card every time, so without consuming
+    // what it finds the queue refills on the next snapshot
+    let s = PR.reduce(S0, { type: "snapshot",
+      snapshot: snap(eagleRows("p1", 0), 0, { decisions: [dec(1, "quiet", { payload: { on: true } })] }) },
+      130_000);
+    for (const t of [140_000, 150_000, 160_000]) {
+      s = PR.reduce(s, { type: "snapshot",
+        snapshot: snap(eagleRows("p1", 0), t, { decisions: [dec(1, "quiet", { payload: { on: true } })] }) }, t);
+    }
+    return s.queue.length === 0 && s.pending.length === 0;
+  })());
+  check("turning announcements back on does not replay the quiet hour", (() => {
+    const ds = [dec(1, "quiet", { payload: { on: true } })];
+    let s = PR.reduce(S0, { type: "snapshot",
+      snapshot: snap(eagleRows("p1", 0), 0, { decisions: ds }) }, 130_000);
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: snap(eagleRows("p1", 0), 200_000, { decisions: ds }) }, 200_000);
+    const back = [...ds, dec(2, "quiet", { payload: { on: false } })];
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: snap(eagleRows("p1", 0), 300_000, { decisions: back }) }, 300_000);
+    s = PR.reduce(s, { type: "tick" }, 300_100);
+    return s.config.quiet === false && s.queue.length === 0 && s.mode === "leaderboard";
+  })());
+  check("a moment that happens after quiet lifts is still announced", (() => {
+    const back = [dec(1, "quiet", { payload: { on: true } }),
+                  dec(2, "quiet", { payload: { on: false } })];
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: snap([], 0, { decisions: back }) }, 100_000);
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: snap(eagleRows("p1", 200_000), 400_000, { decisions: back }) }, 400_000);
+    return s.queue.some((a) => a.kind === "eagle");
+  })());
+  check("a retraction from the panel is queued forward-looking", (() => {
+    const s = PR.reduce(S0, { type: "snapshot",
+      snapshot: snap([], 0, { decisions: [dec(1, "retract", { payload: { player: "Ben Otieno" } })] }) },
+      100_000);
+    return s.queue[0]?.kind === "retraction" &&
+      s.queue[0].subject === "Congratulations to Ben Otieno";
+  })());
+  check("decisions apply in the order they were made", (() => {
+    let s = PR.reduce(S0, { type: "snapshot", snapshot: heldSnap(0) }, 130_000);
+    const fk = s.pending[0].factKey;
+    // quiet, then loud again: the screen should end up loud
+    s = PR.reduce(s, { type: "snapshot", snapshot: heldSnap(131_000, [
+      dec(1, "quiet", { payload: { on: true } }),
+      dec(2, "quiet", { payload: { on: false } }),
+      dec(3, "approve", { factKey: fk }),
+    ]) }, 131_000);
+    return s.config.quiet === false && s.queue.length === 1;
+  })());
+  check("a screen switched on late catches up on everything it missed", (() => {
+    const fk = "eagle:1:p1:" + eagleHole;
+    const s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: heldSnap(500_000, [
+        dec(1, "quiet", { payload: { on: true } }),
+        dec(2, "reject", { factKey: fk }),
+        dec(3, "quiet", { payload: { on: false } }),
+      ]) }, 500_000);
+    return s.appliedDecision === 3 && s.config.quiet === false &&
+      s.pending.length === 0 && s.queue.length === 0;
   })());
 }
 

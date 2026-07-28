@@ -7,6 +7,7 @@ import {
   Radio,
   Settings,
   Trophy,
+  Tv,
   Users,
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ const NAV = [
   { href: "/admin/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/admin/members", label: "Members", icon: Users },
   { href: "/admin/live", label: "Live Ops", icon: Radio },
+  { href: "/admin/tv", label: "TV producer", icon: Tv },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

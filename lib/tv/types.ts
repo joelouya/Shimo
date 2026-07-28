@@ -52,6 +52,22 @@ export interface CourseRecord {
   year: number;
 }
 
+/**
+ * A call the club has made, travelling from the panel to the screen.
+ *
+ * One way only. The television reads these and never writes one, which is
+ * what lets it stay a read-only surface while still being steerable.
+ */
+export interface TvDecision {
+  id: number;
+  kind: "approve" | "reject" | "cancel" | "quiet" | "retract" | "test" | "skip";
+  /** the fact decided about, for approve, reject and cancel */
+  factKey?: string;
+  payload?: Record<string, string | number | boolean>;
+  actor?: string;
+  at: number;
+}
+
 export interface TvSnapshot {
   /** epoch ms this snapshot describes */
   at: number;
@@ -67,6 +83,8 @@ export interface TvSnapshot {
   fieldByRound: Record<number, string[]>;
   identity: ClubIdentity;
   records: CourseRecord[];
+  /** every decision the club has made about this tournament, oldest first */
+  decisions: TvDecision[];
   online: boolean;
 }
 
@@ -203,6 +221,8 @@ export interface ProducerState {
   config: ProducerConfig;
   /** the last snapshot seen, so detection can diff against it */
   lastAt: number;
+  /** the highest decision id already folded in, so none is applied twice */
+  appliedDecision: number;
   /**
    * The settled board as of the previous snapshot, so a lead change is a
    * comparison rather than a guess. Absent on the first snapshot, which is why
