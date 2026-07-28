@@ -187,3 +187,64 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ------------------------------------------------------------------ */
+/* TV mode                                                             */
+/*                                                                     */
+/* Everything on the television is sized in cqw against this one       */
+/* container, so the composition scales from a 720p projector to a 4K  */
+/* panel without a breakpoint anywhere. A clubhouse screen is whatever */
+/* the club already owns, and asking which has never helped.           */
+/* ------------------------------------------------------------------ */
+
+.tv-root {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #101722;
+  container-type: size;
+  container-name: tv;
+  /* a television is never interacted with; nothing here should invite it */
+  cursor: none;
+  user-select: none;
+}
+
+/* The board creeps only when the field does not fit. Transform only, so it
+   composites on the GPU: a $300 stick behind a clubhouse TV is the target. */
+@keyframes tv-scroll {
+  0%, 6% { transform: translateY(0); }
+  94%, 100% { transform: translateY(-50%); }
+}
+
+.tv-scroll {
+  animation: tv-scroll var(--tv-scroll-seconds, 60s) linear infinite alternate;
+  will-change: transform;
+}
+
+/* Rows dissolve at the edges rather than being cut off by them. A hard clip
+   reads as a layout fault; a soft one reads as a board that continues. Applied
+   only when the field actually scrolls, so a small field keeps crisp edges. */
+.tv-scroll-view {
+  -webkit-mask-image: linear-gradient(
+    to bottom, transparent, #000 5%, #000 95%, transparent);
+  mask-image: linear-gradient(
+    to bottom, transparent, #000 5%, #000 95%, transparent);
+}
+
+@keyframes tv-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+.tv-pulse {
+  animation: tv-pulse 2.4s ease-in-out infinite;
+}
+
+/* A club may ask for stillness, and some rooms need it. */
+@media (prefers-reduced-motion: reduce) {
+  .tv-scroll,
+  .tv-pulse {
+    animation: none;
+  }
+}

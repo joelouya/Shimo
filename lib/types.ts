@@ -23,6 +23,20 @@ export interface ClubIdentity {
   website?: string;
   /** show the Shimo credit on generated posters */
   posterCredit?: boolean;
+  /** hero image behind TV mode, darkened for legibility */
+  tvBackgroundUrl?: string;
+  /**
+   * The club's course records, held here rather than on a tournament because a
+   * record belongs to the course and outlives every event played on it. Kept
+   * per tee set: a record off the white tees is not a record off the red.
+   */
+  courseRecords?: {
+    courseId: string;
+    tee: string;
+    strokes: number;
+    holder: string;
+    year: number;
+  }[];
 }
 
 export interface Club {

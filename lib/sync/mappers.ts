@@ -26,6 +26,7 @@ export function tournamentToRow(t: Tournament) {
     entry_fee: t.entryFee,
     fee_tiers: t.feeTiers ?? null,
     sponsors: t.sponsors ?? null,
+    field_profile: t.fieldProfile ?? null,
     status: t.status,
     members_only: t.membersOnly,
     membership: t.membership ?? null,
@@ -62,6 +63,7 @@ export function rowToTournament(r: Record<string, unknown>): Tournament {
     entryFee: (r.entry_fee as number) ?? 0,
     feeTiers: (r.fee_tiers as Tournament["feeTiers"]) ?? undefined,
     sponsors: (r.sponsors as Tournament["sponsors"]) ?? undefined,
+    fieldProfile: (r.field_profile ?? undefined) as Tournament["fieldProfile"],
     status: r.status as Tournament["status"],
     membersOnly: Boolean(r.members_only),
     membership: (r.membership as Tournament["membership"]) ?? undefined,
@@ -300,6 +302,8 @@ export function clubToRow(c: ClubIdentity) {
     email: c.email ?? null,
     website: c.website ?? null,
     poster_credit: c.posterCredit ?? true,
+    tv_background_url: c.tvBackgroundUrl ?? null,
+    course_records: c.courseRecords ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -315,5 +319,8 @@ export function rowToClub(r: Record<string, unknown>): ClubIdentity {
     email: (r.email as string) ?? undefined,
     website: (r.website as string) ?? undefined,
     posterCredit: r.poster_credit == null ? true : Boolean(r.poster_credit),
+    tvBackgroundUrl: (r.tv_background_url as string) ?? undefined,
+    courseRecords:
+      (r.course_records as ClubIdentity["courseRecords"]) ?? undefined,
   };
 }
