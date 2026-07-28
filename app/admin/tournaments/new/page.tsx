@@ -20,6 +20,8 @@ import { Switch } from "@/components/ui/switch";
 import { COURSES, clubById, courseById } from "@/lib/data";
 import { IS_PILOT, WIRED_FORMATS } from "@/lib/mode";
 import { createTournament, updateTournament, useSim } from "@/lib/sim/store";
+import { detectProfile, PROFILE_HELP, PROFILE_LABEL } from "@/lib/tv/profile";
+import type { FieldProfile } from "@/lib/tv/types";
 import { makeRound, roundsOf, withRoundsSynced } from "@/lib/rounds";
 import {
   defaultRegClosesAt,
@@ -93,6 +95,8 @@ interface Draft {
   /** true once the admin edits the cutoff, so it stops following round 1 */
   regClosesTouched?: boolean;
   allowance: number;
+  /** how TV mode should talk about this field; null means follow the guess */
+  fieldProfile: FieldProfile | null;
   countback: string;
   correctionWindowMin: number;
   prizes: { place: string; prize: string }[];
@@ -123,6 +127,7 @@ const INITIAL: Draft = {
   regCloses: "2026-08-20",
   regClosesAt: defaultRegClosesAt("2026-08-22"),
   allowance: 95,
+  fieldProfile: null,
   countback: "Back 9, then back 6, then back 3",
   correctionWindowMin: 15,
   prizes: [
@@ -158,6 +163,7 @@ function draftFromTournament(t: Tournament): Draft {
     regCloses: t.regCloses,
     regClosesAt: t.regClosesAt ?? defaultRegClosesAt(roundsOf(t)[0].date),
     allowance: t.handicapAllowance,
+    fieldProfile: t.fieldProfile ?? null,
     countback: INITIAL.countback,
     correctionWindowMin: t.correctionWindowMin ?? 15,
     prizes: t.prizes.map((p) => ({ place: p.place, prize: p.prize })),
@@ -316,6 +322,7 @@ function CreateTournamentInner() {
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
   const created = useSim((s) => s.created);
+  const roster = useSim((s) => s.roster);
   const editing = useMemo(
     () => (editId ? created.find((t) => t.id === editId) : undefined),
     [editId, created],
@@ -324,6 +331,15 @@ function CreateTournamentInner() {
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<Draft>(INITIAL);
   const [publishing, setPublishing] = useState(false);
+  /*
+   * The guess follows the roster and the format as the club fills the form in,
+   * so a wizard opened for a Stableford already reads Stableford and one for a
+   * scratch field already reads championship.
+   */
+  const guess = useMemo(
+    () => detectProfile(draft.format, roster),
+    [draft.format, roster],
+  );
   const [loadedEdit, setLoadedEdit] = useState(false);
 
   // prefill once the tournament being edited is available from the store,
@@ -488,6 +504,7 @@ function CreateTournamentInner() {
       regCloses: draft.regClosesAt.slice(0, 10),
       regClosesAt: draft.regClosesAt,
       handicapAllowance: draft.allowance,
+      fieldProfile: draft.fieldProfile ?? guess.profile,
       firstTee: editing?.firstTee ?? "07:30",
       teeInterval: editing?.teeInterval ?? 10,
       fieldSize: editing?.fieldSize ?? 0,
@@ -1083,6 +1100,38 @@ function CreateTournamentInner() {
                       ))}
                     </SelectContent>
                   </Select>
+                </Field>
+                <Field
+                  label="How the clubhouse screen covers this"
+                  hint={
+                    draft.fieldProfile
+                      ? "Overriding the guess. Set it back to follow the field."
+                      : guess.because
+                  }
+                >
+                  <Select
+                    value={draft.fieldProfile ?? "auto"}
+                    onValueChange={(v) =>
+                      set("fieldProfile", v === "auto" ? null : (v as FieldProfile))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">
+                        Follow the field — {PROFILE_LABEL[guess.profile]}
+                      </SelectItem>
+                      {(Object.keys(PROFILE_LABEL) as FieldProfile[]).map((k) => (
+                        <SelectItem key={k} value={k}>
+                          {PROFILE_LABEL[k]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1.5 text-[12px] text-muted-foreground">
+                    {PROFILE_HELP[draft.fieldProfile ?? guess.profile]}
+                  </p>
                 </Field>
                 <Field label="Count-back rule (ties)">
                   <Select

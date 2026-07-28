@@ -133,6 +133,8 @@ export interface Announcement {
   presentedBy?: Sponsor;
   /** the players involved, for a lead change */
   outgoing?: string;
+  /** whose moment it is, so the screen can spread itself across the field */
+  subjectId?: string;
   /** what produced it, so the same fact is never announced twice */
   factKey: string;
   /** epoch ms it entered the queue */
@@ -215,6 +217,12 @@ export interface ProducerState {
   pending: Announcement[];
   /** every fact already announced, so nothing repeats */
   announced: string[];
+  /**
+   * Who has been on screen lately, most recent first. Used at a club medal to
+   * spread the afternoon across the field rather than letting one good round
+   * take every slot.
+   */
+  recentSubjects: string[];
   /** earliest the next announcement may start */
   nextSlotAt: number;
   /** when the next feature interlude is due */

@@ -1459,6 +1459,101 @@ section("Feature interludes");
 }
 
 /* ------------------------------------------------------------------ */
+section("Field profile");
+const PF = await jiti.import("../lib/tv/profile.ts");
+const hcField = (hcs) => hcs.map((h, i) => ({ id: `x${i}`, name: `P${i}`,
+  clubId: "sigona", handicap: h, gender: "M" }));
+
+check("a scratch field playing stroke play is a championship",
+  PF.detectProfile("Stroke Play", hcField([0, 1, 2, 3, 4, 5, 6, 7])).profile === "championship");
+check("a normal Saturday field is a club medal",
+  PF.detectProfile("Stroke Play", hcField([2, 6, 11, 14, 18, 21, 24, 28])).profile === "club");
+check("stableford is read as stableford whatever the handicaps",
+  PF.detectProfile("Stableford", hcField([0, 1, 2, 3, 4, 5, 6, 7])).profile === "stableford");
+check("team formats are read as team formats",
+  PF.detectProfile("Scramble", hcField([0, 1, 2, 3, 4, 5, 6, 7])).profile === "team" &&
+  PF.detectProfile("Better Ball", hcField([2, 4, 6, 8, 10, 12, 14, 16])).profile === "team");
+check("too few entries to tell falls to the club treatment",
+  PF.detectProfile("Stroke Play", hcField([1, 2, 3])).profile === "club");
+check("one visiting scratch player does not make a club day a championship",
+  PF.detectProfile("Stroke Play",
+    hcField([0, 14, 16, 17, 18, 20, 22, 26])).profile === "club");
+check("one high handicap does not stop a championship being one",
+  PF.detectProfile("Stroke Play",
+    hcField([1, 2, 3, 4, 5, 6, 7, 28])).profile === "championship");
+check("the guess explains itself in words a club can judge",
+  /Handicaps \d+ to \d+/.test(
+    PF.detectProfile("Stroke Play", hcField([2, 6, 11, 14, 18, 21, 24, 28])).because));
+
+/* ------------------------------------------------------------------ */
+section("Spreading the afternoon across the field");
+{
+  const two = [
+    { id: "hot", name: "Hot Streak", clubId: "sigona", handicap: 12, gender: "M" },
+    { id: "other", name: "Someone Else", clubId: "sigona", handicap: 14, gender: "F" },
+  ];
+  const mk = (profile) => ({ ...snap([], 0),
+    players: two, fieldByRound: { 1: ["hot", "other"] },
+    tournament: { ...tvT, fieldProfile: profile } });
+
+  const q = (state, subjectId, priority, i) => ({
+    id: `a${i}`, kind: "round-in", priority, durationMs: 3000,
+    headline: "Round in", subject: subjectId, subjectId,
+    factKey: `f${i}`, queuedAt: 0,
+  });
+
+  check("at a club medal the screen prefers someone who has not been on", (() => {
+    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+      { type: "snapshot", snapshot: mk("club") }, 1000);
+    s = { ...s, recentSubjects: ["hot", "hot", "hot"],
+          queue: [q(s, "hot", 40, 1), q(s, "other", 36, 2)] };
+    s = PR.reduce(s, { type: "tick" }, 1000);
+    return s.playing.item.subjectId === "other";
+  })());
+
+  check("at a championship the higher-ranked moment simply wins", (() => {
+    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+      { type: "snapshot", snapshot: mk("championship") }, 1000);
+    s = { ...s, recentSubjects: ["hot", "hot", "hot"],
+          queue: [q(s, "hot", 40, 1), q(s, "other", 36, 2)] };
+    s = PR.reduce(s, { type: "tick" }, 1000);
+    return s.playing.item.subjectId === "hot";
+  })());
+
+  check("the nudge never keeps a rare moment waiting behind a common one", (() => {
+    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+      { type: "snapshot", snapshot: mk("club") }, 1000);
+    s = { ...s, recentSubjects: ["hot", "hot", "hot", "hot", "hot"],
+          queue: [
+            { ...q(s, "hot", 100, 1), kind: "ace", headline: "Hole-in-one" },
+            q(s, "other", 20, 2),
+          ] };
+    s = PR.reduce(s, { type: "tick" }, 1000);
+    return s.playing.item.kind === "ace";
+  })());
+
+  check("being on screen is remembered, and forgotten again", (() => {
+    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+      { type: "snapshot", snapshot: mk("club") }, 1000);
+    s = { ...s, queue: [q(s, "hot", 40, 1)] };
+    s = PR.reduce(s, { type: "tick" }, 1000);
+    const remembered = s.recentSubjects[0] === "hot";
+    // the memory is short by design
+    const long = { ...s, recentSubjects: Array(20).fill("hot") };
+    let t2 = { ...long, queue: [q(long, "hot", 40, 9)] };
+    t2 = PR.reduce(PR.reduce(t2, { type: "tick" }, 5000), { type: "tick" }, 9000);
+    return remembered && t2.recentSubjects.length <= 8;
+  })());
+
+  check("a club changing the profile mid-round is picked up", (() => {
+    let s = PR.reduce(PR.initialState(), { type: "snapshot", snapshot: mk("club") }, 1000);
+    const wasClub = s.config.profile === "club";
+    s = PR.reduce(s, { type: "snapshot", snapshot: mk("championship") }, 2000);
+    return wasClub && s.config.profile === "championship";
+  })());
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

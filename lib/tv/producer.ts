@@ -91,6 +91,7 @@ export function initialState(config?: Partial<ProducerConfig>): ProducerState {
     queue: [],
     pending: [],
     announced: [],
+    recentSubjects: [],
     nextSlotAt: 0,
     nextFeatureAt: 0,
     featureTurn: 0,
@@ -212,6 +213,7 @@ export function dress(
     id: `${m.factKey}#${m.at}`,
     priority: m.priority,
     subject: player.name,
+    subjectId: player.id,
     detail,
     factKey: m.factKey,
     queuedAt: now,
@@ -298,10 +300,28 @@ function note(state: ProducerState, entry: HistoryEntry): HistoryEntry[] {
   return [entry, ...state.history].filter((h) => h.at >= cutoff).slice(0, 60);
 }
 
-/** Highest priority first; between equals, whatever has waited longest. */
-function ordered(queue: Announcement[]) {
+/**
+ * Highest priority first; between equals, whatever has waited longest.
+ *
+ * At a club medal the priority is nudged down for a player who has been on
+ * screen recently. Most of the room is watching to see themselves and their
+ * friends, not the leader, and without this one player having a very good
+ * round takes every slot in the afternoon while forty other people wait. The
+ * nudge is small and capped, so it reorders moments of similar weight and
+ * never keeps a hole-in-one waiting behind a round-in.
+ */
+const FAIRNESS_STEP = 8;
+const FAIRNESS_CAP = 24;
+
+function ordered(queue: Announcement[], state: ProducerState) {
+  const spread = isNetFirst(state.config.profile);
+  const weight = (a: Announcement) => {
+    if (!spread || !a.subjectId) return a.priority;
+    const seen = state.recentSubjects.filter((id) => id === a.subjectId).length;
+    return a.priority - Math.min(seen * FAIRNESS_STEP, FAIRNESS_CAP);
+  };
   return [...queue].sort(
-    (a, b) => b.priority - a.priority || a.queuedAt - b.queuedAt,
+    (a, b) => weight(b) - weight(a) || a.queuedAt - b.queuedAt,
   );
 }
 
@@ -493,7 +513,16 @@ function onSnapshot(
   snapshot: TvSnapshot,
   now: number,
 ): ProducerState {
-  const state = applyDecisions(base, snapshot, now);
+  const withDecisions = applyDecisions(base, snapshot, now);
+  /*
+   * The tournament carries the profile, so a club changing it mid-round is
+   * picked up on the next snapshot rather than needing the screen restarted.
+   */
+  const profile = snapshot.tournament.fieldProfile ?? "club";
+  const state =
+    profile === withDecisions.config.profile
+      ? withDecisions
+      : { ...withDecisions, config: { ...withDecisions.config, profile } };
   const cfg = state.config;
   const settled = settledHoles(snapshot.rows ?? [], snapshot.published ?? {}, cfg, now);
 
@@ -658,7 +687,7 @@ function onTick(state: ProducerState, now: number): ProducerState {
 
   // An announcement, if one is due and the room has had a moment of board.
   if (state.queue.length && now >= state.nextSlotAt) {
-    const [next] = ordered(state.queue).filter((a) => a.queuedAt <= now);
+    const [next] = ordered(state.queue, state).filter((a) => a.queuedAt <= now);
     if (next) {
       const remaining = state.queue.filter((a) => a.id !== next.id);
       return {
@@ -667,6 +696,11 @@ function onTick(state: ProducerState, now: number): ProducerState {
         playing: { type: "announcement", item: next, until: now + next.durationMs },
         queue: remaining,
         announced: [...state.announced, next.factKey],
+        // a short memory: long enough to spread a busy hour, short enough that
+        // a player who was on once at eleven is not penalised at three
+        recentSubjects: next.subjectId
+          ? [next.subjectId, ...state.recentSubjects].slice(0, 8)
+          : state.recentSubjects,
         materialShown: MATERIAL.has(next.kind)
           ? [...state.materialShown, next.factKey]
           : state.materialShown,
