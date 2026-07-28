@@ -248,3 +248,92 @@ body {
     animation: none;
   }
 }
+
+/* ---- TV announcements -------------------------------------------- *
+ * All CSS, no JS animation. It composites off the main thread, which is
+ * what makes it hold up on the cheap stick behind a clubhouse TV, and it
+ * keeps running when the tab is throttled.
+ *
+ * One curve throughout: a long ease-out that arrives quickly and settles
+ * slowly. Nothing snaps, nothing bounces, nothing overshoots.
+ * ------------------------------------------------------------------ */
+
+:root {
+  --tv-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The layer itself. It does not slide; the board behind it goes, and the
+   type arrives. Moving both would be two things competing to be looked at. */
+@keyframes tv-veil {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tv-veil {
+  animation: tv-veil 420ms var(--tv-ease) both;
+}
+
+/* Everything rises. The vertical axis is the whole vocabulary: scores move
+   up and down a board, so an announcement arriving from below reads as part
+   of the same world rather than a graphic pasted over it. */
+@keyframes tv-rise {
+  from { opacity: 0; transform: translate3d(0, 1.6cqw, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.tv-rise {
+  animation: tv-rise 560ms var(--tv-ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 120ms);
+}
+
+/* The accent rule draws itself, left to right. It is the only element that
+   moves horizontally, which is what makes it read as a signature. */
+@keyframes tv-rule {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.tv-rule {
+  transform-origin: left center;
+  animation: tv-rule 680ms var(--tv-ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 200ms);
+}
+
+/* The outgoing leader gives way rather than being erased. */
+@keyframes tv-yield {
+  from { opacity: 0.55; transform: translate3d(0, 0, 0); }
+  to { opacity: 0; transform: translate3d(0, -1.2cqw, 0); }
+}
+
+.tv-yield {
+  animation: tv-yield 900ms var(--tv-ease) both;
+  animation-delay: 420ms;
+}
+
+/* Sparse confetti, for the one moment a year that earns it. Thin strokes in
+   the club's colour, falling slowly and unevenly, well short of a shower. */
+@keyframes tv-fall {
+  from { opacity: 0; transform: translate3d(0, -8cqw, 0) rotate(0deg); }
+  12% { opacity: 0.9; }
+  to { opacity: 0; transform: translate3d(0, 88cqh, 0) rotate(220deg); }
+}
+
+.tv-fleck {
+  position: absolute;
+  top: 0;
+  width: 0.22cqw;
+  height: 1.5cqw;
+  animation: tv-fall var(--d, 7s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv-veil,
+  .tv-rise,
+  .tv-rule,
+  .tv-yield {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
+  .tv-fleck { display: none; }
+}

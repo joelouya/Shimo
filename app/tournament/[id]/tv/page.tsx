@@ -16,6 +16,7 @@
 import { use, useEffect, useMemo, useReducer, useState } from "react";
 
 import { TvBoard, TvEmpty, TvFrame } from "@/components/tv/board";
+import { TvAnnouncement, playChime } from "@/components/tv/announcement";
 import { COURSES } from "@/lib/data";
 import { accentOnDark, DEFAULT_ACCENT, normalizeHex } from "@/lib/contrast";
 import { roundsOf } from "@/lib/rounds";
@@ -58,6 +59,20 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   const feed = useTvFeed(id);
   const snapshot = feed.snapshot;
   const producer = useProducer(snapshot);
+
+  /*
+   * The chime, if the club has asked for one. Keyed off which announcement is
+   * on screen rather than off the queue, so it sounds when the name appears
+   * and not a moment before.
+   */
+  const soundingId = producer.playing?.type === "announcement" &&
+    producer.playing.item.kind === "ace" &&
+    producer.config.chime
+      ? producer.playing.item.id
+      : null;
+  useEffect(() => {
+    if (soundingId) playChime();
+  }, [soundingId]);
 
   // only for the staleness note; nothing else on this screen watches a clock
   const [now, setNow] = useState(() => Date.now());
@@ -112,10 +127,22 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   }
 
   const stale = isStale(feed, now) || feed.status === "reconnecting";
+  const playing = producer.playing;
 
   return (
     <TvFrame snapshot={snapshot} accent={accent} stale={stale}>
-      {rows.length === 0 ? (
+      {playing?.type === "announcement" ? (
+        /*
+         * Keyed by the item, so each announcement mounts fresh and replays its
+         * entrance. Without the key, two in a row would have the second inherit
+         * the first's finished animation and simply appear.
+         */
+        <TvAnnouncement
+          key={playing.item.id}
+          item={playing.item}
+          accent={accent}
+        />
+      ) : rows.length === 0 ? (
         <TvEmpty snapshot={snapshot} />
       ) : (
         <TvBoard
@@ -125,8 +152,6 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
           accent={accent}
         />
       )}
-      {/* announcement and feature layers land here next */}
-      <span className="hidden">{producer.mode}</span>
     </TvFrame>
   );
 }

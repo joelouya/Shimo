@@ -150,10 +150,12 @@ export function dress(
 ): Announcement | null {
   const player = snapshot.players.find((p) => p.id === m.playerId);
   if (!player) return null;
-  const club = player.clubId;
-  const detail = `${club ? clubShort(snapshot, club) : ""}${
-    club ? " · " : ""
-  }HC ${player.handicap}`;
+  // A visitor's club is worth naming; the host club is not, since every other
+  // name on the screen belongs to it too. Join only what there is, or the
+  // members of the club running the event get a dangling separator.
+  const detail = [clubShort(snapshot, player.clubId), `HC ${player.handicap}`]
+    .filter(Boolean)
+    .join(" · ");
 
   const common = {
     id: `${m.factKey}#${m.at}`,

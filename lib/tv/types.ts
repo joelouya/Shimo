@@ -156,6 +156,8 @@ export interface ProducerConfig {
   featureEveryMs: number;
   /** an ace above this handicap waits for admin approval */
   aceApprovalHandicap: number;
+  /** sound a soft chime on a hole-in-one, through the television */
+  chime: boolean;
   /** no announcements, no features: the board alone */
   quiet: boolean;
   profile: FieldProfile;
@@ -168,6 +170,7 @@ export const DEFAULT_CONFIG: ProducerConfig = {
   spacingMs: 15_000,
   featureEveryMs: 90_000,
   aceApprovalHandicap: 20,
+  chime: false,
   quiet: false,
   profile: "club",
   messages: [],
