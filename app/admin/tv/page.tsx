@@ -30,6 +30,7 @@ import {
   Radio,
   SkipForward,
   TriangleAlert,
+  Trophy,
   X,
 } from "lucide-react";
 
@@ -39,6 +40,10 @@ import { allTournaments, useSim } from "@/lib/sim/store";
 import { isStale, useTvFeed } from "@/lib/tv/feed";
 import { initialState, reduce } from "@/lib/tv/producer";
 import { decide } from "@/lib/tv/decide";
+import { recordClaims } from "@/lib/tv/profile";
+import { settledHoles } from "@/lib/tv/trust";
+import { clubIdentityOf, setClubIdentity } from "@/lib/sim/store";
+import { roundsOf } from "@/lib/rounds";
 import type { ProducerEvent } from "@/lib/tv/producer";
 import type {
   Announcement,
@@ -89,6 +94,43 @@ export default function ProducerPanel() {
       setBusy(null);
     }
   };
+
+  /*
+   * A settled card that beats the club's stored record. Offered rather than
+   * applied: Shimo has one afternoon's view of a course the club has played
+   * for eighty years, and a record that looks beaten is more often one nobody
+   * updated when the tees moved than it is history being made.
+   */
+  const claims = useMemo(() => {
+    const snap = feed.snapshot;
+    if (!snap) return [];
+    const round = roundsOf(snap.tournament).find((r) => r.number === snap.round);
+    // the panel's own clock, not Date.now(): reading it here would make the
+    // memo impure, and settling genuinely does depend on the passage of time
+    const settled = settledHoles(
+      snap.rows ?? [],
+      snap.published ?? {},
+      producer.config,
+      now,
+    );
+    const byPlayer = new Map<string, number[]>();
+    for (const h of settled) {
+      const arr = byPlayer.get(h.playerId) ?? [];
+      arr.push(h.gross);
+      byPlayer.set(h.playerId, arr);
+    }
+    return recordClaims({
+      cards: [...byPlayer.entries()].map(([playerId, gs]) => ({
+        playerId,
+        strokes: gs.reduce((a, b) => a + b, 0),
+        complete: gs.length === 18,
+      })),
+      nameOf: (id) => snap.players.find((p) => p.id === id)?.name ?? id,
+      courseId: snap.course.id,
+      tee: round?.tees ?? snap.course.tees,
+      records: snap.records ?? [],
+    });
+  }, [feed.snapshot, producer.config, now]);
 
   const recent = useMemo(
     () => producer.history.filter((h) => h.at > now - 20 * 60_000).slice(0, 12),
@@ -172,6 +214,17 @@ export default function ProducerPanel() {
           </div>
         </div>
       </section>
+
+      {claims.length > 0 && (
+        <section className="mt-5">
+          <p className="smallcaps text-gold">Your books</p>
+          <div className="mt-3 space-y-3">
+            {claims.map((c) => (
+              <RecordClaimCard key={`${c.courseId}-${c.tee}`} claim={c} clubId={live.clubId} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* held for a human */}
       {producer.pending.length > 0 && (
@@ -258,6 +311,85 @@ export default function ProducerPanel() {
       </div>
 
       <Tools onSend={send} busy={busy} />
+    </div>
+  );
+}
+
+/**
+ * "Shimo has recorded a lower score than your stored record."
+ *
+ * A question, never a change. Dismissing it is as legitimate an answer as
+ * accepting it, and phrased so that it reads that way.
+ */
+function RecordClaimCard({
+  claim,
+  clubId,
+}: {
+  claim: ReturnType<typeof recordClaims>[number];
+  clubId: string;
+}) {
+  const identity = useSim((s) => clubIdentityOf(s, clubId));
+  const [done, setDone] = useState<"kept" | "updated" | null>(null);
+
+  if (done) {
+    return (
+      <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-muted-foreground">
+        {done === "updated"
+          ? `Course record updated to ${claim.strokes}, ${claim.holder}.`
+          : "Left as it was."}
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-gold/40 bg-amber-wash/30 p-4">
+      <div className="flex items-start gap-3">
+        <Trophy className="mt-0.5 size-4 shrink-0 text-gold" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-medium text-foreground">
+            {`Shimo has recorded a ${claim.strokes} off the ${claim.tee} tees`}
+          </p>
+          <p className="mt-0.5 text-[13px] text-ink-soft">
+            {claim.previous
+              ? `${claim.holder} today, against ${claim.previous.strokes} by ${claim.previous.holder} in ${claim.previous.year} on your books.`
+              : `${claim.holder} today.`}
+          </p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Nothing changes unless you say so, and nothing about this has been
+            on the screen.
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setDone("kept")}>
+          Leave it
+        </Button>
+        <Button
+          variant="clay"
+          size="sm"
+          onClick={() => {
+            const others = (identity.courseRecords ?? []).filter(
+              (r) => !(r.courseId === claim.courseId && r.tee === claim.tee),
+            );
+            setClubIdentity(clubId, {
+              courseRecords: [
+                ...others,
+                {
+                  courseId: claim.courseId,
+                  tee: claim.tee,
+                  strokes: claim.strokes,
+                  holder: claim.holder,
+                  year: new Date().getFullYear(),
+                },
+              ],
+            });
+            setDone("updated");
+          }}
+        >
+          <Check className="size-3.5" />
+          Update the record
+        </Button>
+      </div>
     </div>
   );
 }

@@ -1554,6 +1554,60 @@ section("Spreading the afternoon across the field");
 }
 
 /* ------------------------------------------------------------------ */
+section("Course records and club settings");
+{
+  const recs = [{ courseId: "c1", tee: "White", strokes: 68, holder: "Old Hand", year: 1998 }];
+  const cards = (strokes, complete = true) => [{ playerId: "p1", strokes, complete }];
+  const nameOf = () => "Today's Player";
+
+  check("a lower score off the same tees is offered to the club",
+    PF.recordClaims({ cards: cards(66), nameOf, courseId: "c1", tee: "White", records: recs })
+      .length === 1);
+  check("the offer carries what is on the books now", (() => {
+    const c = PF.recordClaims({ cards: cards(66), nameOf, courseId: "c1", tee: "White",
+      records: recs })[0];
+    return c.previous.strokes === 68 && c.previous.holder === "Old Hand";
+  })());
+  check("a score off other tees does not touch that record",
+    PF.recordClaims({ cards: cards(66), nameOf, courseId: "c1", tee: "Red", records: recs })
+      .length === 0);
+  check("equalling the record is not beating it",
+    PF.recordClaims({ cards: cards(68), nameOf, courseId: "c1", tee: "White", records: recs })
+      .length === 0);
+  check("an unfinished card is never a record",
+    PF.recordClaims({ cards: cards(60, false), nameOf, courseId: "c1", tee: "White",
+      records: recs }).length === 0);
+  check("with nothing on the books Shimo does not invent a record", (() => {
+    // the first score it happens to see at a club is not eighty years of history
+    return PF.recordClaims({ cards: cards(60), nameOf, courseId: "c1", tee: "White",
+      records: [] }).length === 0;
+  })());
+
+  check("a tournament can start the day quiet", (() => {
+    const quietT = { ...tvT, tvQuiet: true };
+    let s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: { ...snap(eagleRows("p1", 0), 0), tournament: quietT } }, 130_000);
+    s = PR.reduce(s, { type: "tick" }, 200_000);
+    return s.config.quiet === true && s.mode === "leaderboard" && s.queue.length === 0;
+  })());
+  check("the panel overrules the tournament's default, not the other way round", (() => {
+    const quietT = { ...tvT, tvQuiet: true };
+    let s = PR.reduce(PR.initialState(), { type: "snapshot", snapshot: {
+      ...snap(eagleRows("p1", 0), 0), tournament: quietT,
+      decisions: [{ id: 1, kind: "quiet", payload: { on: false }, at: 1 }],
+    } }, 130_000);
+    return s.config.quiet === false;
+  })());
+  check("club messages reach the feature rotation", (() => {
+    const s = PR.reduce(PR.initialState(), { type: "snapshot", snapshot: {
+      ...snap([], 0),
+      identity: { clubId: "sigona", tvMessages: ["Prizegiving at 6pm in the main bar"] },
+    } }, 1000);
+    return s.config.messages[0] === "Prizegiving at 6pm in the main bar";
+  })());
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

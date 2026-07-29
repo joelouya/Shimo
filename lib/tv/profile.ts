@@ -84,3 +84,58 @@ export const PROFILE_HELP: Record<FieldProfile, string> = {
   stableford: "Points, with net moments. Stableford compresses the field already.",
   team: "Team moments rather than individual ones.",
 };
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * A settled card that beats the club's stored record.
+ *
+ * Deliberately a question rather than an action. Shimo has one afternoon's
+ * view of a course a club has been playing for eighty years, and a stored
+ * record that looks beaten is far more often a record nobody has updated
+ * since the tees moved than it is history being made. So the club is asked,
+ * and the record only changes when someone says so.
+ *
+ * Separate from the course-record announcement, which is about the screen.
+ * This is about the club's own books, and a club may well want the second
+ * without the first.
+ */
+export interface RecordClaim {
+  courseId: string;
+  tee: string;
+  strokes: number;
+  holder: string;
+  /** what is on the books now, if anything */
+  previous?: { strokes: number; holder: string; year: number };
+}
+
+export function recordClaims(opts: {
+  cards: { playerId: string; strokes: number; complete: boolean }[];
+  nameOf: (id: string) => string;
+  courseId: string;
+  tee: string;
+  records: { courseId: string; tee: string; strokes: number; holder: string; year: number }[];
+}): RecordClaim[] {
+  const { cards, nameOf, courseId, tee, records } = opts;
+  const held = records.find((r) => r.courseId === courseId && r.tee === tee);
+
+  const best = cards
+    .filter((c) => c.complete)
+    .sort((a, b) => a.strokes - b.strokes)[0];
+  if (!best) return [];
+
+  // With nothing on the books there is nothing to beat, and the first score
+  // Shimo happens to see is not a course record.
+  if (!held) return [];
+  if (best.strokes >= held.strokes) return [];
+
+  return [
+    {
+      courseId,
+      tee,
+      strokes: best.strokes,
+      holder: nameOf(best.playerId),
+      previous: { strokes: held.strokes, holder: held.holder, year: held.year },
+    },
+  ];
+}

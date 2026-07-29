@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { ClubIdentityCard } from "@/components/admin/club-identity";
 import { CsvImportCard } from "@/components/admin/csv-import";
 import { DeskCard } from "@/components/admin/desk-card";
+import { TvSettingsCard } from "@/components/admin/tv-settings";
 import { IS_PILOT } from "@/lib/mode";
 import { resetDemo, reviewIntegrityEntry, useSim } from "@/lib/sim/store";
 
@@ -216,6 +217,7 @@ export default function SettingsPage() {
 
         <div className="flex flex-col gap-6">
           <ClubIdentityCard />
+          <TvSettingsCard />
           <DeskCard />
           {IS_PILOT && <IntegrityCard />}
           <CsvImportCard />

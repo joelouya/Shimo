@@ -27,6 +27,7 @@ export function tournamentToRow(t: Tournament) {
     fee_tiers: t.feeTiers ?? null,
     sponsors: t.sponsors ?? null,
     field_profile: t.fieldProfile ?? null,
+    tv_quiet: t.tvQuiet ?? false,
     status: t.status,
     members_only: t.membersOnly,
     membership: t.membership ?? null,
@@ -64,6 +65,7 @@ export function rowToTournament(r: Record<string, unknown>): Tournament {
     feeTiers: (r.fee_tiers as Tournament["feeTiers"]) ?? undefined,
     sponsors: (r.sponsors as Tournament["sponsors"]) ?? undefined,
     fieldProfile: (r.field_profile ?? undefined) as Tournament["fieldProfile"],
+    tvQuiet: Boolean(r.tv_quiet),
     status: r.status as Tournament["status"],
     membersOnly: Boolean(r.members_only),
     membership: (r.membership as Tournament["membership"]) ?? undefined,
@@ -303,6 +305,7 @@ export function clubToRow(c: ClubIdentity) {
     website: c.website ?? null,
     poster_credit: c.posterCredit ?? true,
     tv_background_url: c.tvBackgroundUrl ?? null,
+    tv_messages: c.tvMessages ?? null,
     course_records: c.courseRecords ?? null,
     updated_at: new Date().toISOString(),
   };
@@ -320,6 +323,7 @@ export function rowToClub(r: Record<string, unknown>): ClubIdentity {
     website: (r.website as string) ?? undefined,
     posterCredit: r.poster_credit == null ? true : Boolean(r.poster_credit),
     tvBackgroundUrl: (r.tv_background_url as string) ?? undefined,
+    tvMessages: (r.tv_messages as string[]) ?? undefined,
     courseRecords:
       (r.course_records as ClubIdentity["courseRecords"]) ?? undefined,
   };

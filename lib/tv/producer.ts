@@ -519,10 +519,21 @@ function onSnapshot(
    * picked up on the next snapshot rather than needing the screen restarted.
    */
   const profile = snapshot.tournament.fieldProfile ?? "club";
-  const state =
-    profile === withDecisions.config.profile
-      ? withDecisions
-      : { ...withDecisions, config: { ...withDecisions.config, profile } };
+  const messages = snapshot.identity?.tvMessages ?? [];
+  /*
+   * Quiet is the one setting the panel and the tournament both have an opinion
+   * about. A club that has switched the screen quiet during the round means it
+   * now, so a decision always wins over the tournament's default; the default
+   * only applies until someone has said otherwise.
+   */
+  const decided = (snapshot.decisions ?? []).some((d) => d.kind === "quiet");
+  const quiet = decided
+    ? withDecisions.config.quiet
+    : Boolean(snapshot.tournament.tvQuiet);
+  const state = {
+    ...withDecisions,
+    config: { ...withDecisions.config, profile, messages, quiet },
+  };
   const cfg = state.config;
   const settled = settledHoles(snapshot.rows ?? [], snapshot.published ?? {}, cfg, now);
 

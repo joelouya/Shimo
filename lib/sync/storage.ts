@@ -183,3 +183,46 @@ export async function signedCardPhoto(path: string, seconds = 300) {
   if (error) throw error;
   return data.signedUrl;
 }
+
+/**
+ * The club's hero image, shown behind TV mode.
+ *
+ * Wider limits than a crest: this fills a television, and a 512px photograph
+ * of the 18th green looks like a 512px photograph of the 18th green on a
+ * 4K panel. It is still shrunk, because a club will hand over whatever came
+ * off the camera and the screen has to load it on a stick.
+ */
+export const TV_BACKGROUND_PX = 2560;
+
+export async function uploadTvBackground(
+  clubId: string,
+  file: File,
+): Promise<LogoResult> {
+  const sb = await supabase();
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, TV_BACKGROUND_PX / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  // JPEG, not PNG: a photograph has no transparency to preserve and a PNG of
+  // one is several times the size for no visible gain on a screen across a room
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", 0.82),
+  );
+
+  const path = `${clubId}/tv-${Date.now().toString(36)}.jpg`;
+  const { error } = await sb.storage.from("club-assets").upload(path, blob, {
+    contentType: "image/jpeg",
+    upsert: true,
+  });
+  if (error) throw error;
+  const { data } = sb.storage.from("club-assets").getPublicUrl(path);
+  return { url: data.publicUrl, width: w, height: h };
+}

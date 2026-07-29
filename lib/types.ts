@@ -25,6 +25,8 @@ export interface ClubIdentity {
   posterCredit?: boolean;
   /** hero image behind TV mode, darkened for legibility */
   tvBackgroundUrl?: string;
+  /** short lines the club wants folded into the TV feature rotation */
+  tvMessages?: string[];
   /**
    * The club's course records, held here rather than on a tournament because a
    * record belongs to the course and outlives every event played on it. Kept
@@ -224,6 +226,13 @@ export interface Tournament {
   /** minutes after certification during which a player may request a
    *  correction (R&A 2024 time-based "returned" guidance); 0 = off */
   correctionWindowMin?: number;
+  /**
+   * Start the day with the board and nothing else: no announcements, no
+   * interludes. For member-guest days, corporate outings, juniors, and the
+   * closing holes of anything serious. The producer panel can switch it during
+   * the round; this is what it starts as.
+   */
+  tvQuiet?: boolean;
   registered?: boolean; // demo user is registered
   result?: { winner: string; score: string; userPosition?: number; userScore?: string };
 }
