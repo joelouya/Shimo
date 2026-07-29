@@ -166,13 +166,19 @@ export interface Announcement {
 /* ---------------- features ---------------- */
 
 export type FeatureKind =
+  /* ---- during play ---- */
   | "spotlight"
   | "group"
   | "hole-of-the-day"
   | "head-to-head"
   | "stats"
   | "sponsor"
-  | "message";
+  | "message"
+  /* ---- once the last card is in ---- */
+  | "champion"
+  | "final-board"
+  | "thanks"
+  | "congratulations";
 
 export interface FeatureCard {
   id: string;

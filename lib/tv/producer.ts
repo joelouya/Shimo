@@ -23,9 +23,16 @@ import { cumulativeStandings, type ViewMode } from "@/lib/scoring";
 import { clubById, COURSES } from "@/lib/data";
 import { roundsOf } from "@/lib/rounds";
 import type { Course } from "@/lib/types";
-import { isNetFirst, momentsForBoard, momentsForCard, type Moment } from "./detect";
+import {
+  isNetFirst,
+  momentsForBoard,
+  momentsForCard,
+  momentsForCut,
+  momentsForTie,
+  type Moment,
+} from "./detect";
 import { settledHoles, type SettledHole } from "./trust";
-import { nextFeature } from "./features";
+import { isOver, nextFeature } from "./features";
 import { defaultCoverage } from "./profile";
 import type {
   Announcement,
@@ -247,20 +254,27 @@ export function dress(
   snapshot: TvSnapshot,
   now: number,
 ): Announcement | null {
+  /*
+   * Most moments belong to a player. Some describe the board itself — where
+   * the cut stands, the shape of the top — and have no one to attach to, so
+   * they are dressed without a name rather than dropped for want of one.
+   */
   const player = (snapshot.players ?? []).find((p) => p.id === m.playerId);
-  if (!player) return null;
+  if (!player && m.playerId) return null;
   // A visitor's club is worth naming; the host club is not, since every other
   // name on the screen belongs to it too. Join only what there is, or the
   // members of the club running the event get a dangling separator.
-  const detail = [clubShort(snapshot, player.clubId), `HC ${player.handicap}`]
-    .filter(Boolean)
-    .join(" · ");
+  const detail = player
+    ? [clubShort(snapshot, player.clubId), `HC ${player.handicap}`]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
 
   const common = {
     id: `${m.factKey}#${m.at}`,
     priority: m.priority,
-    subject: player.name,
-    subjectId: player.id,
+    subject: player?.name ?? "",
+    subjectId: player?.id,
     detail,
     factKey: m.factKey,
     queuedAt: now,
@@ -316,6 +330,35 @@ export function dress(
         headline: "Round in",
         figure: String(m.data?.gross ?? ""),
       };
+    case "cut-line":
+      return {
+        ...common,
+        kind: m.kind,
+        subject: `Top ${m.data?.topN} and ties`,
+        subjectId: undefined,
+        detail: undefined,
+        headline: `Cut after ${m.data?.roundName}`,
+        figure: String(m.data?.line ?? ""),
+        line:
+          Number(m.data?.bubble) > 1
+            ? `${m.data?.inside} inside · ${m.data?.bubble} on the mark`
+            : `${m.data?.inside} inside the cut`,
+      };
+    case "tie":
+      return m.data?.broken
+        ? {
+            ...common,
+            kind: m.kind,
+            headline: "Clear at the top",
+            subject: String(m.data?.names ?? player?.name ?? ""),
+          }
+        : {
+            ...common,
+            kind: m.kind,
+            headline: "Share of the lead",
+            subject: String(m.data?.names ?? player?.name ?? ""),
+            subjectId: undefined,
+          };
     case "course-record":
       return {
         ...common,
@@ -639,15 +682,58 @@ function onSnapshot(
   }
 
   const after = standingsFrom(snapshot, settled);
+  const nameOf = (id: string) => byId.get(id)?.name ?? id;
+  const visible = boardRows(snapshot, settled);
+  const finished =
+    snapshot.tournament.status === "completed" ||
+    (visible.length > 0 && visible.every((r) => r.thru >= 18));
   found.push(
     ...momentsForBoard({
       before: state.boardBefore ?? [],
       after,
-      nameOf: (id) => byId.get(id)?.name ?? id,
+      nameOf,
+      round: snapshot.round,
+      at: now,
+    }),
+    ...momentsForTie({
+      before: state.boardBefore ?? [],
+      after,
+      nameOf,
       round: snapshot.round,
       at: now,
     }),
   );
+
+  /*
+   * The cut, if this is the round one applies after. Read from the full board
+   * rather than the settled one: a cut line drawn only from confirmed figures
+   * would sit in the wrong place all afternoon and move every time a marker
+   * caught up, and the line is a description of where the field is rather
+   * than a claim about any one player.
+   */
+  const cutRound = roundsOf(snapshot.tournament).find(
+    (r) => r.number === snapshot.round && r.cut,
+  );
+  if (cutRound?.cut) {
+    const view = modeOf(snapshot);
+    const rows = boardRows(snapshot, settled);
+    found.push(
+      ...momentsForCut({
+        standings: rows.map((r) => ({
+          playerId: r.player.id,
+          position: r.position,
+          score: view === "points" ? -r.points : view === "net" ? r.netToPar : r.grossToPar,
+          thru: r.thru,
+        })),
+        topN: cutRound.cut.topN,
+        round: snapshot.round,
+        roundName: cutRound.name.toLowerCase(),
+        at: now,
+        formatScore: (n) =>
+          view === "points" ? `${-n} pts` : n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`,
+      }),
+    );
+  }
 
   // Nothing already said, nothing already waiting, nothing already queued.
   const known = new Set([
@@ -757,13 +843,37 @@ function onSnapshot(
     boardBefore: after,
     lastAt: snapshot.at,
     lastSnapshot: snapshot,
-    // the first snapshot sets the feature clock, so nothing fires immediately
-    nextFeatureAt: state.nextFeatureAt || now + cfg.featureEveryMs,
+    /*
+     * The first snapshot sets the feature clock so nothing fires the instant
+     * the screen comes on — except when the golf is already over, which is
+     * precisely when someone has walked over and switched the television on
+     * for the prizegiving. Making them look at a static board for ninety
+     * seconds first is the wrong answer to the one moment they are watching.
+     */
+    nextFeatureAt:
+      state.nextFeatureAt ||
+      now + (finished ? 2_500 : cfg.featureEveryMs),
   };
 }
 
 function onTick(state: ProducerState, now: number): ProducerState {
   const cfg = state.config;
+  /*
+   * Whether the golf is finished. Once it is, the screen stops announcing and
+   * settles into the closing rotation: everything left in the queue happened
+   * before the last group walked off, and a room at the prizegiving does not
+   * want the afternoon replayed at it one card at a time.
+   */
+  const over = Boolean(
+    state.lastSnapshot &&
+      isOver({
+        snapshot: state.lastSnapshot,
+        settled: [],
+        standings: boardRows(state.lastSnapshot, []),
+        cfg,
+        now,
+      }),
+  );
 
   // Something is on screen. Let it finish: cutting an animation short reads as
   // a fault, and whatever changed underneath it will still be true afterwards.
@@ -822,7 +932,7 @@ function onTick(state: ProducerState, now: number): ProducerState {
   }
 
   // An announcement, if one is due and the room has had a moment of board.
-  if (state.queue.length && now >= state.nextSlotAt) {
+  if (!over && state.queue.length && now >= state.nextSlotAt) {
     const [next] = ordered(state.queue, state).filter((a) => a.queuedAt <= now);
     if (next) {
       const remaining = state.queue.filter((a) => a.id !== next.id);
@@ -862,7 +972,7 @@ function onTick(state: ProducerState, now: number): ProducerState {
   if (
     now >= state.nextFeatureAt &&
     state.lastSnapshot &&
-    state.queue.length === 0
+    (state.queue.length === 0 || over)
   ) {
     const settled = settledHoles(
       state.lastSnapshot.rows ?? [],
@@ -888,7 +998,13 @@ function onTick(state: ProducerState, now: number): ProducerState {
       mode: "feature",
       playing: { type: "feature", item: card, until: now + card.durationMs },
       featureTurn: state.featureTurn + 1,
-      nextFeatureAt: now + card.durationMs + cfg.featureEveryMs,
+      /*
+       * Once the golf is over the closing cards run back to back rather than
+       * every ninety seconds. There is no play left to interrupt and the club
+       * leaves the screen on through the prizegiving, so the board on its own
+       * for a minute and a half at a time would be a screen nobody looks at.
+       */
+      nextFeatureAt: now + card.durationMs + (over ? 1_500 : cfg.featureEveryMs),
       history: note(state, { at: now, kind: card.kind, text: card.title }),
     };
   }

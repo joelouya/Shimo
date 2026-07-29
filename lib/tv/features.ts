@@ -32,6 +32,17 @@ const ROTATION: FeatureKind[] = [
   "message",
 ];
 
+/**
+ * What the screen does once the last card is in.
+ *
+ * A club leaves the television on through the prizegiving and into the
+ * evening, so this has to be worth walking past for an hour: the champion,
+ * the board, the people who paid for the day, and a thank you. It loops, and
+ * it is the same four cards every time round, because a room that has already
+ * seen them is not watching any more, it is drinking.
+ */
+const CLOSING: FeatureKind[] = ["champion", "final-board", "thanks", "congratulations"];
+
 const DURATION: Record<FeatureKind, number> = {
   spotlight: 10_000,
   "hole-of-the-day": 9_000,
@@ -40,6 +51,10 @@ const DURATION: Record<FeatureKind, number> = {
   "head-to-head": 10_000,
   sponsor: 5_000,
   message: 8_000,
+  champion: 12_000,
+  "final-board": 14_000,
+  thanks: 8_000,
+  congratulations: 8_000,
 };
 
 interface Ctx {
@@ -57,12 +72,26 @@ interface Ctx {
  * a kind has nothing to offer and is skipped.
  */
 export function nextFeature(ctx: Ctx, turn: number): FeatureCard | null {
-  for (let i = 0; i < ROTATION.length; i++) {
-    const kind = ROTATION[(turn + i) % ROTATION.length];
+  const list = isOver(ctx) ? CLOSING : ROTATION;
+  for (let i = 0; i < list.length; i++) {
+    const kind = list[(turn + i) % list.length];
     const card = build(kind, ctx, turn);
     if (card) return card;
   }
   return null;
+}
+
+/**
+ * Whether the golf is finished.
+ *
+ * Either the club has said so, or every player in the field has a full card.
+ * The second matters because a club rarely remembers to press anything: the
+ * last group walks off, and the screen should know.
+ */
+export function isOver(ctx: Ctx) {
+  if (ctx.snapshot.tournament.status === "completed") return true;
+  const rows = ctx.standings;
+  return rows.length > 0 && rows.every((r) => r.thru >= 18);
 }
 
 function build(kind: FeatureKind, ctx: Ctx, turn: number): FeatureCard | null {
@@ -83,7 +112,76 @@ function build(kind: FeatureKind, ctx: Ctx, turn: number): FeatureCard | null {
       return sponsor(ctx, base, turn);
     case "message":
       return message(ctx, base, turn);
+    case "champion":
+      return champion(ctx, base);
+    case "final-board":
+      return finalBoard(ctx, base);
+    case "thanks":
+      return thanks(ctx, base);
+    case "congratulations":
+      return congratulations(ctx, base);
   }
+}
+
+/* ---------------- once the last card is in ---------------- */
+
+function champion(ctx: Ctx, base: Base): FeatureCard | null {
+  const top = ctx.standings[0];
+  if (!top) return null;
+  const beaten = ctx.standings.length - 1;
+  return {
+    ...base,
+    eyebrow: ctx.snapshot.tournament.status === "completed" ? "Champion" : "Leader in the clubhouse",
+    title: top.player.name,
+    lines: [
+      { label: "Score", value: scoreLine(top, ctx.snapshot) },
+      { label: "Strokes", value: `${top.grossTotal}` },
+      { label: "Handicap", value: `${top.player.handicap}` },
+      ...(beaten > 0 ? [{ label: "From a field of", value: `${ctx.standings.length}` }] : []),
+    ],
+  };
+}
+
+function finalBoard(ctx: Ctx, base: Base): FeatureCard | null {
+  const top = ctx.standings.slice(0, 8);
+  if (top.length < 2) return null;
+  return {
+    ...base,
+    eyebrow: "Final standings",
+    title: dayOf(ctx.snapshot),
+    lines: top.map((r) => ({
+      label: `${r.tied ? "T" : ""}${r.position}  ${r.player.name}`,
+      value: scoreLine(r, ctx.snapshot),
+    })),
+  };
+}
+
+function thanks(ctx: Ctx, base: Base): FeatureCard | null {
+  const list = ctx.snapshot.tournament.sponsors ?? [];
+  if (!list.length) return null;
+  const order = { title: 0, prize: 1, category: 2, partner: 3 } as const;
+  const sorted = [...list].sort(
+    (a, b) => (order[a.tier ?? "partner"] ?? 3) - (order[b.tier ?? "partner"] ?? 3),
+  );
+  return {
+    ...base,
+    eyebrow: "With thanks to",
+    title: sorted[0].name,
+    lines: sorted.slice(1).map((s) => ({ label: s.name, value: "" })),
+    footnote: "and everyone who made today possible",
+  };
+}
+
+function congratulations(ctx: Ctx, base: Base): FeatureCard | null {
+  const n = ctx.standings.length;
+  if (!n) return null;
+  return {
+    ...base,
+    eyebrow: ctx.snapshot.tournament.name,
+    title: "Congratulations to all who played",
+    lines: [],
+    footnote: `${n} cards returned`,
+  };
 }
 
 type Base = { id: string; kind: FeatureKind; durationMs: number };

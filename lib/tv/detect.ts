@@ -320,3 +320,118 @@ export function momentsForBoard(opts: {
 
   return out;
 }
+
+/**
+ * The cut, while it is still being decided.
+ *
+ * Only interesting on the round a cut applies after, and only once enough of
+ * the field has played enough golf for the line to mean anything. It recurs
+ * through the afternoon rather than firing once, because the line moves: the
+ * fact being announced is where the cut stands now, so the key carries the
+ * line and a new one is a new moment.
+ *
+ * Deliberately about the line and the bubble rather than about who is out.
+ * Naming the players who would currently miss is the one thing this must not
+ * do — they are in the clubhouse, and the screen is not there to tell them.
+ */
+export function momentsForCut(opts: {
+  standings: { playerId: string; position: number; score: number; thru: number }[];
+  topN: number;
+  round: number;
+  roundName: string;
+  at: number;
+  formatScore: (n: number) => string;
+}): Moment[] {
+  const { standings, topN, round, roundName, at, formatScore } = opts;
+
+  // the line means nothing until a good part of the field is well into it
+  const started = standings.filter((r) => r.thru >= 9);
+  if (started.length < Math.max(8, topN)) return [];
+  if (standings.length <= topN) return [];
+
+  const sorted = [...standings].sort((a, b) => a.position - b.position);
+  const last = sorted[topN - 1];
+  if (!last) return [];
+  const line = last.score;
+
+  // everyone level with the last qualifier is in, which is why a top 30 cut
+  // routinely returns more than thirty players
+  const inside = sorted.filter((r) => r.score <= line).length;
+  const bubble = sorted.filter((r) => r.score === line).length;
+
+  return [
+    {
+      kind: "cut-line",
+      playerId: "",
+      round,
+      factKey: `cut-line:${round}:${line}:${inside}`,
+      at,
+      priority: PRIORITY["cut-line"],
+      data: {
+        line: formatScore(line),
+        topN,
+        inside,
+        bubble,
+        roundName,
+      },
+    },
+  ];
+}
+
+/**
+ * A tie at the very top forming or breaking.
+ *
+ * Kept to the front of the board on purpose. Ties happen constantly through a
+ * field of forty and announcing each one would be a screen that never stops
+ * talking about nothing; a share of the lead is the only one a room cares
+ * about.
+ */
+export function momentsForTie(opts: {
+  before: { playerId: string; position: number }[];
+  after: { playerId: string; position: number }[];
+  nameOf: (id: string) => string;
+  round: number;
+  at: number;
+}): Moment[] {
+  const { before, after, nameOf, round, at } = opts;
+  if (!before.length || !after.length) return [];
+
+  const leadersOf = (rows: { playerId: string; position: number }[]) =>
+    rows.filter((r) => r.position === 1).map((r) => r.playerId).sort();
+
+  const was = leadersOf(before);
+  const now = leadersOf(after);
+  if (was.length === now.length) return [];
+
+  // a share of the lead has formed
+  if (now.length > 1 && was.length === 1) {
+    return [
+      {
+        kind: "tie",
+        playerId: now[0],
+        round,
+        factKey: `tie:${round}:${now.join("+")}`,
+        at,
+        priority: PRIORITY.tie,
+        data: { names: now.map(nameOf).join(" and "), count: now.length },
+      },
+    ];
+  }
+
+  // or one player has broken clear of it
+  if (now.length === 1 && was.length > 1) {
+    return [
+      {
+        kind: "tie",
+        playerId: now[0],
+        round,
+        factKey: `tie-broken:${round}:${now[0]}:${was.join("+")}`,
+        at,
+        priority: PRIORITY.tie,
+        data: { broken: 1, names: nameOf(now[0]) },
+      },
+    ];
+  }
+
+  return [];
+}

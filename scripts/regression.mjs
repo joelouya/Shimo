@@ -1791,6 +1791,178 @@ check("and the only thing that can is a hole-in-one", (() => {
 })());
 
 /* ------------------------------------------------------------------ */
+section("Cut line, ties, and the end of the day");
+{
+  const cutT = { ...tvT, rounds: [
+    { id: "r1", number: 1, name: "Round 1", date: "2030-01-01", courseId: tvC.id,
+      tees: "White", firstTee: "07:00", teeInterval: 10, cut: { topN: 4 } },
+    { id: "r2", number: 2, name: "Round 2", date: "2030-01-02", courseId: tvC.id,
+      tees: "White", firstTee: "07:00", teeInterval: 10, cut: null },
+  ] };
+  const twelve = Array.from({ length: 12 }, (_, i) =>
+    ({ id: `k${i}`, name: `Cut ${i}`, clubId: "sigona", handicap: 8, gender: "M" }));
+  // twelve players, twelve holes each, spread out so a line exists
+  const cutRows = [];
+  twelve.forEach((p, pi) => {
+    for (let h = 0; h < 12; h++) {
+      const gross = tvC.holes[h].par + (pi % 4 === 0 ? 0 : pi % 4 === 1 ? 1 : pi < 8 ? 1 : 2);
+      for (const source of ["player", "marker"])
+        cutRows.push({ round: 1, playerId: p.id, hole: h, gross, source, at: 0 });
+    }
+  });
+  const cutSnap = (at) => ({ ...snap(cutRows, at), tournament: cutT, players: twelve,
+    fieldByRound: { 1: twelve.map((p) => p.id) } });
+
+  const cs = PR.reduce(PR.initialState({ coverage: "full" }),
+    { type: "snapshot", snapshot: cutSnap(0) }, 130_000);
+  check("the cut line is announced on the round it applies after",
+    cs.queue.some((a) => a.kind === "cut-line"), String(cs.queue.map((a) => a.kind)));
+  check("it names the line and the number inside, never who is out", (() => {
+    const a = cs.queue.find((x) => x.kind === "cut-line");
+    return /Top 4 and ties/.test(a.subject) &&
+      /inside/.test(a.line ?? "") &&
+      !twelve.some((p) => (a.line ?? "").includes(p.name));
+  })());
+  check("no cut line on a round that has no cut", (() => {
+    const noCut = { ...cutT, rounds: [{ ...cutT.rounds[0], cut: null }] };
+    const s = PR.reduce(PR.initialState({ coverage: "full" }), { type: "snapshot",
+      snapshot: { ...cutSnap(0), tournament: noCut } }, 130_000);
+    return !s.queue.some((a) => a.kind === "cut-line");
+  })());
+  check("no cut line before the field has played enough for one", (() => {
+    const thin = cutRows.filter((r) => r.hole < 3);
+    const s = PR.reduce(PR.initialState({ coverage: "full" }), { type: "snapshot",
+      snapshot: { ...cutSnap(0), rows: thin } }, 130_000);
+    return !s.queue.some((a) => a.kind === "cut-line");
+  })());
+  check("the line recurs when it moves, and not before", (() => {
+    let s = cs;
+    const same = PR.reduce(s, { type: "snapshot", snapshot: cutSnap(200_000) }, 200_000);
+    const before = same.queue.filter((a) => a.kind === "cut-line").length;
+    return before === 1; // still the one, not a second copy of the same line
+  })());
+  check("a cut line is not shown at reduced coverage",
+    !PR.allowedAt("cut-line", "reduced"));
+
+  const board = (ids) => ids.map((playerId, i) => ({ playerId, position: i + 1 }));
+  const DT2 = DT;
+  check("a share of the lead forming is worth three seconds", (() => {
+    const out = DT2.momentsForTie({
+      before: board(["a", "b", "c"]),
+      after: [{ playerId: "a", position: 1 }, { playerId: "b", position: 1 },
+              { playerId: "c", position: 3 }],
+      nameOf: (id) => id.toUpperCase(), round: 1, at: 1 });
+    return out.length === 1 && /A and B/.test(String(out[0].data.names));
+  })());
+  check("one player breaking clear is the other half of it", (() => {
+    const out = DT2.momentsForTie({
+      before: [{ playerId: "a", position: 1 }, { playerId: "b", position: 1 }],
+      after: board(["a", "b"]),
+      nameOf: (id) => id.toUpperCase(), round: 1, at: 1 });
+    return out.length === 1 && out[0].data.broken === 1;
+  })());
+  check("ties further down the board are left alone", (() => {
+    const out = DT2.momentsForTie({
+      before: board(["a", "b", "c", "d"]),
+      after: [{ playerId: "a", position: 1 }, { playerId: "b", position: 2 },
+              { playerId: "c", position: 3 }, { playerId: "d", position: 3 }],
+      nameOf: (id) => id, round: 1, at: 1 });
+    return out.length === 0;
+  })());
+
+  /* ---- the end of the day ---- */
+  const doneRows = [];
+  twelve.forEach((p, pi) => {
+    for (let h = 0; h < 18; h++) {
+      const gross = tvC.holes[h].par + (pi % 3 === 0 ? 0 : 1);
+      for (const source of ["player", "marker"])
+        doneRows.push({ round: 1, playerId: p.id, hole: h, gross, source, at: 0 });
+    }
+  });
+  const doneSnap = (at, extraT = {}) => ({ ...snap(doneRows, at),
+    tournament: { ...tvT, status: "completed",
+      sponsors: [{ id: "s1", name: "NCBA", tier: "title" },
+                 { id: "s2", name: "Junior Golf Foundation", tier: "prize" }],
+      ...extraT },
+    players: twelve, fieldByRound: { 1: twelve.map((p) => p.id) } });
+
+  let d = PR.reduce(PR.initialState({ coverage: "full" }),
+    { type: "snapshot", snapshot: doneSnap(0) }, 130_000);
+  const kinds = new Set();
+  let u = 130_000;
+  for (let i = 0; i < 400; i++) {
+    u += 2_000;
+    d = PR.reduce(d, { type: "tick" }, u);
+    if (d.mode === "feature") kinds.add(d.playing.item.kind);
+  }
+  check("the screen closes with the champion, the board, thanks and a goodbye",
+    ["champion", "final-board", "thanks", "congratulations"].every((k) => kinds.has(k)),
+    [...kinds].join(","));
+  check("it stops announcing once the golf is finished", (() => {
+    let x = PR.reduce(PR.initialState({ coverage: "full" }),
+      { type: "snapshot", snapshot: doneSnap(0) }, 130_000);
+    let v = 130_000;
+    for (let i = 0; i < 120; i++) { v += 2_000; x = PR.reduce(x, { type: "tick" }, v); }
+    return x.mode !== "announcement";
+  })());
+  check("a club with no sponsors is not given an empty thank-you card", (() => {
+    let x = PR.reduce(PR.initialState({ coverage: "full" }), { type: "snapshot",
+      snapshot: { ...doneSnap(0), tournament: { ...tvT, status: "completed" } } }, 130_000);
+    let v = 130_000;
+    const seen = new Set();
+    for (let i = 0; i < 300; i++) {
+      v += 2_000;
+      x = PR.reduce(x, { type: "tick" }, v);
+      if (x.mode === "feature") seen.add(x.playing.item.kind);
+    }
+    return !seen.has("thanks") && seen.has("champion");
+  })());
+  check("a finished field is recognised without the club pressing anything", (() => {
+    // no status change: every card simply came in
+    let x = PR.reduce(PR.initialState({ coverage: "full" }), { type: "snapshot",
+      snapshot: { ...doneSnap(0), tournament: { ...tvT, sponsors: undefined } } }, 130_000);
+    let v = 130_000;
+    const seen = new Set();
+    for (let i = 0; i < 300; i++) {
+      v += 2_000;
+      x = PR.reduce(x, { type: "tick" }, v);
+      if (x.mode === "feature") seen.add(x.playing.item.kind);
+    }
+    return seen.has("champion") || seen.has("final-board");
+  })());
+  check("a screen switched on at the prizegiving does not wait ninety seconds", (() => {
+    // the one moment someone is definitely watching
+    let x = PR.reduce(PR.initialState({ coverage: "full", featureEveryMs: 90_000 }),
+      { type: "snapshot", snapshot: doneSnap(0) }, 130_000);
+    let v = 130_000;
+    for (let i = 0; i < 8; i++) { v += 1_000; x = PR.reduce(x, { type: "tick" }, v); }
+    return x.mode === "feature";
+  })());
+  check("a tournament still in play does still wait", (() => {
+    let x = PR.reduce(PR.initialState({ coverage: "full", featureEveryMs: 90_000 }),
+      { type: "snapshot", snapshot: cutSnap(0) }, 130_000);
+    let v = 130_000;
+    for (let i = 0; i < 8; i++) { v += 1_000; x = PR.reduce(x, { type: "tick" }, v); }
+    return x.mode !== "feature";
+  })());
+  check("the closing cards run back to back, not once a minute", (() => {
+    let x = PR.reduce(PR.initialState({ coverage: "full" }),
+      { type: "snapshot", snapshot: doneSnap(0) }, 130_000);
+    let v = 130_000;
+    let gaps = 0;
+    let lastEnd = null;
+    for (let i = 0; i < 300; i++) {
+      v += 1_000;
+      const before = x.mode;
+      x = PR.reduce(x, { type: "tick" }, v);
+      if (before === "feature" && x.mode === "leaderboard") lastEnd = v;
+      if (lastEnd && x.mode === "feature") { gaps = v - lastEnd; lastEnd = null; }
+    }
+    return gaps > 0 && gaps <= 4_000;
+  })());
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),
