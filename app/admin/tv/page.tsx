@@ -23,8 +23,6 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  BellOff,
-  BellRing,
   Check,
   ExternalLink,
   Radio,
@@ -40,7 +38,7 @@ import { allTournaments, useSim } from "@/lib/sim/store";
 import { isStale, useTvFeed } from "@/lib/tv/feed";
 import { initialState, reduce } from "@/lib/tv/producer";
 import { decide } from "@/lib/tv/decide";
-import { recordClaims } from "@/lib/tv/profile";
+import { COVERAGE_HELP, COVERAGE_LABEL, recordClaims } from "@/lib/tv/profile";
 import { settledHoles } from "@/lib/tv/trust";
 import { clubIdentityOf, setClubIdentity } from "@/lib/sim/store";
 import { roundsOf } from "@/lib/rounds";
@@ -152,7 +150,8 @@ export default function ProducerPanel() {
     );
   }
 
-  const quiet = producer.config.quiet;
+  const coverage = producer.config.coverage;
+  const quiet = coverage === "quiet";
 
   return (
     <div>
@@ -193,19 +192,31 @@ export default function ProducerPanel() {
               <p className="text-[13px] text-muted-foreground">
                 {isStale(feed, now)
                   ? "The screen may be behind — reconnecting"
-                  : `${producer.queue.length} waiting · ${producer.pending.length} held`}
+                  : `${COVERAGE_HELP[coverage]} · ${producer.queue.length} waiting · ${producer.pending.length} held`}
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant={quiet ? "clay" : "outline"}
-              onClick={() => void send("quiet", { payload: { on: !quiet } })}
-              disabled={busy !== null}
-            >
-              {quiet ? <BellRing className="size-4" /> : <BellOff className="size-4" />}
-              {quiet ? "Resume announcements" : "Go quiet"}
-            </Button>
+          <div className="flex items-center gap-2">
+            {/* three settings, always all three visible: during a round the
+                admin wants to see where it is set, not discover it by tapping */}
+            <div className="flex rounded-xl border border-border bg-secondary/40 p-1">
+              {(["full", "reduced", "quiet"] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void send("coverage", { payload: { level } })}
+                  title={COVERAGE_HELP[level]}
+                  className={`rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
+                    coverage === level
+                      ? "bg-card font-medium text-foreground shadow-card"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {COVERAGE_LABEL[level]}
+                </button>
+              ))}
+            </div>
             {producer.playing && !quiet && (
               <Button variant="ghost" onClick={() => void send("skip")}>
                 <SkipForward className="size-4" />

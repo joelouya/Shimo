@@ -15,7 +15,7 @@
  */
 
 import type { Format, Player } from "@/lib/types";
-import type { FieldProfile } from "./types";
+import type { Coverage, FieldProfile } from "./types";
 
 /** The value at a given percentile of a sorted list. */
 function percentile(sorted: number[], p: number) {
@@ -75,6 +75,35 @@ export const PROFILE_LABEL: Record<FieldProfile, string> = {
   club: "Club medal",
   stableford: "Stableford",
   team: "Team format",
+};
+
+/**
+ * How much a screen should say, before anyone has told it.
+ *
+ * A championship field can carry a busy screen: the room is there for the
+ * golf and the moments are genuinely rare. A Saturday medal wants the big
+ * things and otherwise its board, because forty people making net pars is
+ * not an event. A corporate or junior day wants to be left alone entirely —
+ * those are the rooms where a screen calling out scores changes how people
+ * feel about their afternoon.
+ */
+export function defaultCoverage(profile: FieldProfile): Coverage {
+  if (profile === "championship") return "full";
+  if (profile === "team") return "quiet";
+  return "reduced";
+}
+
+export const COVERAGE_LABEL: Record<Coverage, string> = {
+  full: "Full",
+  reduced: "Reduced",
+  quiet: "Quiet",
+};
+
+export const COVERAGE_HELP: Record<Coverage, string> = {
+  full: "Every moment worth showing. For a championship.",
+  reduced:
+    "The big ones only — aces, eagles, the lead changing, course records. Interludes still run.",
+  quiet: "The board and nothing else. For corporate days, juniors, and member-guests.",
 };
 
 export const PROFILE_HELP: Record<FieldProfile, string> = {

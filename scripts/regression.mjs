@@ -13,6 +13,7 @@
  */
 
 import { createJiti } from "jiti";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -829,7 +830,7 @@ const pair = (pid, hole, gross, at) => [
 const eagleHole = tvC.holes.findIndex((h) => h.par === 5);
 const eagleRows = (pid, at) => pair(pid, eagleHole, tvC.holes[eagleHole].par - 2, at);
 
-const S0 = PR.initialState({ cooldownMs: 120_000, spacingMs: 15_000 });
+const S0 = PR.initialState({ cooldownMs: 120_000, spacingMs: 15_000, coverage: "full" });
 
 check("nothing is queued while a figure is still cooling down", (() => {
   const s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 60_000);
@@ -948,21 +949,21 @@ check("a disagreement mid-cooldown holds everything back", (() => {
 
 check("quiet mode keeps the board up and drops the backlog", (() => {
   let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
-  s = PR.reduce(s, { type: "config", patch: { quiet: true } }, 130_100);
+  s = PR.reduce(s, { type: "config", patch: { coverage: "quiet" } }, 130_100);
   s = PR.reduce(s, { type: "tick" }, 200_000);
   return s.queue.length === 0 && s.mode === "leaderboard" &&
-    s.history.some((h) => h.kind === "quiet-on");
+    s.history.some((h) => h.kind === "coverage");
 })());
 check("leaving quiet mode does not replay what was silenced", (() => {
   let s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
-  s = PR.reduce(s, { type: "config", patch: { quiet: true } }, 130_100);
-  s = PR.reduce(s, { type: "config", patch: { quiet: false } }, 200_000);
+  s = PR.reduce(s, { type: "config", patch: { coverage: "quiet" } }, 130_100);
+  s = PR.reduce(s, { type: "config", patch: { coverage: "full" } }, 200_000);
   s = PR.reduce(s, { type: "tick" }, 200_100);
   return s.mode === "leaderboard";
 })());
 check("quiet mode interrupts nothing that is already on screen", (() => {
   let s = PR.reduce(settledState, { type: "tick" }, 130_000);
-  s = PR.reduce(s, { type: "config", patch: { quiet: true } }, 131_000);
+  s = PR.reduce(s, { type: "config", patch: { coverage: "quiet" } }, 131_000);
   return s.playing === null; // cleared, board restored, room stops being interrupted
 })());
 
@@ -1102,7 +1103,7 @@ section("Producer decisions from the panel");
       snapshot: snap(eagleRows("p1", 0), 0, { decisions: [dec(1, "quiet", { payload: { on: true } })] }) },
       130_000);
     s = PR.reduce(s, { type: "tick" }, 200_000);
-    return s.config.quiet === true && s.mode === "leaderboard" && s.queue.length === 0;
+    return s.config.coverage === "quiet" && s.mode === "leaderboard" && s.queue.length === 0;
   })());
   check("nothing piles up behind quiet mode", (() => {
     // detection runs against the whole card every time, so without consuming
@@ -1126,7 +1127,7 @@ section("Producer decisions from the panel");
     s = PR.reduce(s, { type: "snapshot",
       snapshot: snap(eagleRows("p1", 0), 300_000, { decisions: back }) }, 300_000);
     s = PR.reduce(s, { type: "tick" }, 300_100);
-    return s.config.quiet === false && s.queue.length === 0 && s.mode === "leaderboard";
+    return s.config.coverage !== "quiet" && s.queue.length === 0 && s.mode === "leaderboard";
   })());
   check("a moment that happens after quiet lifts is still announced", (() => {
     const back = [dec(1, "quiet", { payload: { on: true } }),
@@ -1152,7 +1153,7 @@ section("Producer decisions from the panel");
       dec(2, "quiet", { payload: { on: false } }),
       dec(3, "approve", { factKey: fk }),
     ]) }, 131_000);
-    return s.config.quiet === false && s.queue.length === 1;
+    return s.config.coverage !== "quiet" && s.queue.length === 1;
   })());
   check("a screen switched on late catches up on everything it missed", (() => {
     const fk = "eagle:1:p1:" + eagleHole;
@@ -1162,7 +1163,7 @@ section("Producer decisions from the panel");
         dec(2, "reject", { factKey: fk }),
         dec(3, "quiet", { payload: { on: false } }),
       ]) }, 500_000);
-    return s.appliedDecision === 3 && s.config.quiet === false &&
+    return s.appliedDecision === 3 && s.config.coverage !== "quiet" &&
       s.pending.length === 0 && s.queue.length === 0;
   })());
 }
@@ -1344,7 +1345,7 @@ section("Feature interludes");
   });
 
   const CFG = { featureEveryMs: 90_000, spacingMs: 15_000, cooldownMs: 120_000 };
-  let s = PR.reduce(PR.initialState(CFG),
+  let s = PR.reduce(PR.initialState({ ...CFG, coverage: "full" }),
     { type: "snapshot", snapshot: bigSnap(0) }, 130_000);
 
   check("no feature fires the moment the screen comes on", (() => {
@@ -1386,7 +1387,7 @@ section("Feature interludes");
 
   check("an announcement always wins the screen over a feature", (() => {
     // a due feature and a waiting eagle at the same instant
-    let x = PR.reduce(PR.initialState(CFG),
+    let x = PR.reduce(PR.initialState({ ...CFG, coverage: "full" }),
       { type: "snapshot", snapshot: bigSnap(0, { rows: [...rowsFor(9), ...eagleRows("f0", 0)] }) },
       130_000);
     x = { ...x, nextFeatureAt: 0 };
@@ -1395,7 +1396,7 @@ section("Feature interludes");
   })());
 
   check("quiet mode shows no features either", (() => {
-    let x = PR.reduce(PR.initialState({ ...CFG, quiet: true }),
+    let x = PR.reduce(PR.initialState({ ...CFG, coverage: "quiet" }),
       { type: "snapshot", snapshot: bigSnap(0) }, 130_000);
     x = { ...x, nextFeatureAt: 0 };
     for (let i = 0; i < 10; i++) x = PR.reduce(x, { type: "tick" }, 130_000 + i * 10_000);
@@ -1403,7 +1404,7 @@ section("Feature interludes");
   })());
 
   check("a tournament with nothing to say yet is not given an empty card", (() => {
-    let x = PR.reduce(PR.initialState(CFG), { type: "snapshot", snapshot: snap([], 0) }, 1000);
+    let x = PR.reduce(PR.initialState({ ...CFG, coverage: "full" }), { type: "snapshot", snapshot: snap([], 0) }, 1000);
     x = { ...x, nextFeatureAt: 0 };
     x = PR.reduce(x, { type: "tick" }, 1000);
     return x.mode === "leaderboard" && x.nextFeatureAt > 1000;
@@ -1418,7 +1419,7 @@ section("Feature interludes");
       try {
         const bare = { ...bigSnap(0) };
         delete bare[field];
-        let x = PR.reduce(PR.initialState(CFG), { type: "snapshot", snapshot: bare }, 130_000);
+        let x = PR.reduce(PR.initialState({ ...CFG, coverage: "full" }), { type: "snapshot", snapshot: bare }, 130_000);
         x = { ...x, nextFeatureAt: 0 };
         PR.reduce(x, { type: "tick" }, 130_000);
         return true;
@@ -1433,7 +1434,7 @@ section("Feature interludes");
   check("the same snapshot and turn always produce the same card", (() => {
     const settled = TR.settledHoles(rowsFor(9), {}, { cooldownMs: 0 }, 999_999);
     const ctx = { snapshot: bigSnap(0), settled,
-      standings: PR.boardRows(bigSnap(0), settled), cfg: PR.initialState(CFG).config, now: 1 };
+      standings: PR.boardRows(bigSnap(0), settled), cfg: PR.initialState({ ...CFG, coverage: "full" }).config, now: 1 };
     const a = FE.nextFeature(ctx, 3);
     const b = FE.nextFeature(ctx, 3);
     return JSON.stringify(a) === JSON.stringify(b);
@@ -1442,9 +1443,9 @@ section("Feature interludes");
     const settled = TR.settledHoles(rowsFor(9), {}, { cooldownMs: 0 }, 999_999);
     const base = { snapshot: bigSnap(0), settled,
       standings: PR.boardRows(bigSnap(0), settled), now: 1 };
-    const none = FE.nextFeature({ ...base, cfg: { ...PR.initialState(CFG).config, messages: [] } }, 6);
+    const none = FE.nextFeature({ ...base, cfg: { ...PR.initialState({ ...CFG, coverage: "full" }).config, messages: [] } }, 6);
     const some = FE.nextFeature({ ...base,
-      cfg: { ...PR.initialState(CFG).config, messages: ["Prizegiving at 6pm in the main bar"] } }, 6);
+      cfg: { ...PR.initialState({ ...CFG, coverage: "full" }).config, messages: ["Prizegiving at 6pm in the main bar"] } }, 6);
     return none?.kind !== "message" && some?.kind === "message" &&
       some.title === "Prizegiving at 6pm in the main bar";
   })());
@@ -1453,7 +1454,7 @@ section("Feature interludes");
     const withPartner = bigSnap(0, { tournament: { ...tvT,
       sponsors: [{ id: "s9", name: "A Partner", tier: "partner" }] } });
     const ctx = { snapshot: withPartner, settled,
-      standings: PR.boardRows(withPartner, settled), cfg: PR.initialState(CFG).config, now: 1 };
+      standings: PR.boardRows(withPartner, settled), cfg: PR.initialState({ ...CFG, coverage: "full" }).config, now: 1 };
     return FE.nextFeature(ctx, 5)?.kind !== "sponsor";
   })());
 }
@@ -1503,7 +1504,7 @@ section("Spreading the afternoon across the field");
   });
 
   check("at a club medal the screen prefers someone who has not been on", (() => {
-    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+    let s = PR.reduce(PR.initialState({ spacingMs: 0, coverage: "full" }),
       { type: "snapshot", snapshot: mk("club") }, 1000);
     s = { ...s, recentSubjects: ["hot", "hot", "hot"],
           queue: [q(s, "hot", 40, 1), q(s, "other", 36, 2)] };
@@ -1512,7 +1513,7 @@ section("Spreading the afternoon across the field");
   })());
 
   check("at a championship the higher-ranked moment simply wins", (() => {
-    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+    let s = PR.reduce(PR.initialState({ spacingMs: 0, coverage: "full" }),
       { type: "snapshot", snapshot: mk("championship") }, 1000);
     s = { ...s, recentSubjects: ["hot", "hot", "hot"],
           queue: [q(s, "hot", 40, 1), q(s, "other", 36, 2)] };
@@ -1521,7 +1522,7 @@ section("Spreading the afternoon across the field");
   })());
 
   check("the nudge never keeps a rare moment waiting behind a common one", (() => {
-    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+    let s = PR.reduce(PR.initialState({ spacingMs: 0, coverage: "full" }),
       { type: "snapshot", snapshot: mk("club") }, 1000);
     s = { ...s, recentSubjects: ["hot", "hot", "hot", "hot", "hot"],
           queue: [
@@ -1533,7 +1534,7 @@ section("Spreading the afternoon across the field");
   })());
 
   check("being on screen is remembered, and forgotten again", (() => {
-    let s = PR.reduce(PR.initialState({ spacingMs: 0 }),
+    let s = PR.reduce(PR.initialState({ spacingMs: 0, coverage: "full" }),
       { type: "snapshot", snapshot: mk("club") }, 1000);
     s = { ...s, queue: [q(s, "hot", 40, 1)] };
     s = PR.reduce(s, { type: "tick" }, 1000);
@@ -1546,7 +1547,7 @@ section("Spreading the afternoon across the field");
   })());
 
   check("a club changing the profile mid-round is picked up", (() => {
-    let s = PR.reduce(PR.initialState(), { type: "snapshot", snapshot: mk("club") }, 1000);
+    let s = PR.reduce(PR.initialState({ coverage: "full" }), { type: "snapshot", snapshot: mk("club") }, 1000);
     const wasClub = s.config.profile === "club";
     s = PR.reduce(s, { type: "snapshot", snapshot: mk("championship") }, 2000);
     return wasClub && s.config.profile === "championship";
@@ -1585,10 +1586,10 @@ section("Course records and club settings");
 
   check("a tournament can start the day quiet", (() => {
     const quietT = { ...tvT, tvQuiet: true };
-    let s = PR.reduce(PR.initialState(), { type: "snapshot",
+    let s = PR.reduce(PR.initialState({ coverage: "full" }), { type: "snapshot",
       snapshot: { ...snap(eagleRows("p1", 0), 0), tournament: quietT } }, 130_000);
     s = PR.reduce(s, { type: "tick" }, 200_000);
-    return s.config.quiet === true && s.mode === "leaderboard" && s.queue.length === 0;
+    return s.config.coverage === "quiet" && s.mode === "leaderboard" && s.queue.length === 0;
   })());
   check("the panel overrules the tournament's default, not the other way round", (() => {
     const quietT = { ...tvT, tvQuiet: true };
@@ -1596,7 +1597,7 @@ section("Course records and club settings");
       ...snap(eagleRows("p1", 0), 0), tournament: quietT,
       decisions: [{ id: 1, kind: "quiet", payload: { on: false }, at: 1 }],
     } }, 130_000);
-    return s.config.quiet === false;
+    return s.config.coverage !== "quiet";
   })());
   check("club messages reach the feature rotation", (() => {
     const s = PR.reduce(PR.initialState(), { type: "snapshot", snapshot: {
@@ -1606,6 +1607,188 @@ section("Course records and club settings");
     return s.config.messages[0] === "Prizegiving at 6pm in the main bar";
   })());
 }
+
+/* ------------------------------------------------------------------ */
+section("Coverage tiers");
+{
+  const tCov = (coverage) => ({ ...tvT, tvCoverage: coverage });
+  const covSnap = (coverage, rows, at = 0) => ({
+    ...snap(rows, at), tournament: tCov(coverage),
+  });
+  const streakRows = (pid) => {
+    // three birdies running: a streak, and nothing bigger
+    const out = [];
+    for (let h = 0; h < 3; h++)
+      for (const source of ["player", "marker"])
+        out.push({ round: 1, playerId: pid, hole: h,
+                   gross: tvC.holes[h].par - 1, source, at: 0 });
+    return out;
+  };
+
+  check("defaults follow the field: championship full, medal reduced, team quiet",
+    PF.defaultCoverage("championship") === "full" &&
+    PF.defaultCoverage("club") === "reduced" &&
+    PF.defaultCoverage("stableford") === "reduced" &&
+    PF.defaultCoverage("team") === "quiet");
+
+  check("full carries a streak", (() => {
+    const s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("full", streakRows("p1")) }, 130_000);
+    return s.queue.some((a) => a.kind === "streak");
+  })());
+  check("reduced does not", (() => {
+    const s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("reduced", streakRows("p1")) }, 130_000);
+    return !s.queue.some((a) => a.kind === "streak");
+  })());
+  check("reduced still carries an eagle", (() => {
+    const s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("reduced", eagleRows("p1", 0)) }, 130_000);
+    return s.queue.some((a) => a.kind === "eagle");
+  })());
+  check("reduced still carries an ace", (() => {
+    const aceHole = tvC.holes.findIndex((h) => h.par === 3);
+    const s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("reduced", pair("p1", aceHole, 1, 0)) }, 130_000);
+    return s.queue.some((a) => a.kind === "ace");
+  })());
+  check("reduced never blocks a correction from being acknowledged",
+    PR.allowedAt("retraction", "reduced") && PR.allowedAt("leaderboard-update", "reduced"));
+  check("quiet carries nothing at all",
+    !PR.allowedAt("ace", "quiet") && !PR.allowedAt("retraction", "quiet"));
+  check("what reduced skips does not pile up behind it", (() => {
+    let s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("reduced", streakRows("p1")) }, 130_000);
+    for (const t of [200_000, 300_000, 400_000])
+      s = PR.reduce(s, { type: "snapshot", snapshot: covSnap("reduced", streakRows("p1"), t) }, t);
+    return s.queue.length === 0;
+  })());
+  check("turning coverage up does not replay what reduced skipped", (() => {
+    let s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("reduced", streakRows("p1")) }, 130_000);
+    s = PR.reduce(s, { type: "snapshot", snapshot: covSnap("full", streakRows("p1"), 200_000) }, 200_000);
+    s = PR.reduce(s, { type: "tick" }, 200_000);
+    return s.mode === "leaderboard";
+  })());
+  check("features still run in reduced", (() => {
+    // reduced is about interruptions, not about the screen going blank
+    return PR.allowedAt("ace", "reduced") === true &&
+      PR.initialState({ coverage: "reduced" }).config.coverage === "reduced";
+  })());
+  check("the panel can move between all three levels", (() => {
+    const d = (id, level) => ({ id, kind: "coverage", payload: { level }, at: 1 });
+    let s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: { ...covSnap("full", []), decisions: [d(1, "reduced")] } }, 1000);
+    const a = s.config.coverage === "reduced";
+    s = PR.reduce(s, { type: "snapshot",
+      snapshot: { ...covSnap("full", [], 2000), decisions: [d(1, "reduced"), d(2, "quiet")] } }, 2000);
+    return a && s.config.coverage === "quiet";
+  })());
+}
+
+/* ------------------------------------------------------------------ */
+section("The hard cap");
+{
+  const CAP = PR.initialState({ cooldownMs: 0, spacingMs: 15_000, coverage: "full" });
+  const many = Array.from({ length: 6 }, (_, i) =>
+    ({ id: `c${i}`, name: `Cap ${i}`, clubId: "sigona", handicap: 6, gender: "M" }));
+  const par5s = tvC.holes.map((h, i) => [i, h.par]).filter(([, p]) => p === 5).map(([i]) => i);
+  const rows = [];
+  many.forEach((p, i) => {
+    const hole = par5s[i % par5s.length];
+    for (const source of ["player", "marker"])
+      rows.push({ round: 1, playerId: p.id, hole, gross: tvC.holes[hole].par - 2, source, at: 0 });
+  });
+  const capSnap = (at) => ({ ...snap(rows, at), players: many,
+    fieldByRound: { 1: many.map((p) => p.id) } });
+
+  let s = PR.reduce(CAP, { type: "snapshot", snapshot: capSnap(0) }, 1000);
+  check("six eagles all reach the queue", s.queue.length >= 6, String(s.queue.length));
+
+  // play them out over five minutes
+  let t = 1000;
+  let aired = 0;
+  for (let i = 0; i < 200; i++) {
+    const before = s.playing;
+    t += 1000;
+    s = PR.reduce(s, { type: "tick" }, t);
+    if (s.playing && s.playing !== before && s.playing.type === "announcement") aired++;
+    if (t > 1000 + 6 * 60_000) break;
+  }
+  check("no more than three go out in five minutes", aired <= 3, `aired ${aired}`);
+  check("at least fifteen seconds between any two", (() => {
+    const gaps = s.firedAt.slice().sort((a, b) => a - b);
+    return gaps.every((v, i) => i === 0 || v - gaps[i - 1] >= 15_000);
+  })());
+  check("what could not be shown is let go, not saved up", s.queue.length < 6,
+    String(s.queue.length));
+  check("and it is written down for the club to look over",
+    s.history.some((h) => h.kind === "skipped" && /too much at once/.test(h.text)),
+    JSON.stringify(s.history.slice(0, 3)));
+  check("a skipped moment is never quietly re-offered later", (() => {
+    const gone = s.history.filter((h) => h.kind === "skipped").length;
+    let x = s;
+    let u = t;
+    for (let i = 0; i < 60; i++) {
+      u += 10_000;
+      x = PR.reduce(x, { type: "snapshot", snapshot: capSnap(u) }, u);
+      x = PR.reduce(x, { type: "tick" }, u);
+    }
+    return gone > 0 && x.queue.length === 0;
+  })());
+  check("the window rolls: more may go out once it has passed", (() => {
+    let x = s;
+    let u = t;
+    // a fresh eagle, well after the busy window
+    const later = u + 10 * 60_000;
+    x = PR.reduce(x, { type: "snapshot",
+      snapshot: { ...capSnap(later), rows: [...rows, ...eagleRows("c0", later - 60_000)] } }, later);
+    x = PR.reduce(x, { type: "tick" }, later);
+    return x.mode === "announcement";
+  })());
+  check("the cap applies in full coverage too, not only reduced",
+    PR.RATE_MAX === 3 && PR.RATE_WINDOW_MS === 300_000);
+
+  check("an ace arriving in a saturated window is held back, never dropped", (() => {
+    /*
+     * The one thing the cap must never do. A club sees an ace once a year and
+     * a screen that threw one away because three birdies got there first would
+     * be unforgivable, so the biggest thing in the queue is kept while the
+     * window clears and everything below it is let go.
+     */
+    let x = PR.reduce(PR.initialState({ cooldownMs: 0, spacingMs: 15_000, coverage: "full" }),
+      { type: "snapshot", snapshot: capSnap(0) }, 1000);
+    let u = 1000;
+    for (let i = 0; i < 60; i++) { u += 1000; x = PR.reduce(x, { type: "tick" }, u); }
+    // the cap is now saturated; an ace lands
+    const aceHole = tvC.holes.findIndex((h) => h.par === 3);
+    x = PR.reduce(x, { type: "snapshot", snapshot: {
+      ...capSnap(u), rows: [...rows, ...pair("c5", aceHole, 1, u - 1000)] } }, u);
+    const queuedIt = x.queue.some((a) => a.kind === "ace");
+    // wind past the window and it goes out
+    for (let i = 0; i < 400 && x.playing?.item?.kind !== "ace"; i++) {
+      u += 1000;
+      x = PR.reduce(x, { type: "tick" }, u);
+    }
+    const aired = x.playing?.item?.kind === "ace";
+    const notSkipped = !x.history.some(
+      (h) => h.kind === "skipped" && /Hole-in-one/.test(h.text),
+    );
+    return queuedIt && aired && notSkipped;
+  })());
+}
+
+/* ------------------------------------------------------------------ */
+section("Sound");
+check("nothing makes a sound unless the club has asked",
+  PR.initialState().config.aceChime === false);
+check("and the only thing that can is a hole-in-one", (() => {
+  // the whole audio surface is one flag and one kind; this holds it there, so
+  // adding a second sound has to be a deliberate change with a test to update
+  const src = readFileSync(new URL("../app/tournament/[id]/tv/page.tsx", import.meta.url), "utf8");
+  const calls = src.match(/playChime\(\)/g) ?? [];
+  return calls.length === 1 && /kind === "ace"/.test(src) && /config\.aceChime/.test(src);
+})());
 
 /* ------------------------------------------------------------------ */
 console.log(

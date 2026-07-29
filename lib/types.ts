@@ -233,6 +233,12 @@ export interface Tournament {
    * the round; this is what it starts as.
    */
   tvQuiet?: boolean;
+  /**
+   * How much the clubhouse screen says: everything, the big moments only, or
+   * the board alone. Defaults from the field profile when unset, and the
+   * producer panel can change it during the round.
+   */
+  tvCoverage?: "full" | "reduced" | "quiet";
   registered?: boolean; // demo user is registered
   result?: { winner: string; score: string; userPosition?: number; userScore?: string };
 }

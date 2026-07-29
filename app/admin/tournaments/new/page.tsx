@@ -20,8 +20,15 @@ import { Switch } from "@/components/ui/switch";
 import { COURSES, clubById, courseById } from "@/lib/data";
 import { IS_PILOT, WIRED_FORMATS } from "@/lib/mode";
 import { createTournament, updateTournament, useSim } from "@/lib/sim/store";
-import { detectProfile, PROFILE_HELP, PROFILE_LABEL } from "@/lib/tv/profile";
-import type { FieldProfile } from "@/lib/tv/types";
+import {
+  COVERAGE_HELP,
+  COVERAGE_LABEL,
+  defaultCoverage,
+  detectProfile,
+  PROFILE_HELP,
+  PROFILE_LABEL,
+} from "@/lib/tv/profile";
+import type { Coverage, FieldProfile } from "@/lib/tv/types";
 import { makeRound, roundsOf, withRoundsSynced } from "@/lib/rounds";
 import {
   defaultRegClosesAt,
@@ -97,6 +104,8 @@ interface Draft {
   allowance: number;
   /** how TV mode should talk about this field; null means follow the guess */
   fieldProfile: FieldProfile | null;
+  /** how much the clubhouse screen says; null means follow the field */
+  tvCoverage: Coverage | null;
   countback: string;
   correctionWindowMin: number;
   prizes: { place: string; prize: string }[];
@@ -128,6 +137,7 @@ const INITIAL: Draft = {
   regClosesAt: defaultRegClosesAt("2026-08-22"),
   allowance: 95,
   fieldProfile: null,
+  tvCoverage: null,
   countback: "Back 9, then back 6, then back 3",
   correctionWindowMin: 15,
   prizes: [
@@ -164,6 +174,7 @@ function draftFromTournament(t: Tournament): Draft {
     regClosesAt: t.regClosesAt ?? defaultRegClosesAt(roundsOf(t)[0].date),
     allowance: t.handicapAllowance,
     fieldProfile: t.fieldProfile ?? null,
+    tvCoverage: t.tvCoverage ?? null,
     countback: INITIAL.countback,
     correctionWindowMin: t.correctionWindowMin ?? 15,
     prizes: t.prizes.map((p) => ({ place: p.place, prize: p.prize })),
@@ -505,6 +516,7 @@ function CreateTournamentInner() {
       regClosesAt: draft.regClosesAt,
       handicapAllowance: draft.allowance,
       fieldProfile: draft.fieldProfile ?? guess.profile,
+      tvCoverage: draft.tvCoverage ?? defaultCoverage(draft.fieldProfile ?? guess.profile),
       firstTee: editing?.firstTee ?? "07:30",
       teeInterval: editing?.teeInterval ?? 10,
       fieldSize: editing?.fieldSize ?? 0,
@@ -1131,6 +1143,39 @@ function CreateTournamentInner() {
                   </Select>
                   <p className="mt-1.5 text-[12px] text-muted-foreground">
                     {PROFILE_HELP[draft.fieldProfile ?? guess.profile]}
+                  </p>
+                </Field>
+                <Field
+                  label="How much the screen says"
+                  hint="The clubhouse television. Changeable during the round from the TV producer panel."
+                >
+                  <Select
+                    value={draft.tvCoverage ?? "auto"}
+                    onValueChange={(v) =>
+                      set("tvCoverage", v === "auto" ? null : (v as Coverage))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">
+                        {`Suggested — ${COVERAGE_LABEL[defaultCoverage(draft.fieldProfile ?? guess.profile)]}`}
+                      </SelectItem>
+                      {(["full", "reduced", "quiet"] as Coverage[]).map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {COVERAGE_LABEL[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1.5 text-[12px] text-muted-foreground">
+                    {
+                      COVERAGE_HELP[
+                        draft.tvCoverage ??
+                          defaultCoverage(draft.fieldProfile ?? guess.profile)
+                      ]
+                    }
                   </p>
                 </Field>
                 <Field label="Count-back rule (ties)">

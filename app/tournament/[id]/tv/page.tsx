@@ -68,7 +68,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
    */
   const soundingId = producer.playing?.type === "announcement" &&
     producer.playing.item.kind === "ace" &&
-    producer.config.chime
+    producer.config.aceChime
       ? producer.playing.item.id
       : null;
   useEffect(() => {

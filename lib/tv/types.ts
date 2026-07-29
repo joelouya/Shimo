@@ -42,6 +42,17 @@ export interface ScoreRow {
  */
 export type FieldProfile = "championship" | "club" | "stableford" | "team";
 
+/**
+ * How much the screen says.
+ *
+ * Three settings rather than on and off, because "some" is what most club
+ * golf actually wants. A championship field can carry a busy screen; a
+ * Saturday medal wants the big moments and the board; a corporate day wants
+ * to be left alone. Feature interludes still run in reduced — they are not
+ * interruptions, they are what the screen does instead of interrupting.
+ */
+export type Coverage = "full" | "reduced" | "quiet";
+
 /** A club's stored record for one course off one set of tees. */
 export interface CourseRecord {
   courseId: string;
@@ -60,7 +71,16 @@ export interface CourseRecord {
  */
 export interface TvDecision {
   id: number;
-  kind: "approve" | "reject" | "cancel" | "quiet" | "retract" | "test" | "skip";
+  kind:
+    | "approve"
+    | "reject"
+    | "cancel"
+    /** payload: { level: Coverage }. "quiet" is the older two-state form. */
+    | "coverage"
+    | "quiet"
+    | "retract"
+    | "test"
+    | "skip";
   /** the fact decided about, for approve, reject and cancel */
   factKey?: string;
   payload?: Record<string, string | number | boolean>;
@@ -178,10 +198,15 @@ export interface ProducerConfig {
   featureEveryMs: number;
   /** an ace above this handicap waits for admin approval */
   aceApprovalHandicap: number;
-  /** sound a soft chime on a hole-in-one, through the television */
-  chime: boolean;
-  /** no announcements, no features: the board alone */
-  quiet: boolean;
+  /**
+   * Sound a soft chime on a hole-in-one, and only on a hole-in-one.
+   * Off unless a club asks for it. Nothing else in Shimo makes a sound: an
+   * ace is rare enough to earn one, and a screen that pings all afternoon is
+   * a screen someone turns off.
+   */
+  aceChime: boolean;
+  /** how much the screen says */
+  coverage: Coverage;
   profile: FieldProfile;
   /** club-written lines to fold into the feature rotation */
   messages: string[];
@@ -192,15 +217,15 @@ export const DEFAULT_CONFIG: ProducerConfig = {
   spacingMs: 15_000,
   featureEveryMs: 90_000,
   aceApprovalHandicap: 20,
-  chime: false,
-  quiet: false,
+  aceChime: false,
+  coverage: "reduced",
   profile: "club",
   messages: [],
 };
 
 export interface HistoryEntry {
   at: number;
-  kind: AnnouncementKind | FeatureKind | "quiet-on" | "quiet-off";
+  kind: AnnouncementKind | FeatureKind | "coverage" | "skipped";
   text: string;
 }
 
@@ -225,6 +250,12 @@ export interface ProducerState {
   recentSubjects: string[];
   /** earliest the next announcement may start */
   nextSlotAt: number;
+  /**
+   * When each recent announcement went out, so the hard cap can be applied.
+   * A screen that fires eight times in four minutes is a screen a room stops
+   * looking at, however true each one was.
+   */
+  firedAt: number[];
   /** when the next feature interlude is due */
   nextFeatureAt: number;
   /** how many features have been shown, so the rotation advances */

@@ -26,8 +26,11 @@ import type { Course } from "@/lib/types";
 import { isNetFirst, momentsForBoard, momentsForCard, type Moment } from "./detect";
 import { settledHoles, type SettledHole } from "./trust";
 import { nextFeature } from "./features";
+import { defaultCoverage } from "./profile";
 import type {
   Announcement,
+  AnnouncementKind,
+  Coverage,
   HistoryEntry,
   ProducerConfig,
   ProducerState,
@@ -73,6 +76,49 @@ export const DURATION: Record<string, number> = {
   retraction: 6_000,
 };
 
+/**
+ * What still goes out when a club has asked for less.
+ *
+ * The test is whether a member would want to be interrupted for it. An ace or
+ * a course record, yes, once a decade. A streak of three net pars, no, not
+ * fifteen times an afternoon.
+ *
+ * Corrections are in the list because they are not celebrations: a screen that
+ * has said something and needs to update it must be able to, whatever the club
+ * has set. Refusing to correct in reduced mode would be the one silence that
+ * actually costs the club something.
+ */
+const REDUCED: ReadonlySet<AnnouncementKind> = new Set<AnnouncementKind>([
+  "ace",
+  "course-record",
+  "eagle",
+  // a net-first field's eagle is a net eagle; dropping it would leave the
+  // reduced tier at a club medal with almost nothing in it, and would drop
+  // exactly the moments that belong to the people watching
+  "net-eagle",
+  "lead-change",
+  "retraction",
+  "leaderboard-update",
+]);
+
+/** Whether this kind may go out at the club's chosen level. */
+export function allowedAt(kind: AnnouncementKind, coverage: Coverage) {
+  if (coverage === "quiet") return false;
+  if (coverage === "full") return true;
+  return REDUCED.has(kind);
+}
+
+/* ------------------------------------------------------------------ *
+ * The hard cap.
+ *
+ * Three in any five minutes, whatever the triggers, on top of everything
+ * else. Every gate before this one asks whether a moment is true and worth
+ * saying; this one asks how much a room can be interrupted before it stops
+ * looking, and the answer does not depend on how good the golf is.
+ * ------------------------------------------------------------------ */
+export const RATE_WINDOW_MS = 5 * 60_000;
+export const RATE_MAX = 3;
+
 export type ProducerEvent =
   | { type: "snapshot"; snapshot: TvSnapshot }
   | { type: "tick" }
@@ -93,6 +139,7 @@ export function initialState(config?: Partial<ProducerConfig>): ProducerState {
     announced: [],
     recentSubjects: [],
     nextSlotAt: 0,
+    firedAt: [],
     nextFeatureAt: 0,
     featureTurn: 0,
     history: [],
@@ -334,13 +381,16 @@ export function reduce(
     case "config": {
       const config = { ...state.config, ...event.patch };
       let next = { ...state, config };
-      if (event.patch.quiet !== undefined && event.patch.quiet !== state.config.quiet) {
+      if (
+        event.patch.coverage !== undefined &&
+        event.patch.coverage !== state.config.coverage
+      ) {
         next = {
           ...next,
           history: note(state, {
             at: now,
-            kind: event.patch.quiet ? "quiet-on" : "quiet-off",
-            text: event.patch.quiet ? "Quiet mode on" : "Quiet mode off",
+            kind: "coverage",
+            text: `Coverage set to ${event.patch.coverage}`,
           }),
         };
         /*
@@ -350,7 +400,14 @@ export function reduce(
          * opposite of what they asked for. Anything still true will be found
          * again on the next snapshot.
          */
-        if (event.patch.quiet) next = { ...next, queue: [], mode: "leaderboard", playing: null };
+        if (event.patch.coverage === "quiet")
+          next = { ...next, queue: [], mode: "leaderboard", playing: null };
+        else if (event.patch.coverage === "reduced")
+          // dropping to reduced also drops what reduced would not have said
+          next = {
+            ...next,
+            queue: next.queue.filter((a) => allowedAt(a.kind, "reduced")),
+          };
       }
       return next;
     }
@@ -482,10 +539,19 @@ function applyDecisions(
         }
         break;
       }
-      case "quiet":
+      case "coverage":
         next = reduce(
           next,
-          { type: "config", patch: { quiet: Boolean(d.payload?.on) } },
+          { type: "config", patch: { coverage: d.payload?.level as Coverage } },
+          now,
+        );
+        break;
+      case "quiet":
+        // the older two-state form, kept so a decision written before the
+        // third tier existed still means what it meant when it was made
+        next = reduce(
+          next,
+          { type: "config", patch: { coverage: d.payload?.on ? "quiet" : "full" } },
           now,
         );
         break;
@@ -526,13 +592,16 @@ function onSnapshot(
    * now, so a decision always wins over the tournament's default; the default
    * only applies until someone has said otherwise.
    */
-  const decided = (snapshot.decisions ?? []).some((d) => d.kind === "quiet");
-  const quiet = decided
-    ? withDecisions.config.quiet
-    : Boolean(snapshot.tournament.tvQuiet);
+  const decided = (snapshot.decisions ?? []).some(
+    (d) => d.kind === "coverage" || d.kind === "quiet",
+  );
+  const coverage: Coverage = decided
+    ? withDecisions.config.coverage
+    : (snapshot.tournament.tvCoverage ??
+      (snapshot.tournament.tvQuiet ? "quiet" : defaultCoverage(profile)));
   const state = {
     ...withDecisions,
-    config: { ...withDecisions.config, profile, messages, quiet },
+    config: { ...withDecisions.config, profile, messages, coverage },
   };
   const cfg = state.config;
   const settled = settledHoles(snapshot.rows ?? [], snapshot.published ?? {}, cfg, now);
@@ -601,7 +670,7 @@ function onSnapshot(
    * The room is not interrupted now and is not interrupted retrospectively
    * later; only what happens after the switch goes back is announced.
    */
-  if (cfg.quiet) {
+  if (cfg.coverage === "quiet") {
     return {
       ...state,
       announced: [...state.announced, ...fresh.map((m) => m.factKey)],
@@ -630,7 +699,18 @@ function onSnapshot(
   const queue = state.queue.filter(stillTrue);
   const pending = state.pending.filter(stillTrue);
 
+  /*
+   * Kinds this tier does not carry are consumed rather than collected, the
+   * same way quiet consumes everything. A club that moves from reduced to full
+   * at four o'clock wants the rest of the afternoon covered fully, not the
+   * morning replayed at them.
+   */
+  const skipped: string[] = [];
   for (const m of fresh) {
+    if (!allowedAt(m.kind, cfg.coverage)) {
+      skipped.push(m.factKey);
+      continue;
+    }
     const a = dress(m, snapshot, now);
     if (!a) continue;
     if (a.holdReason) pending.push(a);
@@ -668,6 +748,9 @@ function onSnapshot(
 
   return {
     ...state,
+    announced: skipped.length
+      ? [...state.announced, ...skipped]
+      : state.announced,
     queue: [...queue, ...update],
     pending,
     materialShown: state.materialShown.filter((k) => trueNow.has(k)),
@@ -694,7 +777,49 @@ function onTick(state: ProducerState, now: number): ProducerState {
     };
   }
 
-  if (cfg.quiet) return state.mode === "leaderboard" ? state : { ...state, mode: "leaderboard" };
+  if (cfg.coverage === "quiet")
+    return state.mode === "leaderboard" ? state : { ...state, mode: "leaderboard" };
+
+  /*
+   * The hard cap, applied before anything else about the queue is considered.
+   * Three in five minutes however good the golf is: past that a room stops
+   * looking up, and a screen nobody looks up at is worse than a quiet one.
+   */
+  const fired = state.firedAt.filter((t) => t > now - RATE_WINDOW_MS);
+  if (fired.length >= RATE_MAX) {
+    /*
+     * The cap is reached, so the rest of this burst is let go rather than
+     * saved up. Deferring instead would mean a busy two o'clock playing itself
+     * out at half past, to a room that had stopped caring an hour before, and
+     * the whole point of a cap is that the screen covers a few things well
+     * rather than everything late.
+     *
+     * The single highest-priority item is kept back rather than dropped. It
+     * will go out when the window rolls. Without that exception a
+     * hole-in-one arriving in a busy five minutes would be silently thrown
+     * away, which is the one thing this feature exists to never do.
+     */
+    const [keep, ...losers] = ordered(state.queue, state);
+    if (losers.length) {
+      return {
+        ...state,
+        firedAt: fired,
+        queue: keep ? [keep] : [],
+        announced: [...state.announced, ...losers.map((a) => a.factKey)],
+        history: [
+          ...losers.map((a) => ({
+            at: now,
+            kind: "skipped" as const,
+            text: `Skipped, too much at once: ${a.headline} — ${a.subject}`,
+          })),
+          ...state.history,
+        ].slice(0, 60),
+      };
+    }
+    return fired.length === state.firedAt.length
+      ? state
+      : { ...state, firedAt: fired };
+  }
 
   // An announcement, if one is due and the room has had a moment of board.
   if (state.queue.length && now >= state.nextSlotAt) {
@@ -703,6 +828,7 @@ function onTick(state: ProducerState, now: number): ProducerState {
       const remaining = state.queue.filter((a) => a.id !== next.id);
       return {
         ...state,
+        firedAt: [...fired, now],
         mode: "announcement",
         playing: { type: "announcement", item: next, until: now + next.durationMs },
         queue: remaining,
