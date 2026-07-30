@@ -75,6 +75,19 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-fraunces), Georgia, "Times New Roman", serif;
 
+  /* ---- corners -----------------------------------------------------
+   *
+   * Three tiers, by what the thing is rather than by how big it is:
+   *
+   *   full   pills, badges, avatars, dots, anything round on purpose
+   *   2xl    surfaces you put things on: cards, panels, dialogs, sheets
+   *   lg/xl  controls you touch: buttons, inputs, selects, switches
+   *          (xl only at the large size, where lg reads as too tight)
+   *
+   * The tiers exist so a control never looks like a surface. Mixing them
+   * arbitrarily is the thing that makes an interface read as assembled rather
+   * than designed, and it is invisible one component at a time.
+   * ------------------------------------------------------------------ */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -83,6 +96,34 @@
   --shadow-card: 0 1px 2px rgb(26 35 50 / 0.04), 0 6px 20px rgb(26 35 50 / 0.06);
   --shadow-lift: 0 2px 4px rgb(26 35 50 / 0.06), 0 12px 32px rgb(26 35 50 / 0.1);
   --shadow-pane: 0 1px 0 rgb(26 35 50 / 0.03), 0 16px 48px rgb(26 35 50 / 0.08);
+
+  /* ---- motion ----------------------------------------------------- *
+   *
+   * Four curves and four durations, used everywhere. The browser's own
+   * easings are too weak to read as deliberate: `ease-out` flattens almost
+   * immediately, so a 200ms transition using it looks like a 200ms transition
+   * using nothing. These arrive fast and settle slowly, which is what makes
+   * an interface feel like it is answering rather than catching up.
+   *
+   * `ease-in` is not in the list on purpose. It starts slow, and the start is
+   * the exact moment the hand is still on the control and the eye is still on
+   * the target. Anything entering or responding uses `--ease-out`.
+   * ------------------------------------------------------------------ */
+
+  /* entering, responding, anything the user just caused */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* moving from one place on screen to another */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* sheets and drawers, borrowed from iOS by way of Ionic */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Durations, by how much the thing being moved weighs.
+     Nothing in the product UI goes over 250ms: past that the interface is
+     narrating itself instead of answering. */
+  --dur-press: 120ms;   /* a control acknowledging a finger */
+  --dur-hover: 160ms;   /* colour and surface changes */
+  --dur-enter: 200ms;   /* menus, popovers, tooltips */
+  --dur-sheet: 260ms;   /* dialogs and drawers, which have further to travel */
 
   --animate-live-pulse: live-pulse 2.2s ease-in-out infinite;
   --animate-marquee-in: marquee-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -106,15 +147,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes score-flash {
-  0% {
-    background-color: rgb(184 74 46 / 0.16);
-  }
-  100% {
-    background-color: transparent;
   }
 }
 
@@ -157,10 +189,6 @@ body {
 
 .tnum {
   font-variant-numeric: tabular-nums lining-nums;
-}
-
-.score-flash {
-  animation: score-flash 1.4s ease-out both;
 }
 
 /* thin warm scrollbars */
@@ -336,4 +364,39 @@ body {
     animation-delay: 0ms;
   }
   .tv-fleck { display: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Reduced motion, globally.
+ *
+ * Reduced does not mean none. Someone who has asked for less motion still
+ * needs to see that a menu opened and that a button heard them, so opacity
+ * and colour keep working; what goes is travel. Movement is the part that
+ * causes trouble, not the part that carries the meaning.
+ *
+ * Written once here rather than guarded at each of the three dozen call
+ * sites, because the one that gets forgotten is the one that makes somebody
+ * ill. Anything genuinely needing different treatment can still opt out with
+ * its own query.
+ * ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* keep it perceptible, remove the journey */
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Opacity is the one thing worth still animating: it is how the interface
+     says something arrived, and it moves nothing. */
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"],
+  [data-slot="select-content"] {
+    transition-duration: var(--dur-hover) !important;
+    transition-property: opacity !important;
+  }
 }

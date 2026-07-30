@@ -86,12 +86,10 @@ function ScoreCell({
   gross,
   par,
   dim,
-  flash,
 }: {
   gross: number | null;
   par: number;
   dim?: boolean;
-  flash?: boolean;
 }) {
   if (gross == null)
     return <span className="text-muted-foreground/40">·</span>;
@@ -106,7 +104,6 @@ function ScoreCell({
         d >= 2 && "rounded-sm border-2 border-stone/60 text-ink-soft",
         d === 0 && "text-foreground",
         dim && "opacity-60",
-        flash && "score-flash rounded-md",
       )}
     >
       {gross}

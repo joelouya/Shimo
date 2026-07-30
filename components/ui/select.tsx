@@ -47,7 +47,17 @@ function SelectContent({
         data-slot="select-content"
         className={cn(
           "relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] overflow-y-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-lift",
+          /*
+           * Grows from the control that opened it, not from its own middle.
+           * Radix measures where the trigger is and hands the origin over; the
+           * default of `center` makes a menu look like it arrived from
+           * somewhere else on the page. Nobody points at this, and everybody
+           * would notice a hundred menus doing the wrong thing.
+           */
+          "origin-(--radix-select-content-transform-origin)",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          "duration-[var(--dur-enter)] ease-[var(--ease-out)]",
           position === "popper" && "translate-y-1",
           className,
         )}

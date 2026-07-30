@@ -21,6 +21,7 @@ function DialogOverlay({
       className={cn(
         "fixed inset-0 z-50 bg-ink/35 backdrop-blur-[2px]",
         "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+        "duration-[var(--dur-sheet)] ease-[var(--ease-out)]",
         className,
       )}
       {...props}
@@ -42,8 +43,14 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-5 rounded-2xl bg-card p-6 shadow-pane duration-200 sm:max-w-lg",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-5 rounded-2xl bg-card p-6 shadow-pane sm:max-w-lg",
+          /*
+           * A dialog keeps a centred origin, unlike a menu. It is not anchored
+           * to anything on the page, so growing it out of a corner would be
+           * inventing a relationship that is not there.
+           */
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          "duration-[var(--dur-sheet)] ease-[var(--ease-out)]",
           className,
         )}
         {...props}

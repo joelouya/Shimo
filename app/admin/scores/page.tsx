@@ -63,8 +63,19 @@ const Cell = memo(function Cell({
     const gross = Number.isFinite(n) && n >= 1 && n <= 15 ? n : null;
     if (gross !== value) {
       setBulkScore(pid, holeIdx, gross);
+      /*
+       * The desk types eighteen numbers per player, forty players a day. This
+       * is the most-repeated action in Shimo by an order of magnitude, so the
+       * acknowledgement has to be the quietest thing in the app: on the instant
+       * the value commits, then gone.
+       *
+       * It cannot be removed altogether. The cell saves on blur, so without a
+       * mark the operator has no way of knowing the number took, and they are
+       * looking at the paper card rather than the screen. Instant on, quick
+       * fade off: the system answering, not the interface performing.
+       */
       setFlash(true);
-      setTimeout(() => setFlash(false), 800);
+      setTimeout(() => setFlash(false), 420);
     }
   };
 
@@ -107,7 +118,10 @@ const Cell = memo(function Cell({
         "focus:border-clay focus:ring-2 focus:ring-clay/25",
         value != null && d < 0 && "text-clay-deep",
         value != null && d > 1 && "text-stone",
-        flash && "border-clay/60 bg-clay-wash/60",
+        // no transition on the way in, 300ms on the way out: an acknowledgement
+        // should appear the moment it is earned and leave without being watched
+        "transition-[background-color,border-color] duration-300 ease-[var(--ease-out)]",
+        flash && "border-clay/60 bg-clay-wash/60 duration-0",
       )}
     />
   );
