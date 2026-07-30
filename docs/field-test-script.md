@@ -281,6 +281,84 @@ The safety net if a phone dies mid-round.
 
 ---
 
+## Part 3b — The clubhouse screen
+
+TV mode is the one part of Shimo that runs unattended for four hours in front
+of people who did not choose to look at it. Everything below has been proved
+in simulation; what a simulation cannot tell us is how it feels in the room
+and whether the club's own hardware can carry it.
+
+### 3b.1 Setup, before anyone tees off
+
+Open **Settings → The clubhouse screen** on the desk device:
+
+- [ ] Upload a background image of the course. Check the preview: scores must
+      stay readable over it
+- [ ] Add one message the room would actually want ("Prizegiving at 6pm")
+- [ ] Enter your course records, **per set of tees**
+- [ ] Confirm the coverage setting on the tournament. A medal should read
+      **Reduced**, a championship **Full**, a corporate day **Quiet**
+
+Then open `/tournament/<id>/tv` on the clubhouse television.
+
+| # | Step | PASS |
+|---|---|---|
+| T1 | Open the URL on the actual clubhouse screen | Board fills it, no scrollbars, nothing cut off at any edge |
+| T2 | Stand where a member would stand | Names and scores readable from the far end of the room. Note the distance: ______ |
+| T3 | Check the corners | Club crest bottom-left, sponsors along the foot, tournament name top-centre |
+| T4 | **TV producer** panel on the desk, tap **Test the screen** | A card appears within a few seconds |
+
+- [ ] **What is it running on?** ______________________ (Chromecast, smart TV
+      browser, laptop, stick). Record the model. This is the number that
+      matters most for the next section.
+
+### 3b.2 Through the round
+
+Leave it alone and watch it from time to time.
+
+| # | Step | PASS |
+|---|---|---|
+| T5 | Watch a full announcement | Type rises from below and settles. No stutter, no dropped frames, no tearing |
+| T6 | Watch the board scroll with a full field | Smooth and slow. Rows dissolve at the top and bottom rather than being cut |
+| T7 | Count announcements over any five minutes | **Never more than three.** If you see four, that is a real bug — record the time |
+| T8 | Time the gap between any two | Never under fifteen seconds |
+| T9 | Watch for a repeat | Nothing should ever be announced twice. Record it if it is |
+| T10 | Check the producer panel's history | Matches what you actually saw on screen |
+
+- [ ] Does the room look up when something fires? ______
+- [ ] Does anything feel like it fires too often? ______
+- [ ] Anything you expected to be announced that was not? ______
+
+### 3b.3 Deliberate trouble
+
+Do these on purpose. This is the part that matters.
+
+| # | Do this | Expected |
+|---|---|---|
+| T11 | **Pull the wifi** from the screen's device for two minutes | Board stays exactly as it was. A quiet **RECONNECTING** appears top-right after about a minute. **Never blank, never an error, never "no such tournament"** |
+| T12 | Restore the wifi | Indicator clears on its own within about twenty seconds. No reload needed |
+| T13 | Have a player enter a wrong score, then correct it inside two minutes | Nothing about it ever appears on screen |
+| T14 | Have a player and marker enter **different** scores and leave them | Nothing about that hole is announced while they disagree |
+| T15 | Enter an eagle for a high handicapper at the desk | Does **not** go to air. Appears in the producer panel as held, with a reason |
+| T16 | Approve it in the panel | It reaches the screen shortly after |
+| T17 | Enter another and **reject** it | Never appears, and does not come back |
+| T18 | Switch coverage to **Quiet** mid-round | Announcements stop at once, board carries on, interludes stop |
+| T19 | Switch back to **Reduced** | Nothing from the quiet period replays. New moments announce normally |
+| T20 | Publish a desk card that beats a stored course record | The panel asks whether to update the record. Nothing goes on screen unless you approve it |
+
+- [ ] T11 in particular: describe exactly what the screen showed while
+      offline: ______________________
+
+### 3b.4 After the last card
+
+- [ ] Screen moves to the closing rotation on its own: champion, final board,
+      sponsor thanks, congratulations
+- [ ] Leave it running through prizegiving. Still looks right an hour later?
+      ______
+- [ ] Anything on screen that is wrong, stale, or embarrassing at that point?
+
+---
+
 ## Part 4 — Ergonomics
 
 Note these as you go. They matter more than any feature.
@@ -289,6 +367,8 @@ Note these as you go. They matter more than any feature.
 - [ ] Score pad tappable **one-handed**, walking?
 - [ ] Any mis-taps between adjacent score buttons?
 - [ ] Onboarding transitions: smooth, or stuttering? ______
+- [ ] Clubhouse screen: any stutter in the announcements or the board scroll,
+      on the device it will actually run on? ______
 - [ ] Battery used across 18 holes, per phone: ______ %
 - [ ] Did any phone lose its session and ask someone to sign in again
       mid-round? **That would be serious.**

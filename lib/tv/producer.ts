@@ -695,14 +695,24 @@ function onSnapshot(
       round: snapshot.round,
       at: now,
     }),
-    ...momentsForTie({
-      before: state.boardBefore ?? [],
-      after,
-      nameOf,
-      round: snapshot.round,
-      at: now,
-    }),
   );
+
+  /*
+   * A lead change and a tie breaking are the same event seen from two sides:
+   * one player has gone clear at the top. Announced together they read as the
+   * screen saying the same thing twice in a row about the same person, which
+   * the simulation showed happening within seconds. The lead change is the
+   * better telling of it, so the tie only speaks when the lead did not.
+   */
+  const ties = momentsForTie({
+    before: state.boardBefore ?? [],
+    after,
+    nameOf,
+    round: snapshot.round,
+    at: now,
+  });
+  const leadChanged = found.some((m) => m.kind === "lead-change");
+  found.push(...ties.filter((m) => !(leadChanged && m.data?.broken)));
 
   /*
    * The cut, if this is the round one applies after. Read from the full board

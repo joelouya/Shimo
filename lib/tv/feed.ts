@@ -82,7 +82,22 @@ export function useTvFeed(tournamentId: string): TvFeed {
             .order("id", { ascending: true }),
         ]);
         if (cancelled) return;
+
+        /*
+         * A read that failed is not a tournament that does not exist.
+         *
+         * supabase-js reports a dropped connection as an error on the result
+         * rather than by throwing, so without this the next line read "no row
+         * came back" and put "No such tournament" on the screen the moment the
+         * clubhouse wifi blinked. Found by pulling the network out from under
+         * a running screen, which is the only way this ever shows up.
+         */
+        if (t.error) throw t.error;
+
         if (!t.data) {
+          // and even a genuine absence does not wipe a screen that was working:
+          // a tournament does not stop existing halfway through an afternoon
+          if (held.current) return;
           setFeed((f) => ({ ...f, status: "not-found" }));
           return;
         }

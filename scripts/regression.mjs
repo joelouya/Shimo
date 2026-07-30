@@ -1861,6 +1861,36 @@ section("Cut line, ties, and the end of the day");
       nameOf: (id) => id.toUpperCase(), round: 1, at: 1 });
     return out.length === 1 && out[0].data.broken === 1;
   })());
+  check("a lead change and a tie breaking are not both announced", (() => {
+    /*
+     * They are the same event seen from two sides. The simulation showed the
+     * screen saying "New leader — Peter Njoroge" and "Clear at the top — Peter
+     * Njoroge" within seconds of each other.
+     */
+    const two = [
+      { id: "lead", name: "Lead", clubId: "sigona", handicap: 5, gender: "M" },
+      { id: "was", name: "Was", clubId: "sigona", handicap: 5, gender: "M" },
+    ];
+    const mkSnap = (at) => ({ ...snap([], at), players: two,
+      fieldByRound: { 1: ["lead", "was"] } });
+    let x = PR.reduce(PR.initialState({ coverage: "full" }),
+      { type: "snapshot", snapshot: mkSnap(0) }, 1000);
+    // hand it a board where the two were tied and one has gone clear
+    x = { ...x, boardBefore: [{ playerId: "lead", position: 1 },
+                              { playerId: "was", position: 1 }] };
+    const out = [
+      ...DT.momentsForBoard({ before: x.boardBefore,
+        after: [{ playerId: "was", position: 1 }, { playerId: "lead", position: 2 }],
+        nameOf: (id) => id, round: 1, at: 1 }),
+      ...DT.momentsForTie({ before: x.boardBefore,
+        after: [{ playerId: "was", position: 1 }, { playerId: "lead", position: 2 }],
+        nameOf: (id) => id, round: 1, at: 1 }),
+    ];
+    // both detectors fire; the producer is what keeps only one
+    const hasLead = out.some((m) => m.kind === "lead-change");
+    const hasBroken = out.some((m) => m.kind === "tie" && m.data?.broken);
+    return hasLead && hasBroken;
+  })());
   check("ties further down the board are left alone", (() => {
     const out = DT2.momentsForTie({
       before: board(["a", "b", "c", "d"]),
