@@ -292,13 +292,12 @@ const BoardRow = memo(
           <span className="text-center text-[13px] text-muted-foreground tnum">
             {r.thru >= 18 ? "F" : r.thru === 0 ? "·" : r.thru}
           </span>
-          <motion.span
+          <span
+            /* the key remounts the element when the figure changes, which is
+               what replays the flash; see .score-changed in globals.css */
             key={fmtScore(r, mode)}
-            initial={{ backgroundColor: "rgba(184,74,46,0.22)" }}
-            animate={{ backgroundColor: "rgba(184,74,46,0)" }}
-            transition={{ duration: 1.4 }}
             className={cn(
-              "mx-auto rounded-md px-1.5 text-center font-serif text-[17px] tnum",
+              "score-changed mx-auto rounded-md px-1.5 text-center font-serif text-[17px] tnum",
               mode !== "points" &&
                 (mode === "net" ? r.netToPar : r.grossToPar) < 0
                 ? "text-clay-deep"
@@ -306,7 +305,7 @@ const BoardRow = memo(
             )}
           >
             {fmtScore(r, mode)}
-          </motion.span>
+          </span>
           <span className="text-center text-[12.5px] text-muted-foreground tnum">
             {fmtGap(r, mode)}
           </span>

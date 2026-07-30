@@ -35,7 +35,15 @@ function Splash() {
     <motion.div
       key="splash"
       exit={{ opacity: 0, transition: { duration: 0.5, ease: "easeInOut" } }}
-      className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-background"
+      /*
+       * pointer-events-none, always. The splash is a logo and a line of text;
+       * it never needs a click. Without this its ability to stop blocking the
+       * app depends on a JavaScript exit animation completing and React then
+       * unmounting it, and if that ever does not happen the whole app is
+       * silently unusable behind a pane you cannot see. Costs nothing, removes
+       * the failure mode.
+       */
+      className="pointer-events-none fixed inset-0 z-[60] flex flex-col items-center justify-center bg-background"
     >
       <motion.div
         initial={{ opacity: 0, y: 10 }}

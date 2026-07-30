@@ -535,7 +535,7 @@ function DemoLiveScoring() {
       {!hidden && !attested && (
         <Link
           href="/app/leaderboard"
-          className="mt-4 flex items-center justify-between rounded-xl bg-card px-4 py-3 shadow-card transition-shadow hover:shadow-lift"
+          className="mt-4 flex items-center justify-between rounded-xl bg-card px-4 py-3 shadow-card transition-shadow duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:shadow-lift"
         >
           <div className="flex items-baseline gap-3">
             <span className="font-serif text-xl text-foreground tnum">

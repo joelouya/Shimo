@@ -42,7 +42,7 @@ export function TournamentCard({ t }: { t: Tournament }) {
   return (
     <Link
       href={`/app/tournaments/${t.id}`}
-      className="group block rounded-2xl bg-card p-4 shadow-card transition-shadow hover:shadow-lift"
+      className="group block rounded-2xl bg-card p-4 shadow-card transition-shadow duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:shadow-lift"
     >
       <ClubSurface clubId={t.clubId} className="flex items-start gap-4">
         <div className="relative flex w-11 shrink-0 flex-col items-center rounded-xl bg-secondary/70 py-2">

@@ -139,6 +139,24 @@
   }
 }
 
+/*
+ * A score has just changed on the board.
+ *
+ * CSS rather than a JavaScript animation: it is the same flash every time, and
+ * on a full board forty of these can be running at once. Framer was driving
+ * each one through React over 1.4s, which is both longer than a glance needs
+ * and more main-thread work than a leaderboard should be spending on
+ * decoration while scores are arriving.
+ */
+@keyframes score-changed {
+  from {
+    background-color: rgb(184 74 46 / 0.22);
+  }
+  to {
+    background-color: rgb(184 74 46 / 0);
+  }
+}
+
 @keyframes marquee-in {
   from {
     opacity: 0;
@@ -185,6 +203,10 @@ body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 560;
+}
+
+.score-changed {
+  animation: score-changed 900ms var(--ease-out) both;
 }
 
 .tnum {

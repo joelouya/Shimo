@@ -37,7 +37,7 @@ export default function LandingPage() {
       >
         <Link
           href="/app"
-          className="group rounded-2xl bg-card p-6 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift"
+          className="group rounded-2xl bg-card p-6 shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
         >
           <div className="flex size-11 items-center justify-center rounded-xl bg-clay-wash text-clay">
             <Smartphone className="size-5" />
@@ -59,7 +59,7 @@ export default function LandingPage() {
 
         <Link
           href="/admin"
-          className="group rounded-2xl bg-primary p-6 text-primary-foreground shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift"
+          className="group rounded-2xl bg-primary p-6 text-primary-foreground shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
         >
           <div className="flex size-11 items-center justify-center rounded-xl bg-white/10 text-clay-wash">
             <MonitorSmartphone className="size-5" />
