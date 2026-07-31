@@ -7,9 +7,9 @@
  *   npm run tv:sim -- --log   print every decision as it is made
  *
  * The regression checks individual rules. This drives one producer instance
- * through an entire afternoon — forty players, mixed live and desk scoring,
+ * through an entire afternoon - forty players, mixed live and desk scoring,
  * corrections landing at every stage, an anomaly held and approved, coverage
- * changed mid-round — and then asserts things that can only be true of the
+ * changed mid-round - and then asserts things that can only be true of the
  * whole run: that every kind of moment appeared, that nothing was ever
  * announced twice, that nothing unsettled reached the screen, and that the cap
  * held from the first hole to the last.
@@ -295,7 +295,7 @@ for (let now = START; now <= END; now += STEP) {
         if (LOG)
           console.log(
             `    ${new Date(t).toISOString().slice(11, 16)}  ` +
-              `${state.playing.item.headline} — ${state.playing.item.subject}`,
+              `${state.playing.item.headline} - ${state.playing.item.subject}`,
           );
       } else {
         featureKinds.add(state.playing.item.kind);

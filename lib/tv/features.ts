@@ -395,7 +395,7 @@ function scoreLine(r: CumulativeRow, snapshot: TvSnapshot) {
   return toPar(netFirst ? r.netToPar : r.grossToPar);
 }
 
-/** "Tuesday, 28 July" — informative, and never a repeat of the header. */
+/** "Tuesday, 28 July" - informative, and never a repeat of the header. */
 function dayOf(snapshot: TvSnapshot) {
   const round = snapshot.tournament.rounds?.find((r) => r.number === snapshot.round);
   const iso = round?.date ?? snapshot.tournament.date;

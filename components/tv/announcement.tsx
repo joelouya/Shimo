@@ -54,7 +54,7 @@ export function TvAnnouncement({
       {ace ? <Flecks accent={accent} /> : null}
 
       {item.kind === "lead-change" && item.outgoing ? (
-        <div className="tv-yield mb-[1cqw] font-serif text-[3cqw] leading-none text-white/50 line-through decoration-white/30 decoration-[0.12cqw]">
+        <div className="tv-yield mb-[1cqw] font-serif text-[3cqw] leading-none text-cream/50 line-through decoration-cream/30 decoration-[0.12cqw]">
           {item.outgoing}
         </div>
       ) : null}
@@ -84,7 +84,7 @@ export function TvAnnouncement({
 
       {item.line ? (
         <Rise i={3} className="mt-[2cqw]">
-          <p className="text-[2cqw] text-white/60">{item.line}</p>
+          <p className="text-[2cqw] text-cream/60">{item.line}</p>
         </Rise>
       ) : null}
 
@@ -98,7 +98,7 @@ export function TvAnnouncement({
 
       {item.detail ? (
         <Rise i={4} className="mt-[1.2cqw]">
-          <p className="text-[1.5cqw] tracking-[0.16em] text-white/40">
+          <p className="text-[1.5cqw] tracking-[0.16em] text-cream/40">
             {item.detail}
           </p>
         </Rise>
@@ -106,7 +106,7 @@ export function TvAnnouncement({
 
       {item.presentedBy ? (
         <Rise i={5} className="mt-[3cqw]">
-          <p className="text-[1.1cqw] uppercase tracking-[0.3em] text-white/30">
+          <p className="text-[1.1cqw] uppercase tracking-[0.3em] text-cream/30">
             Presented by {item.presentedBy.name}
           </p>
         </Rise>

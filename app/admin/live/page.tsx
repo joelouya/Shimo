@@ -217,7 +217,7 @@ function GroupCard({ g, byId }: { g: SavedGroup; byId: Map<string, Player> }) {
             {lastEvent.hole}th · {timeAgo(lastEvent.ts)}
           </motion.p>
         ) : (
-          <p className="text-[10.5px] text-muted-foreground/60">
+          <p className="text-[10.5px] text-muted-foreground">
             {finished
               ? "Card in, awaiting certification"
               : thru > 0
@@ -235,8 +235,8 @@ function LeaderboardPanel({ isStableford }: { isStableford: boolean }) {
   return (
     <div className="overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-card">
       <div className="flex items-center justify-between px-4 pt-4 pb-2.5">
-        <p className="smallcaps text-primary-foreground/50">Leaderboard</p>
-        <p className="text-[10px] text-primary-foreground/40">
+        <p className="smallcaps text-primary-foreground/60">Leaderboard</p>
+        <p className="text-[10px] text-primary-foreground/60">
           {isStableford ? "Stableford pts" : "Net to par"}
         </p>
       </div>
@@ -246,8 +246,8 @@ function LeaderboardPanel({ isStableford }: { isStableford: boolean }) {
           key={r.player.id}
           transition={{ type: "spring", stiffness: 350, damping: 32 }}
           className={cn(
-            "flex items-center gap-2.5 border-t border-white/5 px-4 py-2",
-            r.player.id === DEMO_USER_ID && "bg-white/5",
+            "flex items-center gap-2.5 border-t border-cream/5 px-4 py-2",
+            r.player.id === DEMO_USER_ID && "bg-cream/5",
           )}
         >
           <span className="w-6 font-serif text-[13px] text-primary-foreground/70 tnum">
@@ -255,7 +255,7 @@ function LeaderboardPanel({ isStableford }: { isStableford: boolean }) {
             {r.position}
           </span>
           <span className="flex-1 truncate text-[12.5px]">{r.player.name}</span>
-          <span className="text-[10.5px] text-primary-foreground/40 tnum">
+          <span className="text-[10.5px] text-primary-foreground/60 tnum">
             {r.thru >= 18 ? "F" : r.thru || "·"}
           </span>
           <motion.span
@@ -305,7 +305,7 @@ function EventFeed({ byId }: { byId: Map<string, Player> }) {
                   </span>{" "}
                   · {p.name}, hole {e.hole}
                 </p>
-                <span className="shrink-0 text-[9.5px] text-muted-foreground/70">
+                <span className="shrink-0 text-[9.5px] text-muted-foreground">
                   {timeAgo(e.ts)}
                 </span>
               </motion.div>
@@ -327,7 +327,7 @@ export default function LiveOpsPage() {
   const [ending, setEnding] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   // deep link: /admin/live#certification opens the Committee tab. Read on the
-  // first render — this page only ever renders on the client, behind SimGate.
+  // first render - this page only ever renders on the client, behind SimGate.
   const [tab, setTab] = useState(() =>
     typeof window !== "undefined" && window.location.hash === "#certification"
       ? "certs"
@@ -340,7 +340,7 @@ export default function LiveOpsPage() {
   );
   const active = useActiveTournament();
 
-  // pilot mode never alerts pace flags during play — they live in
+  // pilot mode never alerts pace flags during play - they live in
   // Settings > Integrity instead
   const openFlags = flags.filter(
     (f) => f.status === "open" && (!IS_PILOT || f.kind !== "red"),
@@ -368,7 +368,7 @@ export default function LiveOpsPage() {
     return (
       <div>
         <p className="smallcaps text-clay">Live Ops</p>
-        <h1 className="mt-2 font-serif text-[32px] leading-tight text-foreground">
+        <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
           Nothing on the course today
         </h1>
         <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground">
@@ -394,7 +394,7 @@ export default function LiveOpsPage() {
               {active.roundInfo.firstTee}
             </p>
           </div>
-          <h1 className="mt-2 font-serif text-[32px] leading-tight text-foreground">
+          <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
             {active.tournament.name}
           </h1>
         </div>

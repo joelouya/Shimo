@@ -16,7 +16,7 @@ the margins; the numbers matter more than the ticks.
 
 ---
 
-## Part 1 — Setup
+## Part 1 - Setup
 
 Do all of this on wifi, the day before.
 
@@ -121,7 +121,7 @@ partner is a real bug: record the group order the desk saved.
 
 ---
 
-## Part 2 — Role flows
+## Part 2 - Role flows
 
 ### 2.1 Player
 
@@ -177,7 +177,7 @@ by the correct partner.
 
 ---
 
-## Part 3 — Edge cases to trigger deliberately
+## Part 3 - Edge cases to trigger deliberately
 
 These are the ones that break in the field. Do them on purpose.
 
@@ -281,7 +281,7 @@ The safety net if a phone dies mid-round.
 
 ---
 
-## Part 3b — The clubhouse screen
+## Part 3b - The clubhouse screen
 
 TV mode is the one part of Shimo that runs unattended for four hours in front
 of people who did not choose to look at it. Everything below has been proved
@@ -320,7 +320,7 @@ Leave it alone and watch it from time to time.
 |---|---|---|
 | T5 | Watch a full announcement | Type rises from below and settles. No stutter, no dropped frames, no tearing |
 | T6 | Watch the board scroll with a full field | Smooth and slow. Rows dissolve at the top and bottom rather than being cut |
-| T7 | Count announcements over any five minutes | **Never more than three.** If you see four, that is a real bug — record the time |
+| T7 | Count announcements over any five minutes | **Never more than three.** If you see four, that is a real bug - record the time |
 | T8 | Time the gap between any two | Never under fifteen seconds |
 | T9 | Watch for a repeat | Nothing should ever be announced twice. Record it if it is |
 | T10 | Check the producer panel's history | Matches what you actually saw on screen |
@@ -359,7 +359,7 @@ Do these on purpose. This is the part that matters.
 
 ---
 
-## Part 4 — Ergonomics
+## Part 4 - Ergonomics
 
 Note these as you go. They matter more than any feature.
 
@@ -376,7 +376,7 @@ Note these as you go. They matter more than any feature.
 
 ---
 
-## Part 5 — Not bugs
+## Part 5 - Not bugs
 
 Do not chase these.
 
@@ -398,7 +398,7 @@ Do not chase these.
 
 ---
 
-## Part 6 — Recording a problem
+## Part 6 - Recording a problem
 
 For anything that fails:
 
@@ -416,7 +416,7 @@ read the queued outbox.
 
 ---
 
-## Part 7 — After
+## Part 7 - After
 
 - [ ] Screenshot or print the prizegiving summary **before** clearing anything.
 - [ ] `truncate` the tables again if this was a rehearsal.

@@ -185,7 +185,7 @@ export default function TournamentSummaryPage({
             <p className="smallcaps text-[var(--club-accent,var(--clay))]">
               {isFinal ? "Final results" : "Provisional standings"} · Prizegiving
             </p>
-            <h1 className="mt-2 font-serif text-[38px] leading-tight text-foreground">
+            <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
               {t.name}
             </h1>
             <p className="mt-2 text-[15px] text-muted-foreground">
@@ -212,7 +212,7 @@ export default function TournamentSummaryPage({
           <div className="flex items-center gap-5 px-7 py-6">
             <Crown className="size-9 shrink-0 text-gold" />
             <div className="min-w-0 flex-1">
-              <p className="smallcaps text-primary-foreground/50">Champion</p>
+              <p className="smallcaps text-primary-foreground/60">Champion</p>
               <p className="mt-0.5 font-serif text-[30px] leading-tight">
                 {champion.player.name}
               </p>
@@ -225,7 +225,7 @@ export default function TournamentSummaryPage({
               <p className="font-serif text-[40px] leading-none tnum">
                 {mode === "points" ? champion.points : toPar(champion.netToPar)}
               </p>
-              <p className="smallcaps text-primary-foreground/50">
+              <p className="smallcaps text-primary-foreground/60">
                 {mode === "points" ? "points" : "net"}
               </p>
             </div>

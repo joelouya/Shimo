@@ -5,6 +5,20 @@
   /* ---- Shimo palette: warm editorial ---- */
   --background: #f7f3ec; /* cream */
   --foreground: #1a2332; /* deep navy ink */
+  /* Cream named in its own right, for the places where it is not the page:
+     a label on a terracotta button, text on the navy rail, a row on the
+     clubhouse screen. Those are cream on a dark ground, not white, and the
+     difference is the whole No-Black Rule. */
+  --cream: #f7f3ec;
+  /* The one dark surface in the system, used by the clubhouse screen. Was
+     repeated as a raw hex in three files before it had a name. */
+  --broadcast-ink: #101722;
+  /* Terracotta for a dark ground. The base clay is 3.47:1 on broadcast ink,
+     which is fine on an actual television (everything there is large text, so
+     the 3:1 threshold applies) and not fine anywhere it is rendered small.
+     This tint is 5.49:1, and it is the same colour a shade further up rather
+     than a second accent. */
+  --clay-lift: #d4744f;
   --card: #fcfaf5;
   --card-foreground: #1a2332;
   --popover: #fcfaf5;
@@ -14,7 +28,7 @@
   --secondary: #ece5d6; /* soft beige */
   --secondary-foreground: #1a2332;
   --muted: #efe9dd;
-  --muted-foreground: #6e6a5e; /* warm grey */
+  --muted-foreground: #69655a; /* warm grey; clears 4.5:1 on cream, card and sand alike */
   --accent: #f0e9db; /* quiet hover wash (menus, rows) */
   --accent-foreground: #1a2332;
   --destructive: #8e2a21;
@@ -25,13 +39,13 @@
   --radius: 0.75rem;
 
   /* brand extras */
-  --clay: #b84a2e; /* burnt terracotta — the accent */
+  --clay: #b84a2e; /* burnt terracotta - the accent */
   --clay-deep: #96371f;
   --clay-wash: #f1e0d8;
   --sand: #ece5d6;
-  --stone: #8b8578;
+  --stone: #736d61; /* 4.9:1 on card, still a step lighter than warm grey */
   --ink-soft: #414b5e;
-  --amber-flag: #a97a1e;
+  --amber-flag: #856010; /* 4.8:1 on amber-wash, 5.2:1 on cream */
   --amber-wash: #f4ead2;
   --red-flag: #8e2a21;
   --red-wash: #f0dcd7;
@@ -71,6 +85,9 @@
   --color-red-flag: var(--red-flag);
   --color-red-wash: var(--red-wash);
   --color-gold: var(--gold);
+  --color-cream: var(--cream);
+  --color-broadcast-ink: var(--broadcast-ink);
+  --color-clay-lift: var(--clay-lift);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-fraunces), Georgia, "Times New Roman", serif;
@@ -124,6 +141,15 @@
   --dur-hover: 160ms;   /* colour and surface changes */
   --dur-enter: 200ms;   /* menus, popovers, tooltips */
   --dur-sheet: 260ms;   /* dialogs and drawers, which have further to travel */
+
+  /* The default every bare `transition-colors` in the app picks up.
+     Tailwind ships 150ms on its own `ease` curve, which is close enough to
+     the system's 160ms that nobody notices the duration, and far enough from
+     `--ease-out` that the whole interface loses the arrive-fast-settle-slow
+     character the rest of this block exists to create. Setting the default
+     is the fix; the alternative was naming the curve at sixty call sites. */
+  --default-transition-duration: var(--dur-hover);
+  --default-transition-timing-function: var(--ease-out);
 
   --animate-live-pulse: live-pulse 2.2s ease-in-out infinite;
   --animate-marquee-in: marquee-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -186,7 +212,7 @@ body {
   color: var(--clay-deep);
 }
 
-/* faint paper grain over everything — unifies the surfaces */
+/* faint paper grain over everything - unifies the surfaces */
 .grain::after {
   content: "";
   position: fixed;
@@ -252,7 +278,7 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: #101722;
+  background: var(--broadcast-ink);
   container-type: size;
   container-name: tv;
   /* a television is never interacted with; nothing here should invite it */

@@ -8,7 +8,7 @@
  * Rules per the pilot spec:
  * - writes always land locally first (the store does that); no spinner
  * - an op that keeps failing while online for 30s becomes "failed" and the UI
- *   offers Retry — never a raw error
+ *   offers Retry - never a raw error
  * - offline: everything waits, nothing fails
  */
 

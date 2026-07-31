@@ -8,8 +8,8 @@
 /**
  * The certification ceremony, mirroring paper-card attestation exactly:
  *
- *   Stage A — the MARKER attests the card of the player they marked
- *   Stage B — the PLAYER certifies their own marker-attested card
+ *   Stage A - the MARKER attests the card of the player they marked
+ *   Stage B - the PLAYER certifies their own marker-attested card
  *
  * Only after both does the card become "returned" (R&A 3.3b), at which point
  * a tamper-evident integrity record is computed and appended.
@@ -73,7 +73,7 @@ import type { Course } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
-/* Location consent — asked early in the round, never at sign-off      */
+/* Location consent - asked early in the round, never at sign-off      */
 /* ------------------------------------------------------------------ */
 
 export function LocationConsentCard() {
@@ -426,7 +426,7 @@ export function CertificationCeremony({
   return (
     <div className="mt-6 overflow-hidden rounded-2xl bg-card shadow-lift">
       <div className="bg-primary p-5 text-primary-foreground">
-        <p className="smallcaps text-primary-foreground/50">Round complete</p>
+        <p className="smallcaps text-primary-foreground/60">Round complete</p>
         <p className="mt-1 font-serif text-[22px] leading-tight">
           Return your cards
         </p>
@@ -450,7 +450,7 @@ export function CertificationCeremony({
             "flex size-9 shrink-0 items-center justify-center rounded-full border text-[14px] font-medium",
             stageADone
               ? "border-clay/40 bg-clay-wash text-clay-deep"
-              : "border-clay bg-clay text-white",
+              : "border-clay bg-clay text-cream",
           )}
         >
           {stageADone ? <Check className="size-4" /> : "A"}
@@ -486,7 +486,7 @@ export function CertificationCeremony({
           className={cn(
             "flex size-9 shrink-0 items-center justify-center rounded-full border text-[14px] font-medium",
             stageBReady
-              ? "border-clay bg-clay text-white"
+              ? "border-clay bg-clay text-cream"
               : "border-border text-muted-foreground",
           )}
         >
@@ -698,19 +698,19 @@ export function CardReturnedView({
       className="mt-6 overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-lift"
     >
       <div className="p-6 text-center">
-        <p className="smallcaps flex items-center justify-center gap-1.5 text-primary-foreground/50">
+        <p className="smallcaps flex items-center justify-center gap-1.5 text-primary-foreground/60">
           <Lock className="size-3" />
           Card returned · locked
         </p>
         <p className="mt-3 font-serif text-5xl tnum">{points}</p>
-        <p className="smallcaps mt-1 text-primary-foreground/50">points</p>
+        <p className="smallcaps mt-1 text-primary-foreground/60">points</p>
         <p className="mt-3 text-sm text-primary-foreground/70 tnum">
           {gross} gross · {toPar(netToPar)} net ·{" "}
           {hidden ? "position on the board" : position}
         </p>
 
         {/* integrity confirmation */}
-        <div className="mx-auto mt-5 max-w-[300px] rounded-xl bg-white/5 px-4 py-3 text-left">
+        <div className="mx-auto mt-5 max-w-[300px] rounded-xl bg-cream/5 px-4 py-3 text-left">
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-clay-wash">
             <ShieldCheck className="size-4" />
             Integrity verified
@@ -759,7 +759,7 @@ export function CardReturnedView({
             <motion.div exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
               <button
                 onClick={() => setCorrOpen(true)}
-                className="mx-auto mt-4 flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-4 text-[13px] text-primary-foreground/75 transition-colors hover:bg-white/5 cursor-pointer"
+                className="mx-auto mt-4 flex min-h-11 items-center gap-2 rounded-full border border-cream/15 px-4 text-[13px] text-primary-foreground/75 transition-colors hover:bg-cream/5 cursor-pointer"
               >
                 <Clock className="size-3.5" />
                 Request correction ·{" "}
@@ -773,7 +773,7 @@ export function CardReturnedView({
       </div>
       <a
         href="/app/leaderboard"
-        className="block border-t border-white/10 bg-clay py-3.5 text-center text-[15px] font-medium text-white transition-colors hover:bg-clay-deep"
+        className="block border-t border-cream/10 bg-clay py-3.5 text-center text-[15px] font-medium text-cream transition-colors hover:bg-clay-deep"
       >
         See where you finish
       </a>

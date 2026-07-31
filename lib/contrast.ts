@@ -135,10 +135,11 @@ export function accentOnDark(hex: string, target = AA_LARGE): string {
 }
 
 /** Whether white or navy text is more legible on a solid fill of this colour. */
-export function textOnAccent(hex: string): "#ffffff" | typeof NAVY {
-  return contrastRatio(hex, "#ffffff") >= contrastRatio(hex, NAVY)
-    ? "#ffffff"
-    : NAVY;
+export function textOnAccent(hex: string): typeof CREAM | typeof NAVY {
+  // Cream rather than white: there is no #ffffff in this system, and on any
+  // accent dark enough to take a light label the two measure within 0.1 of
+  // each other anyway.
+  return contrastRatio(hex, CREAM) >= contrastRatio(hex, NAVY) ? CREAM : NAVY;
 }
 
 /* ------------------------------------------------------------------ */

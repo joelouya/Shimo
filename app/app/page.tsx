@@ -52,7 +52,7 @@ function PilotLiveCard() {
       </div>
       <Link
         href="/app/leaderboard"
-        className="flex items-center justify-center gap-2 bg-clay py-3.5 text-[15px] font-medium text-white transition-colors hover:bg-clay-deep"
+        className="flex items-center justify-center gap-2 bg-clay py-3.5 text-[15px] font-medium text-cream transition-colors hover:bg-clay-deep"
       >
         Live leaderboard
         <ArrowRight className="size-4" />
@@ -77,7 +77,7 @@ function LiveNowCard() {
       <div className="p-5">
         <div className="flex items-center justify-between">
           <LiveBadge />
-          <span className="smallcaps text-primary-foreground/50">
+          <span className="smallcaps text-primary-foreground/60">
             {me.attested ? "Round complete" : `Thru ${me.thru}`}
           </span>
         </div>
@@ -89,22 +89,22 @@ function LiveNowCard() {
         <div className="mt-5 flex items-end gap-7">
           {!hidden && (
             <div>
-              <p className="smallcaps text-primary-foreground/45">Position</p>
+              <p className="smallcaps text-primary-foreground/60">Position</p>
               <p className="mt-1 font-serif text-3xl leading-none tnum">
                 {me.tied ? "T" : ""}
                 {me.position}
-                <span className="ml-1 text-sm text-primary-foreground/45">
+                <span className="ml-1 text-sm text-primary-foreground/60">
                   of {36}
                 </span>
               </p>
             </div>
           )}
           <div>
-            <p className="smallcaps text-primary-foreground/45">Points</p>
+            <p className="smallcaps text-primary-foreground/60">Points</p>
             <p className="mt-1 font-serif text-3xl leading-none tnum">{me.points}</p>
           </div>
           <div>
-            <p className="smallcaps text-primary-foreground/45">Playing HC</p>
+            <p className="smallcaps text-primary-foreground/60">Playing HC</p>
             <p className="mt-1 font-serif text-3xl leading-none tnum">
               {
                 handicapSet(
@@ -117,10 +117,10 @@ function LiveNowCard() {
           </div>
         </div>
       </div>
-      <div className="flex border-t border-white/10">
+      <div className="flex border-t border-cream/10">
         <Link
           href="/app/live"
-          className="flex flex-1 items-center justify-center gap-2 bg-clay py-3.5 text-[13px] font-medium text-white transition-colors hover:bg-clay-deep"
+          className="flex flex-1 items-center justify-center gap-2 bg-clay py-3.5 text-[13px] font-medium text-cream transition-colors hover:bg-clay-deep"
         >
           {me.attested ? "View your card" : "Enter scores"}
           <ArrowRight className="size-3.5" />
@@ -128,7 +128,7 @@ function LiveNowCard() {
         {!hidden && (
           <Link
             href="/app/leaderboard"
-            className="flex flex-1 items-center justify-center gap-2 py-3.5 text-[13px] font-medium text-primary-foreground/80 transition-colors hover:bg-white/5"
+            className="flex flex-1 items-center justify-center gap-2 py-3.5 text-[13px] font-medium text-primary-foreground/80 transition-colors hover:bg-cream/5"
           >
             Leaderboard
           </Link>
@@ -141,6 +141,7 @@ function LiveNowCard() {
 export default function HomePage() {
   const registrations = useSim((s) => s.registrations);
   const created = useSim((s) => s.created);
+  const dismissed = useSim((s) => s.dismissed);
   const tone = useSim((s) => s.tonePref);
   const roster = useSim((s) => s.roster);
   const identity = useSim((s) => s.deviceIdentity);
@@ -155,7 +156,7 @@ export default function HomePage() {
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const upcoming = allTournaments(created)
+  const upcoming = allTournaments(created, dismissed)
     .filter(
       (t) =>
         t.status === "upcoming" &&
@@ -163,7 +164,9 @@ export default function HomePage() {
     )
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const recent = allTournaments(created).filter((t) => t.status === "completed");
+  const recent = allTournaments(created, dismissed).filter(
+    (t) => t.status === "completed",
+  );
 
   return (
     <div className="px-5 pt-5">

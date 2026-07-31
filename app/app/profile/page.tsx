@@ -106,7 +106,7 @@ export default function ProfilePage() {
           {initials(user.name)}
         </div>
         <div>
-          <h1 className="font-serif text-[26px] leading-tight text-foreground">
+          <h1 className="font-serif text-[28px] leading-tight text-foreground">
             {user.name}
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -334,7 +334,7 @@ export default function ProfilePage() {
             </Select>
           </div>
         </div>
-        <p className="mt-6 text-center text-[10px] text-muted-foreground/60">
+        <p className="mt-6 text-center text-[10px] text-muted-foreground">
           Shimo · prototype build for the Kenya Golf Union
         </p>
       </section>

@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-28T00:00:00.000Z",
+  "title": "Design System: Shimo",
+  "extensions": {
+    "colorMeta": {
+      "clay": {
+        "role": "primary",
+        "displayName": "Burnt Terracotta",
+        "canonical": "#b84a2e",
+        "tonalRamp": ["#2d1108", "#4a1d0f", "#682917", "#86351f", "#b84a2e", "#d07a63", "#e5ab9b", "#f6ded6"]
+      },
+      "clay-deep": {
+        "role": "primary",
+        "displayName": "Terracotta Deep",
+        "canonical": "#96371f",
+        "tonalRamp": ["#250d05", "#3d160c", "#552013", "#6d2a19", "#96371f", "#bd6a51", "#dba38e", "#f4dcd3"]
+      },
+      "clay-wash": {
+        "role": "primary",
+        "displayName": "Terracotta Wash",
+        "canonical": "#f1e0d8",
+        "tonalRamp": ["#3a2119", "#573328", "#744538", "#a06e5e", "#c69b8c", "#e0c3b7", "#f1e0d8", "#faf2ee"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Deep Navy Ink",
+        "canonical": "#1a2332",
+        "tonalRamp": ["#0b0f16", "#131a25", "#1a2332", "#2b3a52", "#415574", "#6b7f9e", "#a3b2c7", "#dde3ec"]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Soft Ink",
+        "canonical": "#414b5e",
+        "tonalRamp": ["#14181f", "#212734", "#2f3748", "#414b5e", "#5e6b83", "#8c97ab", "#bcc4d1", "#e6eaf0"]
+      },
+      "cream": {
+        "role": "neutral",
+        "displayName": "Cream",
+        "canonical": "#f7f3ec",
+        "tonalRamp": ["#3b352a", "#584f3e", "#756a53", "#9d9179", "#c3b9a4", "#e0d9c9", "#f7f3ec", "#fdfbf7"]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Card",
+        "canonical": "#fcfaf5",
+        "tonalRamp": ["#3e392e", "#5c5443", "#7a7058", "#a2977c", "#c8bfa8", "#e5dfcd", "#fcfaf5", "#fefdfa"]
+      },
+      "sand": {
+        "role": "neutral",
+        "displayName": "Sand",
+        "canonical": "#ece5d6",
+        "tonalRamp": ["#332e22", "#4d4634", "#675e46", "#8b8062", "#b0a382", "#cfc4a9", "#ece5d6", "#f7f3e9"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Paper",
+        "canonical": "#efe9dd",
+        "tonalRamp": ["#353023", "#4f4836", "#696049", "#8d8265", "#b2a689", "#d1c8b1", "#efe9dd", "#f8f5ee"]
+      },
+      "accent-wash": {
+        "role": "neutral",
+        "displayName": "Accent Wash",
+        "canonical": "#f0e9db",
+        "tonalRamp": ["#363023", "#504836", "#6a6049", "#8e8265", "#b3a689", "#d2c8b1", "#f0e9db", "#f9f5ed"]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Warm Hairline",
+        "canonical": "#e4ddce",
+        "tonalRamp": ["#2f2a1f", "#474031", "#5f5642", "#817659", "#a69a78", "#c5bb9f", "#e4ddce", "#f3efe4"]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "Field Stroke",
+        "canonical": "#d9d1bf",
+        "tonalRamp": ["#2c271c", "#423c2c", "#59503b", "#786d51", "#9b8f6f", "#bab094", "#d9d1bf", "#ece7dc"]
+      },
+      "stone": {
+        "role": "neutral",
+        "displayName": "Stone",
+        "canonical": "#8b8578",
+        "tonalRamp": ["#1c1b18", "#2e2c27", "#403d36", "#5b574d", "#767064", "#8b8578", "#b3aea4", "#dcd9d3"]
+      },
+      "warm-grey": {
+        "role": "neutral",
+        "displayName": "Warm Grey",
+        "canonical": "#6e6a5e",
+        "tonalRamp": ["#161513", "#25231f", "#34322c", "#4a473f", "#6e6a5e", "#948f81", "#bab6ac", "#e1dfd9"]
+      },
+      "amber-flag": {
+        "role": "tertiary",
+        "displayName": "Amber Flag",
+        "canonical": "#a97a1e",
+        "tonalRamp": ["#2a1e07", "#43300c", "#5c4110", "#755315", "#a97a1e", "#cfa04a", "#e5c48d", "#f7e9cf"]
+      },
+      "amber-wash": {
+        "role": "tertiary",
+        "displayName": "Amber Wash",
+        "canonical": "#f4ead2",
+        "tonalRamp": ["#3a3218", "#575024", "#746a30", "#9b8f47", "#c1b678", "#dcd3a8", "#f4ead2", "#fbf6e9"]
+      },
+      "red-flag": {
+        "role": "tertiary",
+        "displayName": "Red Flag",
+        "canonical": "#8e2a21",
+        "tonalRamp": ["#230a08", "#3a110d", "#511813", "#681f18", "#8e2a21", "#b55a51", "#d69790", "#f2d9d6"]
+      },
+      "red-wash": {
+        "role": "tertiary",
+        "displayName": "Red Wash",
+        "canonical": "#f0dcd7",
+        "tonalRamp": ["#3a1f1a", "#573028", "#744136", "#a06a5c", "#c6968a", "#e0bfb6", "#f0dcd7", "#faf0ed"]
+      },
+      "gold": {
+        "role": "tertiary",
+        "displayName": "Champion Gold",
+        "canonical": "#a08434",
+        "tonalRamp": ["#28200c", "#403413", "#58471a", "#705a22", "#a08434", "#c4aa62", "#dccb9c", "#f2ead3"]
+      },
+      "broadcast-ink": {
+        "role": "neutral",
+        "displayName": "Broadcast Ink",
+        "canonical": "#101722",
+        "tonalRamp": ["#070a0f", "#0b1018", "#101722", "#1e2a3c", "#31425c", "#55698a", "#93a3bd", "#d5dde8"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles and the subject of a broadcast announcement. One per screen."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section and card titles."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "The most common serif size in the system: row headings, player names, panel titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose, descriptions and help text. Inter, because it is scanned rather than read."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The .smallcaps class. Section eyebrows and field labels, uppercase and tracked."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Every score, position, total and stroke count. Always tabular."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card",
+        "value": "0 1px 2px rgb(26 35 50 / 0.04), 0 6px 20px rgb(26 35 50 / 0.06)",
+        "purpose": "A sheet at rest on the page. The lightest step, and the default for any surface that is also a target."
+      },
+      {
+        "name": "lift",
+        "value": "0 2px 4px rgb(26 35 50 / 0.06), 0 12px 32px rgb(26 35 50 / 0.1)",
+        "purpose": "The hovered state of a card or tile that is also a link."
+      },
+      {
+        "name": "pane",
+        "value": "0 1px 0 rgb(26 35 50 / 0.03), 0 16px 48px rgb(26 35 50 / 0.08)",
+        "purpose": "Dialogs and anything covering the page. Wide, soft, clearly above."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Anything entering or responding to the user. The default curve in the system."
+      },
+      {
+        "name": "ease-in-out",
+        "value": "cubic-bezier(0.77, 0, 0.175, 1)",
+        "purpose": "Something travelling from one place on screen to another."
+      },
+      {
+        "name": "ease-drawer",
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "Sheets and drawers, borrowed from iOS by way of Ionic."
+      },
+      {
+        "name": "dur-press",
+        "value": "120ms",
+        "purpose": "A control acknowledging a finger."
+      },
+      {
+        "name": "dur-hover",
+        "value": "160ms",
+        "purpose": "Colour and surface changes."
+      },
+      {
+        "name": "dur-enter",
+        "value": "200ms",
+        "purpose": "Menus, popovers and tooltips arriving."
+      },
+      {
+        "name": "dur-sheet",
+        "value": "260ms",
+        "purpose": "Dialogs and drawers, which have further to travel."
+      },
+      {
+        "name": "tab-spring",
+        "value": "spring(stiffness 420, damping 36, mass 0.7)",
+        "purpose": "The travelling tab pill. A spring rather than a duration so an interrupted click redirects it from where it has reached."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" },
+      { "name": "broadcast", "value": "container query, sized in cqw with no breakpoints" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The default action. Navy ink ground, cream label, compresses on press.",
+      "html": "<button class=\"ds-btn-primary\">Start tournament day</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 8px 20px; border: none; border-radius: 12px; background: #1a2332; color: #f7f3ec; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: transform, background-color, box-shadow; transition-duration: 160ms; transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); box-shadow: 0 1px 2px rgb(26 35 50 / 0.04); } .ds-btn-primary:hover { background: #414b5e; } .ds-btn-primary:active { transform: scale(0.97); transition-duration: 120ms; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #f7f3ec, 0 0 0 4px rgb(184 74 46 / 0.4); }"
+    },
+    {
+      "name": "Clay Button",
+      "kind": "button",
+      "refersTo": "button-clay",
+      "description": "The accent action. At most one per screen, under the Red Pencil Rule.",
+      "html": "<button class=\"ds-btn-clay\">Publish card</button>",
+      "css": ".ds-btn-clay { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 8px 20px; border: none; border-radius: 12px; background: #b84a2e; color: #fff; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: transform, background-color; transition-duration: 160ms; transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-clay:hover { background: #96371f; } .ds-btn-clay:active { transform: scale(0.97); transition-duration: 120ms; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action. Warm hairline on a transparent ground.",
+      "html": "<button class=\"ds-btn-outline\">Pairings and tee times</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 8px 20px; border: 1px solid #d9d1bf; border-radius: 12px; background: transparent; color: #1a2332; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: transform, background-color, border-color; transition-duration: 160ms; transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-outline:hover { background: #f0e9db; } .ds-btn-outline:active { transform: scale(0.97); transition-duration: 120ms; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Card ground, warm stroke, terracotta focus ring. Label always sits above.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Name on the desk</span><input class=\"ds-input\" type=\"text\" placeholder=\"Peter Kamau\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; } .ds-field-label { font-size: 11px; font-weight: 560; letter-spacing: 0.14em; text-transform: uppercase; color: #6e6a5e; } .ds-input { height: 40px; padding: 8px 14px; border: 1px solid #d9d1bf; border-radius: 12px; background: #fcfaf5; color: #1a2332; font-size: 14px; outline: none; transition: border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-input::placeholder { color: rgb(110 106 94 / 0.7); } .ds-input:focus-visible { border-color: rgb(184 74 46 / 0.5); box-shadow: 0 0 0 2px rgb(184 74 46 / 0.25); }"
+    },
+    {
+      "name": "Soft Clay Badge",
+      "kind": "chip",
+      "refersTo": "badge-clay-soft",
+      "description": "The quiet accent badge. Hairline is a tint of its own colour, never a neutral.",
+      "html": "<span class=\"ds-badge-clay-soft\">Live</span>",
+      "css": ".ds-badge-clay-soft { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border: 1px solid rgb(184 74 46 / 0.25); border-radius: 9999px; background: #f1e0d8; color: #96371f; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 500; letter-spacing: 0.02em; white-space: nowrap; }"
+    },
+    {
+      "name": "Amber Flag Badge",
+      "kind": "chip",
+      "refersTo": "badge-amber",
+      "description": "Something needs a human. Never decorative, under the Three Flags Rule.",
+      "html": "<span class=\"ds-badge-amber\">Needs review</span>",
+      "css": ".ds-badge-amber { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border: 1px solid rgb(169 122 30 / 0.25); border-radius: 9999px; background: #f4ead2; color: #a97a1e; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 500; white-space: nowrap; }"
+    },
+    {
+      "name": "Card Surface",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "A sheet resting on the cream page. Separation is tonal first, shadow second.",
+      "html": "<div class=\"ds-card\"><p class=\"ds-card-eyebrow\">Entry</p><p class=\"ds-card-title\">Muthaiga Captain's Prize</p><p class=\"ds-card-body\">Stableford, 95% allowance. Scores feed the live leaderboard.</p></div>",
+      "css": ".ds-card { padding: 24px; border-radius: 16px; background: #fcfaf5; box-shadow: 0 1px 2px rgb(26 35 50 / 0.04), 0 6px 20px rgb(26 35 50 / 0.06); transition: box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-card:hover { box-shadow: 0 2px 4px rgb(26 35 50 / 0.06), 0 12px 32px rgb(26 35 50 / 0.1); transform: translateY(-2px); } .ds-card-eyebrow { margin: 0 0 8px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 560; letter-spacing: 0.14em; text-transform: uppercase; color: #b84a2e; } .ds-card-title { margin: 0 0 8px; font-family: Fraunces, Georgia, serif; font-size: 22px; line-height: 1.2; color: #1a2332; } .ds-card-body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.55; color: #6e6a5e; }"
+    },
+    {
+      "name": "Tab Set",
+      "kind": "nav",
+      "refersTo": "tab-pill-active",
+      "description": "The selected pill travels between triggers rather than appearing and vanishing.",
+      "html": "<div class=\"ds-tabs\"><button class=\"ds-tab ds-tab-active\">Points</button><button class=\"ds-tab\">Net</button><button class=\"ds-tab\">Gross</button></div>",
+      "css": ".ds-tabs { display: inline-flex; align-items: center; height: 36px; padding: 3px; border-radius: 9999px; background: #ece5d6; } .ds-tab { flex: 1; height: 100%; padding: 0 14px; border: none; border-radius: 9999px; background: transparent; color: #6e6a5e; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-tab:hover { color: #1a2332; } .ds-tab-active { background: #1a2332; color: #f7f3ec; box-shadow: 0 1px 2px rgb(26 35 50 / 0.04); } .ds-tab:active { transform: scale(0.97); }"
+    },
+    {
+      "name": "Score Cell",
+      "kind": "custom",
+      "description": "The signature component. Classic scorecard notation: one ring for a birdie, two for an eagle, one box for a bogey, two for worse, nothing on a par.",
+      "html": "<div class=\"ds-scorerow\"><span class=\"ds-score ds-score-eagle\">3</span><span class=\"ds-score ds-score-birdie\">3</span><span class=\"ds-score\">4</span><span class=\"ds-score ds-score-bogey\">5</span><span class=\"ds-score ds-score-double\">7</span></div>",
+      "css": ".ds-scorerow { display: inline-flex; align-items: center; gap: 10px; font-family: Fraunces, Georgia, serif; } .ds-score { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; font-size: 12.5px; font-variant-numeric: tabular-nums lining-nums; color: #1a2332; } .ds-score-birdie { border: 1px solid #b84a2e; border-radius: 9999px; color: #96371f; } .ds-score-eagle { border: 2px solid #b84a2e; border-radius: 9999px; color: #96371f; } .ds-score-bogey { border: 1px solid rgb(139 133 120 / 0.6); border-radius: 2px; color: #414b5e; } .ds-score-double { border: 2px solid rgb(139 133 120 / 0.6); border-radius: 2px; color: #414b5e; }"
+    },
+    {
+      "name": "Clubhouse Board Row",
+      "kind": "custom",
+      "description": "One row of the television leaderboard. Broadcast ink ground, leader in the club accent, everything tabular.",
+      "html": "<div class=\"ds-tvboard\"><div class=\"ds-tvrow ds-tvrow-leader\"><span class=\"ds-tvpos\">1</span><span class=\"ds-tvname\">Edwin Simiyu</span><span class=\"ds-tvhc\">HC 12</span><span class=\"ds-tvthru\">15</span><span class=\"ds-tvscore\">-8</span></div><div class=\"ds-tvrow\"><span class=\"ds-tvpos\">2</span><span class=\"ds-tvname\">Lucy Nyambura</span><span class=\"ds-tvhc\">HC 9</span><span class=\"ds-tvthru\">F</span><span class=\"ds-tvscore\">-6</span></div></div>",
+      "css": ".ds-tvboard { padding: 20px 24px; background: #101722; font-family: Fraunces, Georgia, serif; } .ds-tvrow { display: grid; grid-template-columns: 44px 1fr auto 56px 68px; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgb(255 255 255 / 0.1); } .ds-tvpos { font-size: 18px; font-variant-numeric: tabular-nums; color: rgb(247 243 236 / 0.45); } .ds-tvname { font-size: 21px; color: #f7f3ec; } .ds-tvhc { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 11px; letter-spacing: 0.14em; color: rgb(255 255 255 / 0.35); } .ds-tvthru { text-align: right; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-variant-numeric: tabular-nums; color: rgb(255 255 255 / 0.4); } .ds-tvscore { text-align: right; font-size: 22px; font-variant-numeric: tabular-nums; color: #f7f3ec; } .ds-tvrow-leader .ds-tvpos, .ds-tvrow-leader .ds-tvname, .ds-tvrow-leader .ds-tvscore { color: #b84a2e; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Returned Card",
+    "overview": "A golf scorecard is not a form. It is a document: kept by a marker, attested, signed, returned, and filed. It is printed on warm paper, filled in with ink, and marked in one other colour only when something happened. Shimo behaves the same way. Every surface is a record being kept properly, and the interface carries itself like a document rather than an application.\n\nThat metaphor explains nearly every decision in the system without needing a rule for each one. The paper grain over every surface. Cream rather than white, because paper is not white. Navy rather than black, because ink is not black. Tabular figures everywhere, because a column of numbers in a document lines up. Circles and squares around scores, because that is how a card has been marked for a century and no member needs it explained. And a single terracotta, used about as often as a starter reaches for the red pencil.\n\nThe system is deliberately unhurried. It is read in direct sunlight, on a mid-range phone, over four hours, and then on a television across a room for four more. Nothing in it competes for attention, because attention here is scarce and already spent on the golf. Brand lives in precision rather than in volume: the exact figure, aligned, in the right weight, unmoving.",
+    "keyCharacteristics": [
+      "Warm paper ground, navy ink, one red mark",
+      "Editorial serif for anything a person reads; sans for anything they scan",
+      "Tabular numerals without exception on scores, positions and totals",
+      "Flat at rest, with depth reserved as a response to the user",
+      "Motion that answers immediately and settles slowly, or is absent entirely",
+      "Classic scorecard notation preserved rather than reinvented"
+    ],
+    "rules": [
+      {
+        "name": "The Red Pencil Rule",
+        "body": "One mark per card. Terracotta appears where something is true and consequential: the leader, the live state, the primary action, the ring around a birdie. Never as decoration, and never twice competing on one screen. If two things on a screen are terracotta, one of them is wrong.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Black Rule",
+        "body": "There is no #000000 and no #ffffff in this system. Text is navy ink, ground is cream, and every shadow is tinted with the ink hue rather than with black. A pure value anywhere is a bug.",
+        "section": "colors"
+      },
+      {
+        "name": "The Three Flags Rule",
+        "body": "Amber means a human is needed. Red means wrong or destructive. Gold means champion. A new colour requires a new meaning, and there are no new meanings.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Any number that appears in a column, or that a reader will compare against another number, uses tabular figures. Scores, positions, handicaps, totals, times. A proportional digit in a scoring column is a defect, not a preference.",
+        "section": "typography"
+      },
+      {
+        "name": "The Serif Carries the Result Rule",
+        "body": "Fraunces is for what happened: the name, the score, the total, the title. Inter is for the apparatus around it: what things are called, what a control does, what state something is in. When unsure, ask whether the text is the outcome or the label for it.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Container Rule",
+        "body": "The television has no breakpoints. If a value on a broadcast surface is expressed in pixels, it is wrong. A clubhouse screen is whatever the club already owns, and asking which one has never produced a useful answer.",
+        "section": "layout"
+      },
+      {
+        "name": "The Tinted Shadow Rule",
+        "body": "No shadow in this system uses black. Every one is mixed from the ink hue. A neutral grey shadow on a warm ground reads as dirt.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Scorecard Notation Rule",
+        "body": "A score is marked the way a card is marked. One ring for a birdie, two for an eagle or better, one box for a bogey, two for worse. Terracotta on the rings, stone on the boxes, and nothing at all on a par. This is a century-old convention that every golfer already reads, and it is not to be replaced with colour coding, arrows, or plus and minus signs.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do use tabular figures (.tnum) on every score, position, total and time.",
+      "Do tint every shadow with the ink hue, never with black.",
+      "Do give every interactive control a press state. A ghost button that does not answer the finger reads as not having heard.",
+      "Do name transition properties explicitly rather than using `all`.",
+      "Do size broadcast surfaces in cqw against the root container query.",
+      "Do put field labels above their input.",
+      "Do let a menu grow from the control that opened it, using the Radix transform-origin variable. Dialogs are the exception and stay centred, because they are anchored to nothing.",
+      "Do reach for a tonal step between cream, card and sand before reaching for a shadow."
+    ],
+    "donts": [
+      "Don't use pure black or pure white anywhere.",
+      "Don't put two terracotta elements in competition on one screen.",
+      "Don't animate an action a person performs hundreds of times. The desk score cell acknowledges a commit instantly and fades over 300ms; it does not perform.",
+      "Don't replace scorecard notation with arrows, plus-minus signs, or a colour scale. Golfers already read circles and squares.",
+      "Don't reach for sports broadcast language. No neon, no outer glow, no gradient swooshes, no chunky drop shadows, no scorebug. The clubhouse screen is editorial, and this is a binding anti-reference.",
+      "Don't reach for generic SaaS language either. No purple-blue gradient hero, no row of three identical feature cards, no glassmorphism, no default sans on slate. This is the second binding anti-reference, and it is what most golf software already looks like.",
+      "Don't use em dashes in any user-facing string.",
+      "Don't show a player's worst moments in public. No triple bogeys, penalties or disqualifications on the clubhouse screen, and no correction that implies an earlier celebration was wrong.",
+      "Don't let a decorative overlay block input. Anything covering the page that a person never needs to click is pointer-events-none."
+    ]
+  }
+}

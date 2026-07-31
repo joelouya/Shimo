@@ -34,7 +34,7 @@ import type { Course, Player } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
-/* One score cell — local text state, saves on blur                    */
+/* One score cell - local text state, saves on blur                    */
 /* ------------------------------------------------------------------ */
 
 const Cell = memo(function Cell({
@@ -98,7 +98,7 @@ const Cell = memo(function Cell({
       onChange={(e) => {
         const next = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
         setText(next);
-        // two digits can't grow further — hop to the next hole
+        // two digits can't grow further - hop to the next hole
         if (next.length === 2) {
           const sibling = document.querySelector<HTMLInputElement>(
             `[data-cell="${pid}:${holeIdx + 1}"]`,
@@ -245,7 +245,7 @@ function ScanCardDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-border bg-secondary/40 px-6 py-10 text-center">
-          <Camera className="size-8 text-muted-foreground/60" />
+          <Camera className="size-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             Drop a photo here, or use the camera
           </p>
@@ -310,7 +310,7 @@ export default function BulkScoresPage() {
     return (
       <div>
         <p className="smallcaps text-clay">Enter scores from cards</p>
-        <h1 className="mt-2 font-serif text-[32px] leading-tight text-foreground">
+        <h1 className="mt-2 font-serif text-[30px] leading-tight text-foreground">
           No tournament running today
         </h1>
         <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground">

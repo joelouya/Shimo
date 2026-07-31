@@ -110,7 +110,7 @@ function BoardRow({
 }) {
   return (
     <div
-      className="grid items-baseline border-b border-white/10 py-[0.62cqw]"
+      className="grid items-baseline border-b border-cream/10 py-[0.62cqw]"
       style={{ gridTemplateColumns: "4.4cqw 1fr 7cqw 8.5cqw" }}
     >
       <div
@@ -126,11 +126,11 @@ function BoardRow({
         >
           {row.player.name}
         </span>
-        <span className="shrink-0 text-[1.02cqw] tracking-[0.14em] text-white/35">
+        <span className="shrink-0 text-[1.02cqw] tracking-[0.14em] text-cream/35">
           {row.madeCut === false ? "MC" : `HC ${row.player.handicap}`}
         </span>
       </div>
-      <div className="text-right text-[1.3cqw] tabular-nums text-white/40">
+      <div className="text-right text-[1.3cqw] tabular-nums text-cream/40">
         {row.thru >= 18 ? "F" : `${row.thru}`}
       </div>
       <div
@@ -174,7 +174,7 @@ export function TvFrame({
         weighting it downward keeps the picture legible as a picture while the
         text stays on a field dark enough to read against.
       */}
-      <div aria-hidden className="absolute inset-0 bg-[#101722]/82" />
+      <div aria-hidden className="absolute inset-0 bg-broadcast-ink/82" />
       <div
         aria-hidden
         className="absolute inset-0"
@@ -198,7 +198,7 @@ export function TvFrame({
             <h1 className="mt-[0.55cqw] font-serif text-[2.7cqw] leading-none text-[#f7f3ec]">
               {snapshot.tournament.name}
             </h1>
-            <p className="mt-[0.45cqw] text-[1.1cqw] text-white/45">
+            <p className="mt-[0.45cqw] text-[1.1cqw] text-cream/45">
               {snapshot.course.name}
             </p>
           </div>
@@ -219,11 +219,11 @@ export function TvFrame({
                 className="h-[3cqw] w-[3cqw] object-contain"
               />
             ) : null}
-            <span className="text-[1.05cqw] font-semibold uppercase tracking-[0.3em] text-white/40">
+            <span className="text-[1.05cqw] font-semibold uppercase tracking-[0.3em] text-cream/40">
               {snapshot.tournament.clubId}
             </span>
           </div>
-          <span className="text-[1.05cqw] tracking-[0.2em] text-white/25">
+          <span className="text-[1.05cqw] tracking-[0.2em] text-cream/25">
             shimo.golf
           </span>
         </footer>
@@ -238,8 +238,8 @@ export function TvFrame({
  */
 function Reconnecting() {
   return (
-    <div className="flex items-center gap-[0.7cqw] text-[1.05cqw] tracking-[0.18em] text-white/40">
-      <span className="tv-pulse block h-[0.6cqw] w-[0.6cqw] rounded-full bg-white/50" />
+    <div className="flex items-center gap-[0.7cqw] text-[1.05cqw] tracking-[0.18em] text-cream/40">
+      <span className="tv-pulse block h-[0.6cqw] w-[0.6cqw] rounded-full bg-cream/50" />
       RECONNECTING
     </div>
   );
@@ -250,13 +250,13 @@ export function TvEmpty({ snapshot }: { snapshot: TvSnapshot }) {
   const first = snapshot.tournament.firstTee;
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
-      <p className="text-[1.2cqw] font-semibold uppercase tracking-[0.4em] text-white/35">
+      <p className="text-[1.2cqw] font-semibold uppercase tracking-[0.4em] text-cream/35">
         Tee off
       </p>
       <p className="mt-[1.2cqw] font-serif text-[7cqw] leading-none text-[#f7f3ec]">
         {first}
       </p>
-      <p className="mt-[1.6cqw] text-[1.6cqw] text-white/45">
+      <p className="mt-[1.6cqw] text-[1.6cqw] text-cream/45">
         {snapshot.players.length} players · {snapshot.course.name} · par{" "}
         {snapshot.course.par}
       </p>

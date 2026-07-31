@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { DeskWelcome } from "@/components/admin/desk-welcome";
 import { Logo } from "@/components/logo";
 import { DemoToggle } from "@/components/demo-toggle";
 import { SimGate } from "@/components/sim-gate";
@@ -37,7 +38,7 @@ function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-primary text-primary-foreground">
       <div className="px-6 pt-7 pb-6">
         <Logo tone="cream" className="text-[22px]" />
-        <p className="smallcaps mt-2 text-primary-foreground/40">
+        <p className="smallcaps mt-2 text-primary-foreground/60">
           Club administration
         </p>
       </div>
@@ -55,8 +56,8 @@ function Sidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium transition-colors",
                 active
-                  ? "bg-white/10 text-white"
-                  : "text-primary-foreground/60 hover:bg-white/5 hover:text-primary-foreground/90",
+                  ? "bg-cream/10 text-cream"
+                  : "text-primary-foreground/60 hover:bg-cream/5 hover:text-primary-foreground/90",
               )}
             >
               <Icon className="size-4" strokeWidth={active ? 2.1 : 1.8} />
@@ -64,7 +65,7 @@ function Sidebar() {
               {item.label === "Live Ops" && (
                 <span className="ml-auto flex items-center gap-1.5">
                   {openFlags > 0 && (
-                    <span className="rounded-full bg-clay px-1.5 text-[10px] font-semibold text-white tnum">
+                    <span className="rounded-full bg-clay px-1.5 text-[10px] font-semibold text-cream tnum">
                       {openFlags}
                     </span>
                   )}
@@ -75,16 +76,16 @@ function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-white/10 p-4">
-        <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
-          <div className="flex size-9 items-center justify-center rounded-full bg-clay font-serif text-sm text-white">
+      <div className="border-t border-cream/10 p-4">
+        <div className="flex items-center gap-3 rounded-xl bg-cream/5 p-3">
+          <div className="flex size-9 items-center justify-center rounded-full bg-clay font-serif text-sm text-cream">
             W
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-medium text-white">
+            <p className="truncate text-[13px] font-medium text-cream">
               Wanjiru Njenga
             </p>
-            <p className="truncate text-[11px] text-primary-foreground/50">
+            <p className="truncate text-[11px] text-primary-foreground/60">
               Muthaiga Golf Club
             </p>
           </div>
@@ -113,6 +114,7 @@ export default function AdminLayout({
           <div className="mx-auto max-w-6xl px-10 py-9">{children}</div>
         </main>
         {!IS_PILOT && <DemoToggle corner="br" />}
+        <DeskWelcome />
       </div>
     </SimGate>
   );

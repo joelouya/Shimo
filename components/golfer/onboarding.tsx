@@ -106,15 +106,263 @@ function Reveal({
   );
 }
 
+/**
+ * First run, whichever build this is.
+ *
+ * Pilot runs the full flow, because a pilot player has to become a real signed
+ * -in person before any of it means anything. Demo runs a three-step
+ * orientation instead: there is nothing to sign into, but somebody opening
+ * this for the first time still deserves to be told whose round they are
+ * looking at and why there are two cards.
+ *
+ * Both write the same `onboarded` flag, so first run is one idea with two
+ * lengths rather than two separate features.
+ */
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
   useAuthReconcile();
   const onboarded = useSim((s) => s.onboarded);
-  const show = IS_PILOT && AUTH_AVAILABLE && !onboarded;
+  const pilotFlow = IS_PILOT && AUTH_AVAILABLE && !onboarded;
+  const demoFlow = !IS_PILOT && !onboarded;
   return (
     <>
       {children}
-      <AnimatePresence>{show && <OnboardingFlow key="onboarding" />}</AnimatePresence>
+      <AnimatePresence>
+        {pilotFlow && <OnboardingFlow key="onboarding" />}
+        {demoFlow && <DemoIntro key="demo-intro" />}
+      </AnimatePresence>
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * The demo orientation.
+ *
+ * Three screens, and every claim on them is checkable in the app within a
+ * minute of finishing. Nothing here sells; it says who you are, what the two
+ * cards are for, and where the other half of the product is.
+ * ------------------------------------------------------------------ */
+
+/* Each orientation step shows the thing it is describing. A screen with three
+   lines of type and a button a phone-height away reads as unfinished, and the
+   claim is more convincing shown than stated. */
+
+function WhoArt() {
+  const figures = [
+    { label: "Position", value: "1", sub: "of 36" },
+    { label: "Points", value: "48", sub: null },
+    { label: "Playing HC", value: "12", sub: null },
+  ];
+  return (
+    <div className="rounded-2xl bg-card p-4 shadow-card">
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-full bg-clay-wash font-serif text-[15px] text-clay-deep">
+          JO
+        </span>
+        <div>
+          <p className="font-serif text-[17px] leading-none text-foreground">
+            Joel Ouya
+          </p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Muthaiga Golf Club
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-3">
+        {figures.map((f) => (
+          <div key={f.label}>
+            <p className="smallcaps text-muted-foreground">{f.label}</p>
+            <p className="mt-1 font-serif text-[22px] leading-none text-foreground tnum">
+              {f.value}
+              {f.sub && (
+                <span className="ml-1 text-[13px] text-muted-foreground">
+                  {f.sub}
+                </span>
+              )}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CardsArt() {
+  /* Hole 3 is where they disagree. That is the whole point of the screen, so
+     it is the only thing on it wearing a colour. */
+  const yours = [4, 4, 5];
+  const markers = [4, 4, 6];
+  const row = (label: string, vals: number[], other: number[]) => (
+    <div className="flex items-center gap-3">
+      <span className="smallcaps w-[86px] shrink-0 text-muted-foreground">
+        {label}
+      </span>
+      {vals.map((v, i) => (
+        <span
+          key={i}
+          className={cn(
+            "flex size-8 items-center justify-center rounded-lg font-serif text-[15px] tnum",
+            v === other[i]
+              ? "bg-secondary text-foreground"
+              : "bg-amber-wash text-amber-flag",
+          )}
+        >
+          {v}
+        </span>
+      ))}
+    </div>
+  );
+  return (
+    <div className="space-y-2.5 rounded-2xl bg-card p-4 shadow-card">
+      <div className="flex items-center gap-3 pb-0.5">
+        <span className="w-[86px] shrink-0" />
+        {[1, 2, 3].map((h) => (
+          <span
+            key={h}
+            className="w-8 text-center text-[11px] text-muted-foreground tnum"
+          >
+            {h}
+          </span>
+        ))}
+      </div>
+      {row("Your card", yours, markers)}
+      {row("D. Kamau", markers, yours)}
+      <p className="border-t border-border pt-3 text-[13px] leading-relaxed text-muted-foreground">
+        Hole 3 does not agree, so neither figure reaches the board until the
+        desk has settled it.
+      </p>
+    </div>
+  );
+}
+
+function BothArt() {
+  const rows = [
+    { pos: 1, name: "You", score: "48" },
+    { pos: 2, name: "A. Wanjiru", score: "46" },
+    { pos: 3, name: "D. Kamau", score: "45" },
+  ];
+  return (
+    <div className="overflow-hidden rounded-2xl bg-broadcast-ink p-4 shadow-card">
+      <div className="flex items-baseline justify-between">
+        <p className="smallcaps text-cream/55">The clubhouse screen</p>
+        <p className="smallcaps text-cream/55">Thru 3</p>
+      </div>
+      <div className="mt-3 space-y-2">
+        {rows.map((r) => (
+          <div key={r.pos} className="flex items-baseline gap-3">
+            <span
+              className={cn(
+                "w-3 font-serif text-[13px] tnum",
+                r.pos === 1 ? "text-clay-lift" : "text-cream/55",
+              )}
+            >
+              {r.pos}
+            </span>
+            <span
+              className={cn(
+                "flex-1 font-serif text-[15px]",
+                r.pos === 1 ? "text-cream" : "text-cream/70",
+              )}
+            >
+              {r.name}
+            </span>
+            <span
+              className={cn(
+                "font-serif text-[15px] tnum",
+                r.pos === 1 ? "text-clay-lift" : "text-cream/70",
+              )}
+            >
+              {r.score}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const DEMO_STEPS = [
+  {
+    key: "who",
+    icon: <LogoMark className="size-6" />,
+    title: "You are Joel Ouya",
+    body: "Handicap 12, three holes into the Captain's Prize at Muthaiga. The tournament is running right now, and the other thirty-five players are playing alongside you.",
+    art: <WhoArt />,
+  },
+  {
+    key: "cards",
+    icon: <ShieldCheck className="size-6" />,
+    title: "Two cards, one result",
+    body: "You keep your own score. David Kamau, playing with you, keeps a second copy of it. That is Rule 3.3b, and it is most of the reason Shimo exists.",
+    art: <CardsArt />,
+  },
+  {
+    key: "both",
+    icon: <Smartphone className="size-6" />,
+    title: "The club is watching",
+    body: "The tournament desk is open at /admin in another tab, running the same afternoon. Anything you enter here reaches it within a second, and the room sees it too.",
+    art: <BothArt />,
+  },
+] as const;
+
+function DemoIntro() {
+  const [i, setI] = useState(0);
+  const step = DEMO_STEPS[i];
+  const last = i === DEMO_STEPS.length - 1;
+  const finish = () => setOnboarded(true);
+
+  return (
+    <Shell step={i + 1} total={DEMO_STEPS.length}>
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={step.key}
+          initial={{ opacity: 0, x: 32 }}
+          animate={{ opacity: 1, x: 0, transition: { duration: 0.5, ease: EASE } }}
+          exit={{
+            opacity: 0,
+            x: -28,
+            transition: { duration: 0.3, ease: [0.4, 0, 1, 1] },
+          }}
+          className="absolute inset-0 flex flex-col overflow-y-auto"
+        >
+          <StepBody icon={step.icon} title={step.title}>
+            <Reveal i={2}>
+              <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
+                {step.body}
+              </p>
+            </Reveal>
+            <Reveal i={3} className="mt-6">
+              {step.art}
+            </Reveal>
+          </StepBody>
+
+          <div className="mt-auto space-y-2 pt-8">
+            <Reveal i={4}>
+              <Button
+                variant="clay"
+                size="lg"
+                className="w-full"
+                onClick={() => (last ? finish() : setI(i + 1))}
+              >
+                {last ? "Start the round" : "Next"}
+                <ArrowRight className="size-4" />
+              </Button>
+            </Reveal>
+            {!last && (
+              <Reveal i={5}>
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-full text-muted-foreground"
+                  onClick={finish}
+                >
+                  Skip
+                </Button>
+              </Reveal>
+            )}
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    </Shell>
   );
 }
 
@@ -638,7 +886,7 @@ function SignatureSetup({ onNext }: { onNext: () => void }) {
               <span
                 className={cn(
                   "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-                  method === o.id ? "bg-clay text-white" : "bg-secondary text-ink-soft",
+                  method === o.id ? "bg-clay text-cream" : "bg-secondary text-ink-soft",
                 )}
               >
                 {o.icon}
@@ -871,7 +1119,7 @@ function Ready({ onDone }: { onDone: () => void }) {
     <div className="flex flex-1 flex-col">
       <Reveal i={0}>
         <motion.div
-          className="mt-6 flex size-14 items-center justify-center rounded-2xl bg-clay text-white"
+          className="mt-6 flex size-14 items-center justify-center rounded-2xl bg-clay text-cream"
           initial={{ scale: 0.7, rotate: -12 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: "spring", stiffness: 240, damping: 16 }}

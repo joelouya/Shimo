@@ -29,7 +29,7 @@ export function PwaBoot() {
     ) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-    // stash the install event — it often fires before any screen listens
+    // stash the install event - it often fires before any screen listens
     const onPrompt = (e: Event) => {
       e.preventDefault();
       window.__shimoInstallEvent = e as BeforeInstallPromptEvent;
@@ -96,8 +96,8 @@ function isStandalone() {
 export type InstallKind = "installed" | "native" | "ios" | "other";
 
 /**
- * How this device can install Shimo. The platform owns the answer — the
- * display mode, the user agent, and the install event stashed by PwaBoot —
+ * How this device can install Shimo. The platform owns the answer - the
+ * display mode, the user agent, and the install event stashed by PwaBoot -
  * so it is read rather than copied into state. It stays a subscription
  * because `beforeinstallprompt` often lands after the screen has painted.
  */
@@ -170,7 +170,7 @@ export function InstallPrompt() {
             window.__shimoInstallEvent = null;
             dismiss();
           }}
-          className="shrink-0 rounded-lg bg-clay px-4 py-2.5 text-[14px] font-medium text-white transition-colors hover:bg-clay-deep cursor-pointer"
+          className="shrink-0 rounded-lg bg-clay px-4 py-2.5 text-[14px] font-medium text-cream transition-colors hover:bg-clay-deep cursor-pointer"
         >
           Install
         </button>
@@ -178,7 +178,7 @@ export function InstallPrompt() {
       <button
         onClick={dismiss}
         aria-label="Dismiss install prompt"
-        className="shrink-0 self-start rounded p-1 text-muted-foreground/60 hover:text-muted-foreground cursor-pointer"
+        className="shrink-0 self-start rounded p-1 text-muted-foreground hover:text-muted-foreground cursor-pointer"
       >
         <X className="size-4" />
       </button>

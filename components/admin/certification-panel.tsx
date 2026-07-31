@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Certification & Disputes — the Committee's room.
+ * Certification & Disputes - the Committee's room.
  *
  * Live certification status for the whole field, dispute resolution under
  * Rule 3.3b (accept a figure, set a Committee score, or DQ), correction

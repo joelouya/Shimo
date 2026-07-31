@@ -35,7 +35,7 @@ export interface ScoreRow {
   player_id: string;
   hole: number; // 0-based
   gross: number | null;
-  /** player | marker | desk — see schema-m2.sql */
+  /** player | marker | desk - see schema-m2.sql */
   source: string;
   client_id: string;
   /** set by the server; used to replay writes in order on hydration */

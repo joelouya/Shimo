@@ -75,7 +75,7 @@ function EventTicker() {
             {word}
           </span>
           {p.name} · {latest.hole}
-          <span className="text-muted-foreground/60">just now</span>
+          <span className="text-muted-foreground">just now</span>
         </motion.p>
       </AnimatePresence>
     </div>
@@ -97,10 +97,10 @@ function FeaturedGroups() {
             className="w-[210px] shrink-0 rounded-2xl bg-primary p-4 text-primary-foreground shadow-card"
           >
             <div className="flex items-center justify-between">
-              <p className="smallcaps text-[9px] text-primary-foreground/50">
+              <p className="smallcaps text-[9px] text-primary-foreground/60">
                 Featured · Group {g.number}
               </p>
-              <p className="text-[10px] text-primary-foreground/50 tnum">
+              <p className="text-[10px] text-primary-foreground/60 tnum">
                 {thru >= 18 ? "F" : `thru ${thru}`}
               </p>
             </div>
@@ -121,7 +121,7 @@ function FeaturedGroups() {
                       className={cn(
                         "truncate text-[12.5px]",
                         pid === DEMO_USER_ID
-                          ? "font-semibold text-white"
+                          ? "font-semibold text-cream"
                           : "text-primary-foreground/85",
                       )}
                     >
@@ -164,7 +164,7 @@ function Nine({
         Par
       </span>
       {LIVE_COURSE.holes.slice(from, from + 9).map((h) => (
-        <span key={h.hole} className="text-[10px] text-muted-foreground/70 tnum">
+        <span key={h.hole} className="text-[10px] text-muted-foreground tnum">
           {h.par}
         </span>
       ))}
@@ -179,7 +179,7 @@ function Nine({
             key={h.hole}
             className={cn(
               "mx-auto flex size-5 items-center justify-center text-[11px] tnum",
-              gross == null && "text-muted-foreground/30",
+              gross == null && "text-muted-foreground",
               gross != null && d === -1 && "rounded-full border border-clay text-clay-deep",
               gross != null && d <= -2 && "rounded-full border-2 border-clay text-clay-deep",
               gross != null && d === 1 && "rounded-sm border border-stone/50 text-ink-soft",
@@ -224,7 +224,7 @@ function ExpandedScorecard({ row }: { row: StandingRow }) {
 
 /**
  * One board row, memoized hard so a score event only re-renders the rows
- * whose numbers actually changed — keeps the board smooth on low-end phones.
+ * whose numbers actually changed - keeps the board smooth on low-end phones.
  */
 const BoardRow = memo(
   function BoardRow({
@@ -585,7 +585,7 @@ export default function LeaderboardPage() {
                   className={cn(
                     "flex min-h-11 shrink-0 items-center rounded-full border px-4 text-[13px] font-medium transition-colors cursor-pointer",
                     scope === opt.key
-                      ? "border-clay bg-clay text-white"
+                      ? "border-clay bg-clay text-cream"
                       : "border-border bg-card text-muted-foreground hover:text-foreground",
                   )}
                 >

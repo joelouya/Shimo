@@ -1,101 +1,390 @@
 "use client";
 
+/**
+ * The landing page.
+ *
+ * Read as a document rather than as a product page: an editorial column, a
+ * numbered sequence of claims, hairlines between them, and one terracotta mark
+ * per screen. The three claims appear in the order PRODUCT.md commits to, and
+ * each one is answered by a real fragment of the interface rather than by an
+ * icon in a card. Three identical feature cards and a gradient hero are the
+ * bound anti-reference here; this is the alternative.
+ *
+ * Every number, name and club on this page is the product's own demo data.
+ * Nothing here claims a customer, a case study or a metric, because there are
+ * none yet.
+ */
+
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, MonitorSmartphone, Smartphone } from "lucide-react";
 
-import { Logo } from "@/components/logo";
+import { ReturnedCard } from "@/components/landing/returned-card";
 import { LiveDot } from "@/components/live-dot";
+import { Logo } from "@/components/logo";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const fadeUp = {
-  initial: { opacity: 0, y: 14 },
-  animate: { opacity: 1, y: 0 },
-};
+const EASE = [0.23, 1, 0.32, 1] as const;
+
+/**
+ * Reveal on scroll, once.
+ *
+ * `once` matters more than it looks: a section that re-animates every time it
+ * crosses the viewport turns a page into a slideshow, and the second viewing
+ * is always worse than the first.
+ */
+function Reveal({
+  children,
+  delay = 0,
+  className,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+}) {
+  const still = useReducedMotion();
+  return (
+    <motion.div
+      className={className}
+      initial={still ? { opacity: 0 } : { opacity: 0, y: 22 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{
+        duration: still ? 0.25 : 0.7,
+        ease: EASE,
+        delay: still ? 0 : delay,
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * The evidence beside each claim.
+ *
+ * Deliberately three different shapes. A row of three matching cards is the
+ * thing this page exists not to be, and each fragment is more convincing at
+ * its own natural size anyway.
+ * ------------------------------------------------------------------ */
+
+function ChainEvidence() {
+  const steps = [
+    { label: "Entered twice", detail: "player and marker, independently" },
+    { label: "Attested", detail: "by the marker who kept the card" },
+    { label: "Certified", detail: "by the player" },
+    { label: "Sealed", detail: "SHA-256 over every figure on it" },
+  ];
+  return (
+    <div className="rounded-2xl bg-card p-5 shadow-card">
+      {steps.map((s, i) => (
+        <div key={s.label} className="flex gap-3.5">
+          {/*
+            The chain drawn as a chain: one rule running through the steps,
+            marked in terracotta only at the end. Four accent dots would make
+            four equal moments out of a sequence that has exactly one outcome.
+          */}
+          <div className="flex flex-col items-center">
+            <span
+              className={cn(
+                "mt-1.5 size-1.5 rounded-full",
+                i === steps.length - 1 ? "bg-clay" : "bg-stone/50",
+              )}
+            />
+            {i < steps.length - 1 && <span className="w-px flex-1 bg-border" />}
+          </div>
+          <div className={i < steps.length - 1 ? "pb-4" : ""}>
+            <p className="text-[13px] font-medium text-foreground">{s.label}</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">{s.detail}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OfflineEvidence() {
+  return (
+    <div className="rounded-2xl bg-card p-5 shadow-card">
+      <div className="flex items-center gap-2">
+        <span className="size-1.5 rounded-full bg-amber-flag" />
+        <span className="smallcaps text-amber-flag">Reconnecting</span>
+      </div>
+      <p className="mt-3 font-serif text-[22px] leading-tight text-foreground">
+        Holding 11 scores
+      </p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+        The board keeps the last figure it trusted. Nothing blanks and nothing
+        reloads, and the moment the phone finds the club again everything
+        reconciles in order.
+      </p>
+      <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
+        <span className="smallcaps text-muted-foreground">Last seen</span>
+        <span className="ml-auto text-[13px] text-ink-soft tnum">14:07</span>
+      </div>
+    </div>
+  );
+}
+
+function BoardEvidence() {
+  const rows = [
+    { pos: 1, name: "A. Wanjiru", score: "-4" },
+    { pos: 2, name: "J. Ouya", score: "-2" },
+    { pos: 3, name: "D. Kamau", score: "-1" },
+  ];
+  return (
+    <div className="overflow-hidden rounded-2xl bg-broadcast-ink p-5 shadow-card">
+      <p className="smallcaps text-cream/55">Through 14</p>
+      <p className="mt-1 font-serif text-[22px] leading-tight text-cream">
+        Captain&apos;s Prize
+      </p>
+      <div className="mt-4 space-y-2.5">
+        {rows.map((r) => (
+          <div key={r.pos} className="flex items-baseline gap-3">
+            <span
+              className={`w-4 font-serif text-[13px] tnum ${
+                r.pos === 1 ? "text-clay-lift" : "text-cream/55"
+              }`}
+            >
+              {r.pos}
+            </span>
+            <span
+              className={`flex-1 font-serif text-[15px] ${
+                r.pos === 1 ? "text-cream" : "text-cream/70"
+              }`}
+            >
+              {r.name}
+            </span>
+            <span
+              className={`font-serif text-[15px] tnum ${
+                r.pos === 1 ? "text-clay-lift" : "text-cream/70"
+              }`}
+            >
+              {r.score}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const CLAIMS = [
+  {
+    n: "01",
+    title: "A result that holds up.",
+    body: "Dual entry under Rule 3.3b: the player scores, the marker keeps a second card, and any disagreement surfaces before it reaches the board. The marker attests, the player certifies, and the card seals with a tamper-evident hash over every figure and every identity on it. The Committee gets an append-only audit trail and a real dispute path. This is rare in club software anywhere, not only here.",
+    evidence: <ChainEvidence />,
+  },
+  {
+    n: "02",
+    title: "Works where the golf is.",
+    body: "Parts of a golf course have no signal, and that is an ordinary condition rather than an error. Shimo scores offline, holds what it knows, says so quietly, and reconciles when the phone finds the club again. Built for a mid-range Android in direct sunlight over four hours, because that is what is actually in the pocket.",
+    evidence: <OfflineEvidence />,
+  },
+  {
+    n: "03",
+    title: "The club looks superb.",
+    body: "Generated fixture and results posters in the club's own crest and colour, and a clubhouse screen that runs the whole afternoon unattended and holds the room through prizegiving. It never shows a member's worst hole. A captain is buying an event that feels like an event, and this is most of what that means.",
+    evidence: <BoardEvidence />,
+  },
+];
+
+/* ------------------------------------------------------------------ */
 
 export default function LandingPage() {
+  const still = useReducedMotion();
+
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center px-6 py-16">
-      <motion.div
-        {...fadeUp}
-        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        className="text-center"
-      >
-        <Logo className="text-5xl sm:text-6xl" />
-        <p className="smallcaps mt-5 text-muted-foreground">
-          Tournament golf, beautifully run
-        </p>
-        <p className="mx-auto mt-6 max-w-md font-serif text-[19px] leading-relaxed text-ink-soft">
-          Entries, tee times, live scoring and honest cards for the clubs of
-          Kenya, and then the continent.
-        </p>
-      </motion.div>
+    <main className="min-h-dvh">
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
+        <Logo className="text-[19px]" />
+        <nav className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/app">The golfer</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin">The club</Link>
+          </Button>
+        </nav>
+      </header>
 
-      <motion.div
-        {...fadeUp}
-        transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-12 grid w-full max-w-2xl gap-4 sm:grid-cols-2"
-      >
-        <Link
-          href="/app"
-          className="group rounded-2xl bg-card p-6 shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
-        >
-          <div className="flex size-11 items-center justify-center rounded-xl bg-clay-wash text-clay">
-            <Smartphone className="size-5" />
+      {/* ---- hero ---- */}
+      <section className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 pb-20 pt-10 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pb-28 lg:pt-16">
+        <div>
+          <motion.p
+            initial={{ opacity: 0, y: still ? 0 : 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: EASE }}
+            className="smallcaps text-muted-foreground"
+          >
+            Tournament golf, beautifully run
+          </motion.p>
+
+          <motion.h1
+            initial={{ opacity: 0, y: still ? 0 : 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.75, ease: EASE, delay: 0.06 }}
+            className="mt-5 font-serif text-[clamp(38px,6.4vw,62px)] leading-[1.04] text-foreground"
+          >
+            Every card
+            <br />
+            comes back signed.
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: still ? 0 : 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.75, ease: EASE, delay: 0.14 }}
+            className="mt-6 max-w-lg font-serif text-[19px] leading-relaxed text-ink-soft"
+          >
+            Shimo runs a club&apos;s tournament day end to end. Entries and tee
+            sheets, live scoring out on the course, cards certified to the Rules
+            of Golf, and a clubhouse screen worth watching.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: still ? 0 : 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.75, ease: EASE, delay: 0.22 }}
+            className="mt-8 flex flex-wrap items-center gap-3"
+          >
+            <Button variant="clay" size="lg" asChild>
+              <Link href="/app">
+                <LiveDot />
+                See a round being played
+              </Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link href="/admin">
+                See the club&apos;s desk
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </motion.div>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8, ease: EASE, delay: 0.34 }}
+            className="mt-6 text-[13px] leading-relaxed text-muted-foreground"
+          >
+            Built for the clubs of Kenya, and then the continent. Both doors are
+            live and carry the same tournament.
+          </motion.p>
+        </div>
+
+        <div className="flex justify-center lg:justify-end">
+          <ReturnedCard />
+        </div>
+      </section>
+
+      {/* ---- the three claims ---- */}
+      <section className="mx-auto w-full max-w-6xl px-6">
+        <Reveal>
+          <p className="smallcaps border-t border-border pt-6 text-muted-foreground">
+            What a club is actually buying
+          </p>
+        </Reveal>
+
+        <div className="mt-4">
+          {CLAIMS.map((c, i) => (
+            <Reveal key={c.n} delay={0.04}>
+              <article
+                className={`grid gap-8 py-12 lg:grid-cols-[1fr_auto] lg:gap-16 ${
+                  i > 0 ? "border-t border-border" : ""
+                }`}
+              >
+                <div className="max-w-xl">
+                  <span className="font-serif text-[22px] text-clay tnum">
+                    {c.n}
+                  </span>
+                  <h2 className="mt-3 font-serif text-[clamp(26px,3.4vw,34px)] leading-tight text-foreground">
+                    {c.title}
+                  </h2>
+                  <p className="mt-4 text-[15px] leading-[1.7] text-ink-soft">
+                    {c.body}
+                  </p>
+                </div>
+                <div className="w-full lg:w-[320px]">{c.evidence}</div>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* ---- the two doors ---- */}
+      <section className="mx-auto w-full max-w-6xl px-6 pb-24 pt-8">
+        <Reveal>
+          <p className="smallcaps border-t border-border pt-6 text-muted-foreground">
+            Have a look around
+          </p>
+          <p className="mt-3 max-w-xl font-serif text-[19px] leading-relaxed text-ink-soft">
+            Both sides run the same tournament at the same time. Open them side
+            by side and a score entered on the phone lands on the club&apos;s
+            desk within a second.
+          </p>
+        </Reveal>
+
+        <Reveal delay={0.06} className="mt-8">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Link
+              href="/app"
+              className="group rounded-2xl bg-card p-6 shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
+            >
+              <div className="flex size-11 items-center justify-center rounded-xl bg-clay-wash text-clay">
+                <Smartphone className="size-5" />
+              </div>
+              <h3 className="mt-4 font-serif text-xl text-foreground">
+                The golfer
+              </h3>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                Three holes into the Captain&apos;s Prize. Score the round,
+                attest a partner&apos;s card, watch the board move.
+              </p>
+              <p className="mt-4 flex items-center gap-1.5 text-[13px] font-medium text-clay">
+                Open the app
+                <ArrowRight className="size-3.5 transition-transform duration-[var(--dur-hover)] ease-[var(--ease-out)] group-hover:translate-x-0.5" />
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Best in a phone-sized window
+              </p>
+            </Link>
+
+            <Link
+              href="/admin"
+              className="group rounded-2xl bg-primary p-6 text-primary-foreground shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
+            >
+              <div className="flex size-11 items-center justify-center rounded-xl bg-cream/10 text-clay-wash">
+                <MonitorSmartphone className="size-5" />
+              </div>
+              <h3 className="mt-4 font-serif text-xl">The club</h3>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-primary-foreground/60">
+                The tournament desk. Create events, set pairings, enter returned
+                cards, and run the day from Live Ops.
+              </p>
+              <p className="mt-4 flex items-center gap-1.5 text-[13px] font-medium text-clay-wash">
+                Open the desk
+                <ArrowRight className="size-3.5 transition-transform duration-[var(--dur-hover)] ease-[var(--ease-out)] group-hover:translate-x-0.5" />
+              </p>
+              <p className="mt-1 text-[11px] text-primary-foreground/60">
+                Best on a laptop, full width
+              </p>
+            </Link>
           </div>
-          <h2 className="mt-4 font-serif text-xl text-foreground">The golfer</h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-            Joel Ouya, HC 12, is three holes into the Captain&apos;s Prize at
-            Muthaiga. Score his round, watch the board move.
-          </p>
-          <p className="mt-4 flex items-center gap-1.5 text-[13px] font-medium text-clay">
-            <LiveDot />
-            Open the app
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-          </p>
-          <p className="mt-1 text-[10.5px] text-muted-foreground/70">
-            Best in a phone-sized window
-          </p>
-        </Link>
+        </Reveal>
+      </section>
 
-        <Link
-          href="/admin"
-          className="group rounded-2xl bg-primary p-6 text-primary-foreground shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
-        >
-          <div className="flex size-11 items-center justify-center rounded-xl bg-white/10 text-clay-wash">
-            <MonitorSmartphone className="size-5" />
-          </div>
-          <h2 className="mt-4 font-serif text-xl">The club</h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-primary-foreground/60">
-            Muthaiga&apos;s tournament desk: create events, set pairings, and
-            run tournament day from Live Ops.
+      <footer className="border-t border-border">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8">
+          <Logo className="text-[15px]" />
+          <p className="text-[13px] text-muted-foreground">
+            A working prototype. The names, clubs and figures throughout are
+            demo data.
           </p>
-          <p className="mt-4 flex items-center gap-1.5 text-[13px] font-medium text-clay-wash">
-            Open the admin
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-          </p>
-          <p className="mt-1 text-[10.5px] text-primary-foreground/40">
-            Best on a laptop, full width
-          </p>
-        </Link>
-      </motion.div>
-
-      <motion.p
-        {...fadeUp}
-        transition={{ delay: 0.3, duration: 0.7 }}
-        className="mt-10 max-w-md text-center text-[11.5px] leading-relaxed text-muted-foreground/80"
-      >
-        Open both side by side: a score entered on the golfer&apos;s phone
-        lands in the club&apos;s Live Ops within a second. The ✦ button in
-        either app auto-plays the round.
-      </motion.p>
-
-      <motion.p
-        {...fadeUp}
-        transition={{ delay: 0.4, duration: 0.7 }}
-        className="smallcaps mt-12 text-muted-foreground/50"
-      >
-        Prototype · built for the Kenya Golf Union
-      </motion.p>
-    </div>
+        </div>
+      </footer>
+    </main>
   );
 }

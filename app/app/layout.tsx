@@ -84,7 +84,7 @@ function BottomNav() {
               href={tab.href}
               className={cn(
                 "relative flex flex-col items-center gap-1 pt-2.5 pb-1 text-[10px] font-medium tracking-wide transition-colors",
-                active ? "text-foreground" : "text-muted-foreground/70 hover:text-muted-foreground",
+                active ? "text-foreground" : "text-muted-foreground hover:text-muted-foreground",
               )}
             >
               <span className="relative">

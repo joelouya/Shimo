@@ -15,11 +15,11 @@ export function LiveBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-clay px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-white uppercase",
+        "inline-flex items-center gap-1.5 rounded-full bg-clay px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-cream uppercase",
         className,
       )}
     >
-      <span className="size-1.5 rounded-full bg-white/90 animate-live-pulse" />
+      <span className="size-1.5 rounded-full bg-cream/90 animate-live-pulse" />
       Live
     </span>
   );

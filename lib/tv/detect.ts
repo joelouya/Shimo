@@ -332,7 +332,7 @@ export function momentsForBoard(opts: {
  *
  * Deliberately about the line and the bubble rather than about who is out.
  * Naming the players who would currently miss is the one thing this must not
- * do — they are in the clubhouse, and the screen is not there to tell them.
+ * do - they are in the clubhouse, and the screen is not there to tell them.
  */
 export function momentsForCut(opts: {
   standings: { playerId: string; position: number; score: number; thru: number }[];

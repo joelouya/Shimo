@@ -89,7 +89,7 @@ if (meta.defaultTee && !tees.some((t) => t.tee === meta.defaultTee))
 const par = holes.reduce((a, h) => a + h.par, 0);
 
 if (errors.length) {
-  console.error("\n✗ Could not import — fix these first:\n");
+  console.error("\n✗ Could not import - fix these first:\n");
   for (const e of errors) console.error("  • " + e);
   console.error("");
   exit(1);
@@ -123,7 +123,7 @@ ${ratingLines}
     ],
   },`;
 
-console.log(`\n✓ ${meta.name} — par ${par}, ${holes.length} holes, ${tees.length} tees`);
+console.log(`\n✓ ${meta.name} - par ${par}, ${holes.length} holes, ${tees.length} tees`);
 if (warnings.length) {
   console.log("\n  warnings:");
   for (const w of warnings) console.log("  • " + w);

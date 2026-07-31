@@ -1,4 +1,4 @@
--- Shimo pilot schema — cross-device state (Milestone 1)
+-- Shimo pilot schema - cross-device state (Milestone 1)
 --
 -- Run this in the Supabase SQL editor AFTER schema.sql. It adds the tables that
 -- let a tournament live in the cloud, so any device that joins hydrates the
@@ -40,7 +40,7 @@ create table if not exists tournaments (
 );
 
 /* ------------------------------------------------------------------ */
-/* Pairings — one row per playing group                                */
+/* Pairings - one row per playing group                                */
 /* ------------------------------------------------------------------ */
 create table if not exists pairings (
   tournament_id text not null,
@@ -53,7 +53,7 @@ create table if not exists pairings (
 );
 
 /* ------------------------------------------------------------------ */
-/* Players — the club roster                                           */
+/* Players - the club roster                                           */
 /* ------------------------------------------------------------------ */
 create table if not exists players (
   id         text primary key,
@@ -67,7 +67,7 @@ create table if not exists players (
 );
 
 /* ------------------------------------------------------------------ */
-/* Certifications — marker attest + player certify state               */
+/* Certifications - marker attest + player certify state               */
 /* ------------------------------------------------------------------ */
 create table if not exists certifications (
   tournament_id      text not null,
@@ -123,7 +123,7 @@ create table if not exists corrections (
 );
 
 /* ------------------------------------------------------------------ */
-/* Audit log — append-only integrity trail                             */
+/* Audit log - append-only integrity trail                             */
 /* ------------------------------------------------------------------ */
 create table if not exists audit_log (
   id            text primary key,
@@ -171,7 +171,7 @@ begin
 end $$;
 
 /* ------------------------------------------------------------------ */
-/* RLS — pilot-pragmatic (permissive; tightened to authenticated in M2)*/
+/* RLS - pilot-pragmatic (permissive; tightened to authenticated in M2)*/
 /* ------------------------------------------------------------------ */
 do $$
 declare t text;

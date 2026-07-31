@@ -1,4 +1,4 @@
-# SHIMO — Tournament golf, beautifully run
+# SHIMO - Tournament golf, beautifully run
 
 Shimo: tournament management and live scoring for African golf clubs,
 launching in Kenya. One codebase, two modes: a **demo** for showing
@@ -15,10 +15,10 @@ NEXT_PUBLIC_SHIMO_MODE=pilot npm run dev   # pilot mode
 
 Open **http://localhost:3000** (or whatever port Next prints).
 
-- `/` — landing page with entry points to both sides
-- `/app` — **the golfer app** (mobile-first; best in a phone-sized window or
+- `/` - landing page with entry points to both sides
+- `/app` - **the golfer app** (mobile-first; best in a phone-sized window or
   device emulation; installable as a PWA)
-- `/admin` — **the club admin desk** (desktop-first)
+- `/admin` - **the club admin desk** (desktop-first)
 
 ## Modes
 
@@ -35,12 +35,12 @@ The mode is baked in at build time via `NEXT_PUBLIC_SHIMO_MODE`
 
 ## The pilot workflow (tier 1: nobody has to install anything)
 
-1. **Create a tournament** (`/admin` → Create tournament) — Stableford or
+1. **Create a tournament** (`/admin` → Create tournament) - Stableford or
    Stroke Play.
-2. **Set pairings** (tournament row → Pairings & tee times) — drag or
+2. **Set pairings** (tournament row → Pairings & tee times) - drag or
    tap-to-assign from the roster; tee times autosave at the club's interval.
 3. **Start tournament day** (button on the tournament row).
-4. **Enter scores from cards** — the caddymaster desk, reachable from the
+4. **Enter scores from cards** - the caddymaster desk, reachable from the
    dashboard and Live Ops. A keyboard grid of the whole field, grouped by
    playing group: **Tab** moves across holes, **Enter** drops to the next
    player, two digits hop automatically, every cell saves on blur. Running
@@ -53,10 +53,10 @@ The mode is baked in at build time via `NEXT_PUBLIC_SHIMO_MODE`
 The end-of-round flow mirrors paper-card attestation exactly, and exceeds it
 on auditability:
 
-1. **Stage A — marker attests.** The marker reviews the card they kept for
+1. **Stage A - marker attests.** The marker reviews the card they kept for
    their player; any difference against the player's own record is highlighted
    in amber and must be agreed (or escalated as a dispute) before attesting.
-2. **Stage B — player certifies.** Unlocked only after the marker's
+2. **Stage B - player certifies.** Unlocked only after the marker's
    attestation. On certification the card is *returned* and locks.
 3. **Tamper evidence.** At that moment Shimo seals a record: SHA-256 hash of
    the full score set + identities, UTC timestamp, device fingerprint (no
@@ -71,7 +71,7 @@ on auditability:
    for the field, dispute resolution (accept a figure, Committee score, or DQ
    under 3.3b(3)) gated by a typed reason + Committee PIN, correction
    decisions, and one-click audit trail export (CSV).
-6. **Correction window:** configurable per tournament (off / 5–60 min,
+6. **Correction window:** configurable per tournament (off / 5-60 min,
    default 15). Players request corrections in-app during the countdown; the
    Committee decides; everything is logged and the card is re-sealed.
 
@@ -111,21 +111,21 @@ The Muthaiga Captain's Prize is live today. Joel Ouya (HC 12) is three holes
 into his round; the field of 36 is out on the course and scores tick in every
 few seconds.
 
-1. **Golfer — live scoring** (`/app` → Live): enter Joel's score on hole 4 with
-   the big score pad. A moment later his marker's phone disagrees — the amber
+1. **Golfer - live scoring** (`/app` → Live): enter Joel's score on hole 4 with
+   the big score pad. A moment later his marker's phone disagrees - the amber
    "Check with your marker: hole 4 differs" banner appears. Tap it, agree the
    score, watch it clear. Note the marker-swap card below: Joel keeps David's
    card, David keeps his.
 2. **Leaderboard** (`/app` → Leaderboard): broadcast-style board with featured
    groups, Points/Net/Gross views, division filters, streak flames, expandable
    scorecards, and live position shifts. The eye icon on the Live tab toggles
-   **scoreboard blindness** — the board hides until the card is signed.
-3. **Admin — Live Ops** (`/admin` → Live Ops): the same tournament from the
+   **scoreboard blindness** - the board hides until the card is signed.
+3. **Admin - Live Ops** (`/admin` → Live Ops): the same tournament from the
    club's side. Joel's hole-4 discrepancy appears here as an amber "Marker
    discrepancy" flag; Dennis Mutua (HC 24, playing far too well) raises a
    quiet "Pace flag" with a Review workflow.
 4. **Create a tournament** (`/admin` → Create tournament): the five-step
-   Stableford wizard. Publish it, then check the golfer app's Tournaments tab —
+   Stableford wizard. Publish it, then check the golfer app's Tournaments tab -
    it's listed for every golfer in Kenya, instantly.
 5. **Pairings** (`/admin` → Tournaments → Pairings & tee times): drag players
    between groups (or click a player, then a group), retime the first tee,
@@ -133,7 +133,7 @@ few seconds.
 
 ### ✦ Demo mode
 
-The sparkle button in the corner of either app auto-plays Joel's round —
+The sparkle button in the corner of either app auto-plays Joel's round -
 scores enter themselves, the discrepancy appears and resolves, push
 notifications fire ("🏆 You've moved into 2nd place…"), the marker attests,
 the player certifies, the card returns and locks, and the board settles. **Reset demo data** in the same popover restarts the
@@ -142,7 +142,7 @@ day.
 ### Two screens, one truth
 
 Open the golfer app and the admin app in two windows side by side. State is
-shared through localStorage + a BroadcastChannel with leader election — a
+shared through localStorage + a BroadcastChannel with leader election - a
 score entered on the phone lands in Live Ops within a second, no server
 involved.
 

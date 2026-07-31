@@ -90,7 +90,7 @@ export function IdentityGate() {
             <p className="smallcaps text-primary-foreground/60">Who are you?</p>
             <button
               onClick={() => setOpen(false)}
-              className="rounded p-1 text-primary-foreground/50 hover:text-primary-foreground cursor-pointer"
+              className="rounded p-1 text-primary-foreground/60 hover:text-primary-foreground cursor-pointer"
             >
               <X className="size-4" />
             </button>
@@ -101,7 +101,7 @@ export function IdentityGate() {
         </div>
       ) : (
         <div className="p-5">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-white/10">
+          <div className="flex size-11 items-center justify-center rounded-xl bg-cream/10">
             <UserRound className="size-5 text-clay-wash" />
           </div>
           <p className="mt-3 font-serif text-[20px] leading-tight">

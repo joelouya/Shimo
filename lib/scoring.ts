@@ -183,7 +183,7 @@ export function generateGross(
   // carry the fractional expectation honestly instead of rounding it away
   const base = Math.floor(expected);
   let gross = base + (rnd() < expected - base ? 1 : 0);
-  // right-skewed outcomes — real golf has more blow-ups than hero holes
+  // right-skewed outcomes - real golf has more blow-ups than hero holes
   const r = rnd();
   if (r < 0.05) gross -= 2;
   else if (r < 0.22) gross -= 1;

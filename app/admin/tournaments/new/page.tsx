@@ -548,7 +548,7 @@ function CreateTournamentInner() {
         <p className="smallcaps text-clay">
           {editing ? "Edit tournament" : "New tournament"}
         </p>
-        <h1 className="mt-1 font-serif text-[32px] leading-tight text-foreground">
+        <h1 className="mt-1 font-serif text-[30px] leading-tight text-foreground">
           {draft.name.trim() || "Untitled tournament"}
         </h1>
       </header>
@@ -568,13 +568,13 @@ function CreateTournamentInner() {
                     "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13.5px] transition-colors",
                     active && "bg-card font-medium text-foreground shadow-card",
                     done && "cursor-pointer text-ink-soft hover:bg-accent/60",
-                    !done && !active && "text-muted-foreground/60",
+                    !done && !active && "text-muted-foreground",
                   )}
                 >
                   <span
                     className={cn(
                       "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] tnum",
-                      active && "border-clay bg-clay text-white",
+                      active && "border-clay bg-clay text-cream",
                       done && "border-clay/40 bg-clay-wash text-clay-deep",
                       !done && !active && "border-border",
                     )}
@@ -940,7 +940,7 @@ function CreateTournamentInner() {
                   <div>
                     <Label className="text-foreground">Split into divisions</Label>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      A (0–9) · B (10–18) · C (19–28), prizes per division
+                      A (0-9) · B (10-18) · C (19-28), prizes per division
                     </p>
                   </div>
                   <Switch
@@ -1132,7 +1132,7 @@ function CreateTournamentInner() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="auto">
-                        Follow the field — {PROFILE_LABEL[guess.profile]}
+                        Follow the field · {PROFILE_LABEL[guess.profile]}
                       </SelectItem>
                       {(Object.keys(PROFILE_LABEL) as FieldProfile[]).map((k) => (
                         <SelectItem key={k} value={k}>
@@ -1160,7 +1160,7 @@ function CreateTournamentInner() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="auto">
-                        {`Suggested — ${COVERAGE_LABEL[defaultCoverage(draft.fieldProfile ?? guess.profile)]}`}
+                        {`Suggested · ${COVERAGE_LABEL[defaultCoverage(draft.fieldProfile ?? guess.profile)]}`}
                       </SelectItem>
                       {(["full", "reduced", "quiet"] as Coverage[]).map((c) => (
                         <SelectItem key={c} value={c}>
@@ -1385,7 +1385,7 @@ function CreateTournamentInner() {
                     ],
                     [
                       "Divisions",
-                      draft.splitDivisions ? "A (0–9) · B (10–18) · C (19–28)" : "Single division",
+                      draft.splitDivisions ? "A (0-9) · B (10-18) · C (19-28)" : "Single division",
                     ],
                     [
                       "Entry",

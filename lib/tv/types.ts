@@ -48,7 +48,7 @@ export type FieldProfile = "championship" | "club" | "stableford" | "team";
  * Three settings rather than on and off, because "some" is what most club
  * golf actually wants. A championship field can carry a busy screen; a
  * Saturday medal wants the big moments and the board; a corporate day wants
- * to be left alone. Feature interludes still run in reduced — they are not
+ * to be left alone. Feature interludes still run in reduced - they are not
  * interruptions, they are what the screen does instead of interrupting.
  */
 export type Coverage = "full" | "reduced" | "quiet";
@@ -280,7 +280,7 @@ export interface ProducerState {
   appliedDecision: number;
   /**
    * Facts that were both material and actually shown. Kept so that if one of
-   * them stops being true — a corrected card, a marker who now disagrees — the
+   * them stops being true - a corrected card, a marker who now disagrees - the
    * screen can acknowledge that the board has moved without ever saying what
    * changed or who it belonged to.
    */

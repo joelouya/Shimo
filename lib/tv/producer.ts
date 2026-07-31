@@ -255,8 +255,8 @@ export function dress(
   now: number,
 ): Announcement | null {
   /*
-   * Most moments belong to a player. Some describe the board itself — where
-   * the cut stands, the shape of the top — and have no one to attach to, so
+   * Most moments belong to a player. Some describe the board itself - where
+   * the cut stands, the shape of the top - and have no one to attach to, so
    * they are dressed without a name rather than dropped for want of one.
    */
   const player = (snapshot.players ?? []).find((p) => p.id === m.playerId);
@@ -473,7 +473,7 @@ export function reduce(
         ...state,
         pending: state.pending.filter((a) => a.id !== event.id),
         announced: [...state.announced, item.factKey],
-        history: note(state, { at: now, kind: item.kind, text: `Rejected: ${item.headline} — ${item.subject}` }),
+        history: note(state, { at: now, kind: item.kind, text: `Rejected: ${item.headline} · ${item.subject}` }),
       };
     }
 
@@ -855,7 +855,7 @@ function onSnapshot(
     lastSnapshot: snapshot,
     /*
      * The first snapshot sets the feature clock so nothing fires the instant
-     * the screen comes on — except when the golf is already over, which is
+     * the screen comes on - except when the golf is already over, which is
      * precisely when someone has walked over and switched the television on
      * for the prizegiving. Making them look at a static board for ninety
      * seconds first is the wrong answer to the one moment they are watching.
@@ -930,7 +930,7 @@ function onTick(state: ProducerState, now: number): ProducerState {
           ...losers.map((a) => ({
             at: now,
             kind: "skipped" as const,
-            text: `Skipped, too much at once: ${a.headline} — ${a.subject}`,
+            text: `Skipped, too much at once: ${a.headline} · ${a.subject}`,
           })),
           ...state.history,
         ].slice(0, 60),
@@ -964,7 +964,7 @@ function onTick(state: ProducerState, now: number): ProducerState {
         history: note(state, {
           at: now,
           kind: next.kind,
-          text: `${next.headline} — ${next.subject}`,
+          text: `${next.headline} · ${next.subject}`,
         }),
         // a feature never lands straight on top of an announcement
         nextFeatureAt: Math.max(state.nextFeatureAt, now + cfg.featureEveryMs),

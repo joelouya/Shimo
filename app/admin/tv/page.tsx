@@ -182,7 +182,7 @@ export default function ProducerPanel() {
             <div>
               <p className="font-serif text-lg text-foreground">
                 {quiet
-                  ? "Quiet — the board only"
+                  ? "Quiet. The board only"
                   : producer.playing?.type === "announcement"
                     ? `On screen: ${producer.playing.item.headline}`
                     : producer.playing
@@ -191,7 +191,7 @@ export default function ProducerPanel() {
               </p>
               <p className="text-[13px] text-muted-foreground">
                 {isStale(feed, now)
-                  ? "The screen may be behind — reconnecting"
+                  ? "The screen may be behind. Reconnecting"
                   : `${COVERAGE_HELP[coverage]} · ${producer.queue.length} waiting · ${producer.pending.length} held`}
               </p>
             </div>
@@ -228,7 +228,7 @@ export default function ProducerPanel() {
 
       {claims.length > 0 && (
         <section className="mt-5">
-          <p className="smallcaps text-gold">Your books</p>
+          <p className="smallcaps text-muted-foreground">Your books</p>
           <div className="mt-3 space-y-3">
             {claims.map((c) => (
               <RecordClaimCard key={`${c.courseId}-${c.tee}`} claim={c} clubId={live.clubId} />
@@ -274,7 +274,7 @@ export default function ProducerPanel() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-[14px] font-medium text-foreground">
-                        {a.headline} — {a.subject}
+                        {a.headline} · {a.subject}
                       </p>
                       <p className="text-[12px] text-muted-foreground">
                         {a.line ?? a.detail ?? ""}
@@ -422,7 +422,7 @@ function PendingCard({
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-flag" />
         <div className="min-w-0 flex-1">
           <p className="text-[15px] font-medium text-foreground">
-            {item.headline} — {item.subject}
+            {item.headline} · {item.subject}
           </p>
           <p className="mt-0.5 text-[13px] text-ink-soft">{item.holdReason}</p>
           {item.line && (

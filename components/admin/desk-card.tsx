@@ -70,7 +70,7 @@ export function DeskCard() {
             inputMode="numeric"
             value={pin}
             onChange={(e) => setPin(e.target.value)}
-            placeholder={adminPin ? "••••  (set — type to replace)" : "4 digits or more"}
+            placeholder={adminPin ? "••••  (set, type to replace)" : "4 digits or more"}
           />
           <p className="text-[12px] text-muted-foreground">
             {adminPin

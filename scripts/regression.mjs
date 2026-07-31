@@ -858,7 +858,7 @@ check("an eagle holds the screen for six seconds",
 check("what is playing has left the queue and been remembered",
   playing.queue.length === 0 && playing.announced.includes(playing.playing.item.factKey));
 check("it appears in the history the panel shows",
-  playing.history[0].text === "Eagle — Alice Wanjiru");
+  playing.history[0].text === "Eagle · Alice Wanjiru");
 
 check("an animation is never cut short by a new snapshot", (() => {
   const mid = PR.reduce(playing,
@@ -1864,7 +1864,7 @@ section("Cut line, ties, and the end of the day");
   check("a lead change and a tie breaking are not both announced", (() => {
     /*
      * They are the same event seen from two sides. The simulation showed the
-     * screen saying "New leader — Peter Njoroge" and "Clear at the top — Peter
+     * screen saying "New leader - Peter Njoroge" and "Clear at the top - Peter
      * Njoroge" within seconds of each other.
      */
     const two = [
@@ -1989,6 +1989,53 @@ section("Cut line, ties, and the end of the day");
       if (lastEnd && x.mode === "feature") { gaps = v - lastEnd; lastEnd = null; }
     }
     return gaps > 0 && gaps <= 4_000;
+  })());
+}
+
+/* ------------------------------------------------------------------ *
+ * The tournament list
+ *
+ * Editing a seeded tournament copies it into the club's own records, which
+ * means the same event can exist twice in two different places. The list is
+ * the one place that has to reconcile them.
+ * ------------------------------------------------------------------ */
+section("The tournament list");
+{
+  const seeded = S.allTournaments([]);
+  const one = seeded[0];
+  check("the seeded list is deduplicated to begin with",
+    new Set(seeded.map((t) => t.id)).size === seeded.length);
+
+  const adopted = S.allTournaments([{ ...one, name: "Renamed by the club" }]);
+  check("adopting a seeded tournament does not list it twice",
+    adopted.filter((t) => t.id === one.id).length === 1);
+  check("the club's own copy is the one that shows",
+    adopted.find((t) => t.id === one.id).name === "Renamed by the club");
+  check("adopting does not lose any other tournament",
+    adopted.length === seeded.length, `${adopted.length} vs ${seeded.length}`);
+
+  const afterDismiss = S.allTournaments([], [one.id]);
+  check("a dismissed tournament leaves the list",
+    !afterDismiss.some((t) => t.id === one.id));
+  check("dismissing one leaves the rest alone",
+    afterDismiss.length === seeded.length - 1);
+}
+
+/* ------------------------------------------------------------------ *
+ * First run
+ *
+ * Both surfaces show their orientation exactly once, and independently. A
+ * welcome that comes back is worse than no welcome at all.
+ * ------------------------------------------------------------------ */
+section("First run");
+{
+  S.setOnboarded(true);
+  S.setDeskWelcomed(true);
+  check("the golfer orientation stays dismissed", st().onboarded === true);
+  check("the desk orientation stays dismissed", st().deskWelcomed === true);
+  check("dismissing one does not dismiss the other", (() => {
+    S.setDeskWelcomed(false);
+    return st().onboarded === true && st().deskWelcomed === false;
   })());
 }
 

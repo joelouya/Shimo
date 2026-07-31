@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * CSV roster import — the one action that swaps the placeholder roster for
+ * CSV roster import - the one action that swaps the placeholder roster for
  * a pilot club's real members. Expected columns (order-free, matched by
  * header): first name, last name, email, member number, handicap index,
  * home club, gender, date of birth (optional).

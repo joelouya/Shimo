@@ -44,7 +44,7 @@ export function detectProfile(format: Format, players: Player[]): ProfileGuess {
   if (hcs.length < 6)
     return {
       profile: "club",
-      because: "Too few entries yet to tell — club treatment for now",
+      because: "Too few entries yet to tell, so club treatment for now",
     };
 
   /*
@@ -61,12 +61,12 @@ export function detectProfile(format: Format, players: Player[]): ProfileGuess {
   if (spread <= 8 && median <= 10)
     return {
       profile: "championship",
-      because: `Handicaps ${low} to ${high} — a tight field, so gross figures mean something`,
+      because: `Handicaps ${low} to ${high}, a tight field, so gross figures mean something`,
     };
 
   return {
     profile: "club",
-    because: `Handicaps ${low} to ${high} — a wide field, so net is the fairer story`,
+    because: `Handicaps ${low} to ${high}, a wide field, so net is the fairer story`,
   };
 }
 
@@ -83,7 +83,7 @@ export const PROFILE_LABEL: Record<FieldProfile, string> = {
  * A championship field can carry a busy screen: the room is there for the
  * golf and the moments are genuinely rare. A Saturday medal wants the big
  * things and otherwise its board, because forty people making net pars is
- * not an event. A corporate or junior day wants to be left alone entirely —
+ * not an event. A corporate or junior day wants to be left alone entirely -
  * those are the rooms where a screen calling out scores changes how people
  * feel about their afternoon.
  */
@@ -102,7 +102,7 @@ export const COVERAGE_LABEL: Record<Coverage, string> = {
 export const COVERAGE_HELP: Record<Coverage, string> = {
   full: "Every moment worth showing. For a championship.",
   reduced:
-    "The big ones only — aces, eagles, the lead changing, course records. Interludes still run.",
+    "The big ones only: aces, eagles, the lead changing, course records. Interludes still run.",
   quiet: "The board and nothing else. For corporate days, juniors, and member-guests.",
 };
 

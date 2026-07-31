@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ *
- * M10 — the producer panel
+ * M10 - the producer panel
  *
  * How an admin steers a television that is not allowed to write.
  *
@@ -9,9 +9,9 @@
  * edits it.
  *
  * Instead the decisions travel one way. The panel runs its own copy of the
- * producer — which is a pure function of the snapshot, the config and the
+ * producer - which is a pure function of the snapshot, the config and the
  * time, so both copies independently derive the same queue and the same held
- * announcements — and writes only its decisions here. The television reads
+ * announcements - and writes only its decisions here. The television reads
  * them and folds them in. Nothing about the screen ever writes.
  *
  * Append-only. A decision is a thing that was decided at a moment; changing

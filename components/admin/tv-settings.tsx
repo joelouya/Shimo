@@ -92,7 +92,7 @@ function Background({ identity }: { identity: ClubIdentity }) {
             />
             {/* the same two layers the television uses, so what is previewed
                 here is what a room will actually see */}
-            <div className="absolute inset-0 bg-[#101722]/82" />
+            <div className="absolute inset-0 bg-broadcast-ink/82" />
             <div
               className="absolute inset-0"
               style={{
@@ -254,7 +254,7 @@ function Records({ identity }: { identity: ClubIdentity }) {
               <span className="text-[13px] text-ink-soft">
                 <Trophy className="mr-1.5 inline size-3.5 text-gold" />
                 {COURSES.find((c) => c.id === r.courseId)?.name ?? r.courseId} ·{" "}
-                {r.tee} tees — <span className="font-medium">{r.strokes}</span>,{" "}
+                {r.tee} tees · <span className="font-medium">{r.strokes}</span>,{" "}
                 {r.holder} ({r.year})
               </span>
               <button

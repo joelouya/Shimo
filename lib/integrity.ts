@@ -6,7 +6,7 @@
  * When marker and player have both certified, we hash the full hole-by-hole
  * score set with the identities involved, capture a light device fingerprint
  * (no PII, no MSISDN), the sign-off location if the golfer permitted it, and
- * the distance to the registered clubhouse — the digital equivalent of
+ * the distance to the registered clubhouse - the digital equivalent of
  * physically returning the card to the Committee's scoring area.
  *
  * Records are append-only. Committee interventions append new records that
@@ -53,7 +53,7 @@ export interface AuditRecord {
   gps?: GpsFix | null;
   distanceFromClubhouseM?: number | null;
   appVersion: string;
-  /** human-readable what/why — committee reasons land here verbatim */
+  /** human-readable what/why - committee reasons land here verbatim */
   detail: string;
   /** hi/ch/ph snapshot for Rule 3.3b(4) */
   handicaps?: { hi: number; ch: number; ph: number };
@@ -118,7 +118,7 @@ export function distanceM(
   return Math.round(2 * R * Math.asin(Math.sqrt(h)));
 }
 
-/** One-shot GPS fix; resolves null on denial/timeout — never throws. */
+/** One-shot GPS fix; resolves null on denial/timeout - never throws. */
 export function getGpsFix(timeoutMs = 8000): Promise<GpsFix | null> {
   return new Promise((resolve) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {

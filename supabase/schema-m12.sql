@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ *
- * M12 — how much the screen says
+ * M12 - how much the screen says
  *
  * Three settings rather than on and off, because "some" is what most club
  * golf actually wants: 'full', 'reduced', 'quiet'. Null means follow the

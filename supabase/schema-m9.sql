@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ *
- * M9 — the desk's publish gate
+ * M9 - the desk's publish gate
  *
  * Publishing a desk-entered card is a deliberate second act, not a switch.
  * The card is typed, then published, and only a published card is allowed
@@ -9,9 +9,9 @@
 /* Who published it, and when. `is_in` already meant "the desk has returned
    this card"; these say who stood behind that and what evidence they left.
 
-   published_by  — the club member id of the caddymaster or admin who did it,
+   published_by  - the club member id of the caddymaster or admin who did it,
                    confirmed with their PIN at the moment they did.
-   card_photo    — storage path of a photograph of the paper card, if one was
+   card_photo    - storage path of a photograph of the paper card, if one was
                    attached. Optional, and encouraged: it is the only thing
                    that settles an argument about a card the player never
                    touched. */

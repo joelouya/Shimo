@@ -62,11 +62,11 @@ function PlayerChip({
       }}
       onClick={onSelect}
       className={cn(
-        "group flex cursor-grab items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 shadow-xs transition-all active:cursor-grabbing hover:shadow-card",
+        "group flex cursor-grab items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 shadow-xs transition-[box-shadow,border-color] duration-[var(--dur-hover)] ease-[var(--ease-out)] active:cursor-grabbing hover:shadow-card",
         selected ? "border-clay ring-1 ring-clay/40" : "border-border",
       )}
     >
-      <GripVertical className="size-3 text-muted-foreground/50" />
+      <GripVertical className="size-3 text-muted-foreground" />
       <span className="flex-1 truncate text-[12.5px] text-foreground">{p.name}</span>
       <span className="rounded bg-secondary px-1 text-[10px] text-muted-foreground tnum">
         {p.handicap}
@@ -109,7 +109,7 @@ export default function PairingsPage({
   /*
    * Load the round's saved pairings when the round changes. Adjusting during
    * render rather than after it means the round being opened is the first tee
-   * sheet drawn — the previous round's groups are never briefly on screen,
+   * sheet drawn - the previous round's groups are never briefly on screen,
    * and autosave never sees the gap between the two.
    */
   const [loadedRound, setLoadedRound] = useState<number | null>(null);
@@ -274,7 +274,7 @@ export default function PairingsPage({
                   className={cn(
                     "rounded px-1.5 py-px text-[10px]",
                     round === r.number
-                      ? "bg-white/15 text-primary-foreground"
+                      ? "bg-cream/15 text-primary-foreground"
                       : "bg-clay-wash text-clay-deep",
                   )}
                 >
@@ -368,7 +368,7 @@ export default function PairingsPage({
                   }
                 }}
                 className={cn(
-                  "rounded-2xl bg-card p-3.5 shadow-card transition-all",
+                  "rounded-2xl bg-card p-3.5 shadow-card transition-[box-shadow,background-color] duration-[var(--dur-hover)] ease-[var(--ease-out)]",
                   g.playerIds.length === 0 && "border border-dashed border-border bg-card/50 shadow-none",
                   selected && g.playerIds.length < 4 && "cursor-pointer ring-1 ring-clay/30 hover:ring-clay/60",
                 )}
@@ -392,7 +392,7 @@ export default function PairingsPage({
                     ) : null,
                   )}
                   {g.playerIds.length === 0 && (
-                    <p className="py-7 text-center text-[11px] text-muted-foreground/60">
+                    <p className="py-7 text-center text-[11px] text-muted-foreground">
                       Drop players here
                     </p>
                   )}

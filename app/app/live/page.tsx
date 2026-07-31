@@ -92,7 +92,7 @@ function ScoreCell({
   dim?: boolean;
 }) {
   if (gross == null)
-    return <span className="text-muted-foreground/40">·</span>;
+    return <span className="text-muted-foreground">·</span>;
   const d = gross - par;
   return (
     <span
@@ -190,7 +190,7 @@ function PilotLiveTab() {
           </div>
           <Link
             href="/app/leaderboard"
-            className="block bg-clay py-3.5 text-center text-[15px] font-medium text-white transition-colors hover:bg-clay-deep"
+            className="block bg-clay py-3.5 text-center text-[15px] font-medium text-cream transition-colors hover:bg-clay-deep"
           >
             Follow the leaderboard
           </Link>
@@ -332,9 +332,9 @@ function PilotScoring() {
                   key={h.hole}
                   onClick={() => setPinned(i === Math.min(currentIdx, 17) ? null : i)}
                   className={cn(
-                    "flex size-11 shrink-0 flex-col items-center justify-center rounded-full border text-[14px] font-medium tnum transition-all cursor-pointer",
+                    "flex size-11 shrink-0 flex-col items-center justify-center rounded-full border text-[14px] font-medium tnum transition-[color,background-color,border-color] duration-[var(--dur-hover)] ease-[var(--ease-out)] cursor-pointer",
                     isSel
-                      ? "border-clay bg-clay text-white"
+                      ? "border-clay bg-clay text-cream"
                       : entered
                         ? "border-transparent bg-secondary text-ink-soft"
                         : "border-border bg-card text-muted-foreground",
@@ -497,7 +497,7 @@ function DemoLiveScoring() {
   );
 
   const [resolveOpen, setResolveOpen] = useState(false);
-  // ceremony opens once every hole is entered — discrepancies are agreed
+  // ceremony opens once every hole is entered - discrepancies are agreed
   // (or disputed to the Committee) inside the ceremony itself
   const roundComplete = currentIdx === 18;
 
@@ -531,7 +531,7 @@ function DemoLiveScoring() {
         </button>
       </header>
 
-      {/* position strip — respects scoreboard blindness */}
+      {/* position strip - respects scoreboard blindness */}
       {!hidden && !attested && (
         <Link
           href="/app/leaderboard"
@@ -610,9 +610,9 @@ function DemoLiveScoring() {
                   key={h.hole}
                   onClick={() => setPinned(i === Math.min(currentIdx, 17) ? null : i)}
                   className={cn(
-                    "flex size-11 shrink-0 flex-col items-center justify-center rounded-full border text-[14px] font-medium tnum transition-all cursor-pointer",
+                    "flex size-11 shrink-0 flex-col items-center justify-center rounded-full border text-[14px] font-medium tnum transition-[color,background-color,border-color] duration-[var(--dur-hover)] ease-[var(--ease-out)] cursor-pointer",
                     isSel
-                      ? "border-clay bg-clay text-white"
+                      ? "border-clay bg-clay text-cream"
                       : entered
                         ? "border-transparent bg-secondary text-ink-soft"
                         : "border-border bg-card text-muted-foreground",
@@ -655,7 +655,7 @@ function DemoLiveScoring() {
                 </div>
               </div>
 
-              {/* the two cards — you and the player you mark */}
+              {/* the two cards - you and the player you mark */}
               <div className="mt-4 grid grid-cols-1 gap-3">
                 <PlayerEntry
                   title="Your ball"

@@ -161,10 +161,10 @@ export function judge(opts: {
   // A club's own record is the club's to confirm. It is rare enough that the
   // one tap costs nothing, and wrong badly enough that it must not be automatic.
   if (kind === "course-record")
-    return { auto: false, reason: "Course record — confirm before broadcast" };
+    return { auto: false, reason: "Course record. Confirm before broadcast" };
 
   if (kind === "ace" && hc > cfg.aceApprovalHandicap)
-    return { auto: false, reason: `Hole-in-one from a ${hc} handicap — confirm` };
+    return { auto: false, reason: `Hole-in-one from a ${hc} handicap. Confirm` };
 
   if (hole && gross != null) {
     const under = underPar(gross, hole);
@@ -174,7 +174,7 @@ export function judge(opts: {
     if (under >= 3)
       return {
         auto: false,
-        reason: `${gross} on a par ${hole.par} — confirm before broadcast`,
+        reason: `${gross} on a par ${hole.par}. Confirm before broadcast`,
       };
 
     // Eagles are the line where handicap starts to matter. A single figure
@@ -182,11 +182,11 @@ export function judge(opts: {
     // worth the four seconds it takes to nod at it first.
     if (under === 2) {
       if (hc > 18)
-        return { auto: false, reason: `Eagle from a ${hc} handicap — confirm` };
+        return { auto: false, reason: `Eagle from a ${hc} handicap. Confirm` };
       if (hc > 12 && hole.si <= 2)
         return {
           auto: false,
-          reason: `Eagle on stroke index ${hole.si} from a ${hc} handicap — confirm`,
+          reason: `Eagle on stroke index ${hole.si} from a ${hc} handicap. Confirm`,
         };
     }
   }

@@ -39,7 +39,7 @@ export function DemoToggle({ corner = "br" }: { corner?: "br" | "phone" }) {
               <p className="smallcaps text-primary-foreground/60">Demo mode</p>
               <button
                 onClick={() => setOpen(false)}
-                className="rounded p-0.5 text-primary-foreground/50 hover:text-primary-foreground cursor-pointer"
+                className="rounded p-0.5 text-primary-foreground/60 hover:text-primary-foreground cursor-pointer"
               >
                 <X className="size-3.5" />
               </button>
@@ -50,7 +50,7 @@ export function DemoToggle({ corner = "br" }: { corner?: "br" | "phone" }) {
               </p>
               <Switch checked={demoMode} onCheckedChange={setDemoMode} />
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-primary-foreground/50">
+            <p className="mt-2 text-[11px] leading-relaxed text-primary-foreground/60">
               Scores enter themselves every few seconds. Watch the leaderboard
               and Live Ops move.
             </p>
@@ -59,7 +59,7 @@ export function DemoToggle({ corner = "br" }: { corner?: "br" | "phone" }) {
                 resetDemo();
                 setOpen(false);
               }}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground/80 hover:bg-white/15 cursor-pointer"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-cream/10 px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground/80 hover:bg-cream/15 cursor-pointer"
             >
               <RotateCcw className="size-3" />
               Reset demo data
@@ -72,7 +72,7 @@ export function DemoToggle({ corner = "br" }: { corner?: "br" | "phone" }) {
         className={cn(
           "flex size-12 items-center justify-center rounded-full shadow-lift transition-colors cursor-pointer",
           demoMode
-            ? "bg-clay text-white"
+            ? "bg-clay text-cream"
             : "bg-primary text-primary-foreground hover:bg-ink-soft",
         )}
         title="Demo mode"

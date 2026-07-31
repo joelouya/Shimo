@@ -7,7 +7,7 @@ import { useSim, type AppNotification } from "@/lib/sim/store";
 
 /**
  * iOS-style push banners for the golfer app. Only notifications that arrive
- * after mount are shown — history never replays on load.
+ * after mount are shown - history never replays on load.
  */
 export function NotificationToasts() {
   const notifications = useSim((s) => s.notifications);
@@ -47,8 +47,8 @@ export function NotificationToasts() {
             <span className="text-xl leading-none">{n.emoji}</span>
             <div className="min-w-0">
               <div className="flex items-baseline justify-between gap-2">
-                <p className="smallcaps text-primary-foreground/50">Shimo</p>
-                <p className="text-[10px] text-primary-foreground/40">now</p>
+                <p className="smallcaps text-primary-foreground/60">Shimo</p>
+                <p className="text-[10px] text-primary-foreground/60">now</p>
               </div>
               <p className="mt-0.5 text-[13px] font-medium leading-snug">{n.title}</p>
               {n.body && (

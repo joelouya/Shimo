@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Flag,
   Image as ImageIcon,
+  MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
@@ -25,17 +26,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { clubById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import {
+  adoptTournament,
   allTournaments,
   deleteTournament,
+  dismissTournament,
   endTournamentDay,
   startTournamentDay,
   useSim,
 } from "@/lib/sim/store";
 import type { Tournament } from "@/lib/types";
-import { formatDate, formatKES } from "@/lib/utils";
+import { formatKES } from "@/lib/utils";
 
 function StatusBadge({ t }: { t: Tournament }) {
   if (t.status === "live") return <Badge variant="live">● Live</Badge>;
@@ -43,16 +53,45 @@ function StatusBadge({ t }: { t: Tournament }) {
   return <Badge variant="secondary">Entries open</Badge>;
 }
 
+/**
+ * One row of secondary actions, behind a single control.
+ *
+ * The upcoming row grew to five buttons of equal weight, which reads as five
+ * equally likely things to do next. On a tournament day exactly one of them is
+ * likely, so that one stays out and the rest go behind the ellipsis. The desk
+ * loses nothing: everything is still one click away, it is just no longer
+ * competing with the thing they actually came here to do.
+ */
+function RowMenu({ children }: { children: React.ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="More actions"
+          className="text-muted-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+        >
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">{children}</DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function TournamentRow({
   t,
   isNew,
   isCreated,
+  onEdit,
   onDelete,
   onEnd,
 }: {
   t: Tournament;
   isNew?: boolean;
   isCreated: boolean;
+  onEdit: (t: Tournament) => void;
   onDelete: (t: Tournament) => void;
   onEnd: (t: Tournament) => void;
 }) {
@@ -87,59 +126,79 @@ function TournamentRow({
             <Button variant="outline" size="sm" asChild>
               <Link href="/admin/scores">Enter scores</Link>
             </Button>
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="clay" size="sm" asChild>
               <Link href="/admin/live">
                 Live Ops <ArrowRight className="size-3" />
               </Link>
             </Button>
-            {IS_PILOT && isCreated && (
-              <Button variant="clay" size="sm" onClick={() => onEnd(t)}>
-                <Flag className="size-3" />
-                End tournament
-              </Button>
-            )}
+            <RowMenu>
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/tournaments/${t.id}/pairings`}>
+                  <Users />
+                  Pairings & tee times
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/tournaments/${t.id}/poster`}>
+                  <ImageIcon />
+                  Poster
+                </Link>
+              </DropdownMenuItem>
+              {IS_PILOT && isCreated && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => onEnd(t)}>
+                    <Flag />
+                    End tournament
+                  </DropdownMenuItem>
+                </>
+              )}
+            </RowMenu>
           </>
         ) : t.status === "upcoming" ? (
           <>
-            {isCreated && (
-              <Button variant="ghost" size="sm" asChild>
-                <Link href={`/admin/tournaments/new?edit=${t.id}`}>
-                  <Pencil className="size-3" />
-                  Edit
+            {/* In pilot the day is the point; otherwise the tee sheet is. */}
+            {IS_PILOT ? (
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/admin/tournaments/${t.id}/pairings`}>
+                    <Users className="size-3" />
+                    Pairings & tee times
+                  </Link>
+                </Button>
+                <Button
+                  variant="clay"
+                  size="sm"
+                  onClick={() => startTournamentDay(t.id)}
+                >
+                  Start tournament day
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/admin/tournaments/${t.id}/pairings`}>
+                  <Users className="size-3" />
+                  Pairings & tee times
                 </Link>
               </Button>
             )}
-            {isCreated && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => onDelete(t)}
-              >
-                <Trash2 className="size-3" />
-              </Button>
-            )}
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/admin/tournaments/${t.id}/poster`}>
-                <ImageIcon className="size-3" />
-                Poster
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/admin/tournaments/${t.id}/pairings`}>
-                <Users className="size-3" />
-                Pairings & tee times
-              </Link>
-            </Button>
-            {IS_PILOT && (
-              <Button
-                variant="clay"
-                size="sm"
-                onClick={() => startTournamentDay(t.id)}
-              >
-                Start tournament day
-              </Button>
-            )}
+            <RowMenu>
+              <DropdownMenuItem onSelect={() => onEdit(t)}>
+                <Pencil />
+                Edit details
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/tournaments/${t.id}/poster`}>
+                  <ImageIcon />
+                  Poster
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(t)}>
+                <Trash2 />
+                {isCreated ? "Delete tournament" : "Remove from list"}
+              </DropdownMenuItem>
+            </RowMenu>
           </>
         ) : (
           <>
@@ -150,17 +209,25 @@ function TournamentRow({
               </span>
             </p>
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/admin/tournaments/${t.id}/poster`}>
-                <ImageIcon className="size-3" />
-                Poster
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
               <Link href={`/admin/tournaments/${t.id}/summary`}>
                 <ClipboardList className="size-3" />
                 Summary
               </Link>
             </Button>
+            <RowMenu>
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/tournaments/${t.id}/poster`}>
+                  <ImageIcon />
+                  Results poster
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/tournaments/${t.id}/pairings`}>
+                  <Users />
+                  Pairings & tee times
+                </Link>
+              </DropdownMenuItem>
+            </RowMenu>
           </>
         )}
       </div>
@@ -171,7 +238,8 @@ function TournamentRow({
 export default function AdminTournamentsPage() {
   const router = useRouter();
   const created = useSim((s) => s.created);
-  const all = allTournaments(created);
+  const dismissed = useSim((s) => s.dismissed);
+  const all = allTournaments(created, dismissed);
   const live = all.filter((t) => t.status === "live");
   const upcoming = all
     .filter((t) => t.status === "upcoming")
@@ -181,6 +249,19 @@ export default function AdminTournamentsPage() {
 
   const [toDelete, setToDelete] = useState<Tournament | null>(null);
   const [toEnd, setToEnd] = useState<Tournament | null>(null);
+
+  /**
+   * A seeded tournament has to become the club's own before it can be edited,
+   * because the wizard edits from `created`. Done silently on the way into the
+   * editor: a club that clicked Edit wants to edit, not to be told about the
+   * difference between an example and their own record.
+   */
+  function onEdit(t: Tournament) {
+    if (!createdIds.has(t.id)) adoptTournament(t.id);
+    router.push(`/admin/tournaments/new?edit=${t.id}`);
+  }
+
+  const deleteIsRemoval = toDelete ? !createdIds.has(toDelete.id) : false;
 
   return (
     <div>
@@ -215,6 +296,7 @@ export default function AdminTournamentsPage() {
                     t={t}
                     isNew={createdIds.has(t.id) && !IS_PILOT}
                     isCreated={createdIds.has(t.id)}
+                    onEdit={onEdit}
                     onDelete={setToDelete}
                     onEnd={setToEnd}
                   />
@@ -228,11 +310,16 @@ export default function AdminTournamentsPage() {
       <Dialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete this tournament?</DialogTitle>
+            <DialogTitle>
+              {deleteIsRemoval
+                ? "Remove this from your list?"
+                : "Delete this tournament?"}
+            </DialogTitle>
             <DialogDescription className="leading-relaxed">
               <span className="font-medium text-foreground">{toDelete?.name}</span>{" "}
-              will be removed for every device. This can&apos;t be undone. Only do
-              this before the tournament has started.
+              {deleteIsRemoval
+                ? "is one of the example events Shimo ships with. Removing it clears it from your list. Nothing you created is affected."
+                : "will be removed for every device. This can't be undone. Only do this before the tournament has started."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -242,12 +329,15 @@ export default function AdminTournamentsPage() {
             <Button
               variant="destructive"
               onClick={() => {
-                if (toDelete) deleteTournament(toDelete.id);
+                if (toDelete) {
+                  if (deleteIsRemoval) dismissTournament(toDelete.id);
+                  else deleteTournament(toDelete.id);
+                }
                 setToDelete(null);
               }}
             >
               <Trash2 className="size-4" />
-              Delete tournament
+              {deleteIsRemoval ? "Remove it" : "Delete tournament"}
             </Button>
           </DialogFooter>
         </DialogContent>

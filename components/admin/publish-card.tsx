@@ -48,7 +48,7 @@ export function PublishButton({
    * The mode is captured when the dialog opens rather than read from live
    * state. Publishing flips this card to published, and a dialog that reads
    * that flag would rewrite itself into its own withdraw form at the moment of
-   * success — the desk taps "Publish card" and is looking at "Withdraw". What
+   * success - the desk taps "Publish card" and is looking at "Withdraw". What
    * it should do is close.
    */
   const [mode, setMode] = useState<"publish" | "withdraw" | null>(null);
@@ -67,10 +67,10 @@ export function PublishButton({
         }
         className={`inline-flex size-7 items-center justify-center rounded-full border transition-colors ${
           published
-            ? "border-clay bg-clay text-white"
+            ? "border-clay bg-clay text-cream"
             : complete
               ? "border-input text-muted-foreground hover:border-clay hover:text-clay"
-              : "border-border/60 text-muted-foreground/40"
+              : "border-border/60 text-muted-foreground"
         }`}
       >
         {published ? <Check className="size-3.5" /> : <Lock className="size-3" />}
@@ -150,7 +150,7 @@ function Publish({
         setBusy(false);
         setSkipPhoto(true);
         setError(
-          "The photo could not be uploaded — the club's connection may be down. Publish without it, or cancel and try again.",
+          "The photo could not be uploaded. The club's connection may be down. Publish without it, or cancel and try again.",
         );
         return;
       }

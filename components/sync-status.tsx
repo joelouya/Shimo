@@ -76,7 +76,7 @@ export function LastUpdatedNote() {
 
 /**
  * Attest resilience: if the attestation is stuck after retries, don't block
- * the golfer — suggest the screenshot fallback and let the club reconcile.
+ * the golfer - suggest the screenshot fallback and let the club reconcile.
  */
 export function AttestSyncNote() {
   const { online } = useSyncStatus();

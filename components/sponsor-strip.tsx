@@ -51,7 +51,7 @@ export function SponsorStrip({
   const list = sortedSponsors(sponsors);
   if (!list.length) return null;
 
-  const muted = tone === "dark" ? "text-primary-foreground/45" : "text-muted-foreground";
+  const muted = tone === "dark" ? "text-primary-foreground/60" : "text-muted-foreground";
   const title = list.find((s) => s.tier === "title");
   const rest = list.filter((s) => s !== title);
 

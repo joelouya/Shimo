@@ -26,7 +26,7 @@ export const CLUBS: Club[] = [
 export const clubById = (id: string) => CLUBS.find((c) => c.id === id)!;
 
 /* ------------------------------------------------------------------ */
-/* Courses (Muthaiga fully detailed — yellow tees)                     */
+/* Courses (Muthaiga fully detailed - yellow tees)                     */
 /* ------------------------------------------------------------------ */
 
 const MUTHAIGA_HOLES = [
@@ -88,11 +88,11 @@ const P = (
 });
 
 export const PLAYERS: Player[] = [
-  // — the demo user and his group —
+  // - the demo user and his group -
   P(DEMO_USER_ID, "Joel Ouya", "muthaiga", 12),
   P(MARKER_ID, "David Kamau", "muthaiga", 14),
   P("p-wanjiku-g", "Grace Wanjiku", "karen", 9, "F"),
-  // — the field —
+  // - the field -
   P("p-otieno-b", "Brian Otieno", "muthaiga", 4),
   P("p-njoroge-p", "Peter Njoroge", "muthaiga", 6),
   P("p-fraser-i", "Ian Fraser", "karen", 3),
@@ -126,7 +126,7 @@ export const PLAYERS: Player[] = [
   P("p-adhiambo-p", "Pauline Adhiambo", "vetlab", 23, "F"),
   P("p-kariuki-t", "Tom Kariuki", "muthaiga", 16),
   P("p-simiyu-e", "Edwin Simiyu", "windsor", 28),
-  // — extra members (roster only) —
+  // - extra members (roster only) -
   P("p-githinji-m", "Martin Githinji", "muthaiga", 20),
   P("p-anyango-r", "Rose Anyango", "muthaiga", 26, "F"),
   P("p-pereira-l", "Luis Pereira", "muthaiga", 9),
@@ -371,7 +371,7 @@ export const TOURNAMENTS: Tournament[] = [
     teeInterval: 10,
     fieldSize: 52,
   },
-  // — completed —
+  // - completed -
   {
     id: "t-muthaiga-medal-july",
     name: "Muthaiga July Monthly Medal",
@@ -466,7 +466,7 @@ export const GROUPS: Group[] = [
   G(7, ["p-akinyi-f", "p-hughes-w", "p-langat-c"]),
   G(8, ["p-vdmerwe-h", "p-muriuki-a", "p-njeri-c"]),
   G(9, ["p-shah-a", "p-kariuki-t", "p-wafula-m"]),
-  G(10, ["p-atieno-s", "p-maina-f", "p-mutua-d"], true), // Mutua — the anomaly story
+  G(10, ["p-atieno-s", "p-maina-f", "p-mutua-d"], true), // Mutua - the anomaly story
   G(11, ["p-chebet-m", "p-barasa-t", "p-wairimu-n"]),
   G(12, ["p-nyambura-l", "p-simiyu-e", "p-adhiambo-p"]),
 ];

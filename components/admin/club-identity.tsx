@@ -22,6 +22,7 @@ import { Logo, LogoMark } from "@/components/logo";
 import { clubById } from "@/lib/data";
 import {
   DEFAULT_ACCENT,
+  AA_TEXT,
   accentOnDark,
   accentOnLight,
   checkAccent,
@@ -58,6 +59,17 @@ export function ClubIdentityCard() {
   const applied = identity.accent ?? DEFAULT_ACCENT;
   const light = accentOnLight(check.hex ?? applied);
   const dark = accentOnDark(check.hex ?? applied);
+  /*
+   * The preview renders the club's accent as 9.5 and 10px labels, which are
+   * normal text however large the real surfaces are. accentOnDark targets the
+   * large-text ratio by default, so asking for it here would show the club a
+   * preview that is a full contrast step more legible than what they get.
+   */
+  const darkSmall = accentOnDark(check.hex ?? applied, AA_TEXT);
+  /* And the eligibility pill paints the accent over a 12% tint of itself, so
+     its ground is a step darker than the cream accentOnLight solves against.
+     A ratio of headroom covers the difference. */
+  const darkOnTint = accentOnLight(check.hex ?? applied, AA_TEXT + 1);
   const onAccent = textOnAccent(check.hex ?? applied);
 
   const flash = () => {
@@ -328,7 +340,7 @@ export function ClubIdentityCard() {
                     </p>
                     <span
                       className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[9.5px] font-medium"
-                      style={{ backgroundColor: light + "1f", color: light }}
+                      style={{ backgroundColor: light + "1f", color: darkOnTint }}
                     >
                       You&apos;re eligible
                     </span>
@@ -366,7 +378,7 @@ export function ClubIdentityCard() {
                     <Logo className="text-[10px] shrink-0" tone="cream" />
                   )}
                 </div>
-                <p className="mt-2 text-[10px]" style={{ color: dark }}>
+                <p className="mt-2 text-[10px]" style={{ color: darkSmall }}>
                   1 · Joel Ouya · 38 pts
                 </p>
               </div>

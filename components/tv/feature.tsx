@@ -55,10 +55,10 @@ export function TvFeature({
           {item.lines.map((l, i) => (
             <div
               key={l.label}
-              className="tv-rise flex items-baseline justify-between border-b border-white/10 py-[0.85cqw]"
+              className="tv-rise flex items-baseline justify-between border-b border-cream/10 py-[0.85cqw]"
               style={{ ["--i" as string]: 3 + i }}
             >
-              <span className="text-[1.7cqw] text-white/55">{l.label}</span>
+              <span className="text-[1.7cqw] text-cream/55">{l.label}</span>
               <span className="font-serif text-[2.1cqw] text-[#f7f3ec] tabular-nums">
                 {l.value}
               </span>
@@ -72,7 +72,7 @@ export function TvFeature({
           className="tv-rise mt-[1.8cqw]"
           style={{ ["--i" as string]: 3 + item.lines.length }}
         >
-          <p className="text-[1.4cqw] tracking-[0.12em] text-white/40">
+          <p className="text-[1.4cqw] tracking-[0.12em] text-cream/40">
             {item.footnote}
           </p>
         </div>

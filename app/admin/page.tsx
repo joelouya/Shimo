@@ -76,7 +76,7 @@ function LivePanel() {
       <div className="flex items-center justify-between p-6 pb-0">
         <div className="flex items-center gap-3">
           <LiveBadge />
-          <p className="smallcaps text-primary-foreground/50">
+          <p className="smallcaps text-primary-foreground/60">
             On course now
           </p>
         </div>
@@ -98,15 +98,15 @@ function LivePanel() {
         </div>
         <div className="flex gap-10">
           <div>
-            <p className="smallcaps text-primary-foreground/45">Groups out</p>
+            <p className="smallcaps text-primary-foreground/60">Groups out</p>
             <p className="mt-1 font-serif text-3xl tnum">{groupsOut}</p>
           </div>
           <div>
-            <p className="smallcaps text-primary-foreground/45">Scores in</p>
+            <p className="smallcaps text-primary-foreground/60">Scores in</p>
             <p className="mt-1 font-serif text-3xl tnum">{scoresIn}</p>
           </div>
           <div>
-            <p className="smallcaps text-primary-foreground/45">Leader</p>
+            <p className="smallcaps text-primary-foreground/60">Leader</p>
             <p className="mt-1 font-serif text-xl leading-tight">
               {leader
                 ? leader.player.name
@@ -124,17 +124,17 @@ function LivePanel() {
           </div>
         </div>
       </div>
-      <div className="flex border-t border-white/10">
+      <div className="flex border-t border-cream/10">
         <Link
           href="/admin/live"
-          className="flex flex-1 items-center justify-between px-6 py-3.5 text-[13px] font-medium text-primary-foreground/85 transition-colors hover:bg-white/5"
+          className="flex flex-1 items-center justify-between px-6 py-3.5 text-[13px] font-medium text-primary-foreground/85 transition-colors hover:bg-cream/5"
         >
           Open Live Ops
           <ArrowRight className="size-4" />
         </Link>
         <Link
           href="/admin/live#certification"
-          className="flex items-center gap-2 border-l border-white/10 px-6 py-3.5 text-[13px] font-medium text-primary-foreground/85 transition-colors hover:bg-white/5"
+          className="flex items-center gap-2 border-l border-cream/10 px-6 py-3.5 text-[13px] font-medium text-primary-foreground/85 transition-colors hover:bg-cream/5"
         >
           Certification & disputes
         </Link>
@@ -178,15 +178,18 @@ function PilotTiles() {
 
 export default function AdminDashboard() {
   const created = useSim((s) => s.created);
-  const upcoming = allTournaments(created)
+  const dismissed = useSim((s) => s.dismissed);
+  const upcoming = allTournaments(created, dismissed)
     .filter((t) => t.status === "upcoming" && t.clubId === "muthaiga")
     .concat(
-      allTournaments(created).filter(
+      allTournaments(created, dismissed).filter(
         (t) => t.status === "upcoming" && t.clubId !== "muthaiga",
       ),
     )
     .slice(0, 5);
-  const recent = allTournaments(created).filter((t) => t.status === "completed");
+  const recent = allTournaments(created, dismissed).filter(
+    (t) => t.status === "completed",
+  );
 
   return (
     <div>
@@ -200,7 +203,7 @@ export default function AdminDashboard() {
             })}{" "}
             · Muthaiga Golf Club
           </p>
-          <h1 className="mt-2 font-serif text-[38px] leading-[1.05] text-foreground">
+          <h1 className="mt-2 font-serif text-[34px] leading-[1.05] text-foreground">
             Good morning, Wanjiru.
           </h1>
         </div>

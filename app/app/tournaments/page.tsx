@@ -38,7 +38,7 @@ function Chip({
     <button
       onClick={onClick}
       className={cn(
-        "flex min-h-11 shrink-0 items-center rounded-full border px-4 text-[13.5px] font-medium transition-all cursor-pointer",
+        "flex min-h-11 shrink-0 items-center rounded-full border px-4 text-[13.5px] font-medium transition-[color,background-color,border-color] duration-[var(--dur-hover)] ease-[var(--ease-out)] cursor-pointer",
         active
           ? "border-primary bg-primary text-primary-foreground"
           : "border-border bg-card text-ink-soft hover:border-stone/50",
@@ -51,13 +51,14 @@ function Chip({
 
 export default function TournamentsPage() {
   const created = useSim((s) => s.created);
+  const dismissed = useSim((s) => s.dismissed);
   const [format, setFormat] = useState<Format | null>(null);
   const [clubId, setClubId] = useState<string | null>(null);
   const [range, setRange] = useState("all");
   const [eligibleOnly, setEligibleOnly] = useState(false);
 
   const list = useMemo(() => {
-    return allTournaments(created)
+    return allTournaments(created, dismissed)
       .filter((t) => t.status === "upcoming")
       .filter((t) => !format || t.format === format)
       .filter((t) => !clubId || t.clubId === clubId)

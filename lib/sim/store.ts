@@ -76,7 +76,7 @@ const STORAGE_KEY = `shimo-sim-v9-${IS_PILOT ? "pilot" : "demo"}`;
 const CHANNEL = `shimo-sim-v9-${IS_PILOT ? "pilot" : "demo"}`;
 const SCHEMA = 9;
 
-/** Device-local identity — which player this phone belongs to (pilot). Kept in
+/** Device-local identity - which player this phone belongs to (pilot). Kept in
  *  its own key so it survives schema resets and is never uploaded. */
 const IDENTITY_KEY = "shimo-device-identity";
 function readIdentity(): string | null {
@@ -123,8 +123,8 @@ export interface AppNotification {
 
 /**
  * Deferred simulation work (the marker's phone confirming a score, Grace
- * playing her ball, a demo-mode auto-resolve). Stored in state — not in
- * setTimeout — so it survives reloads and runs on whichever tab leads.
+ * playing her ball, a demo-mode auto-resolve). Stored in state - not in
+ * setTimeout - so it survives reloads and runs on whichever tab leads.
  */
 export interface EchoTask {
   kind:
@@ -234,7 +234,7 @@ export interface SimState {
   schema: number;
   v: number;
   demoMode: boolean;
-  /** scoreboard blindness — hide leaderboard references during the round */
+  /** scoreboard blindness - hide leaderboard references during the round */
   hideLeaderboard: boolean;
   /**
    * Each player's card as entered on their own phone (source of truth),
@@ -284,6 +284,17 @@ export interface SimState {
   adminPin: string | null;
   /** who is on the desk, named on every card they publish */
   deskName: string | null;
+  /** the desk has seen the one-time orientation card */
+  deskWelcomed: boolean;
+  /**
+   * Seeded tournaments the club has removed from its list.
+   *
+   * A seeded event lives in a constant, so it cannot be deleted the way a
+   * created one can. Recording the dismissal instead means the admin list
+   * behaves the same whatever a tournament's origin, which is the only thing
+   * anyone actually cares about.
+   */
+  dismissed: string[];
   signMethod: SignMethod;
   tonePref: "editorial" | "classic";
   locationConsent: "unset" | "granted" | "declined";
@@ -301,7 +312,7 @@ export interface SimState {
 }
 
 /* ------------------------------------------------------------------ */
-/* Initial state — deterministic                                       */
+/* Initial state - deterministic                                       */
 /* ------------------------------------------------------------------ */
 
 const HOLES_PLAYED: Record<string, number> = {
@@ -310,7 +321,7 @@ const HOLES_PLAYED: Record<string, number> = {
 };
 
 const BIAS: Record<string, number> = {
-  "p-mutua-d": -0.65, // the anomaly — HC 24 playing out of his skin
+  "p-mutua-d": -0.65, // the anomaly - HC 24 playing out of his skin
   "p-ochieng-s": -0.35,
   "p-fraser-i": -0.25,
 };
@@ -410,6 +421,8 @@ export function buildInitialState(): SimState {
     userPin: null,
     adminPin: null,
     deskName: null,
+    deskWelcomed: false,
+    dismissed: [],
     signMethod: "pin",
     tonePref: "editorial",
     locationConsent: "unset",
@@ -525,6 +538,8 @@ function normalize(saved: SimState): SimState {
   out.outbox ??= [];
   out.roster ??= base.roster;
   out.created ??= [];
+  out.dismissed ??= [];
+  out.deskWelcomed ??= false;
   out.liveRound ||= 1;
   return out;
 }
@@ -604,7 +619,7 @@ function pushEvent(draft: SimState, playerId: string, holeIdx: number, gross: nu
 }
 
 function checkStoryFlags(draft: SimState) {
-  // red flag — the HC-24 player scoring far beyond expectation
+  // red flag - the HC-24 player scoring far beyond expectation
   if (!draft.mutuaFlagged) {
     const mutua = playerById("p-mutua-d");
     const st = rowStats(
@@ -722,7 +737,7 @@ function applyEcho(draft: SimState, task: EchoTask) {
   const cards = cardsFor(draft, key);
   const marks = markerCardsFor(draft, key);
   if (task.kind === "marker-joe") {
-    // "David's phone" confirms the user's own score —
+    // "David's phone" confirms the user's own score -
     // except hole 4, where he has the user down for one more.
     const own = (cards[DEMO_USER_ID] ??= emptyCard())[h];
     if (own == null || (marks[DEMO_USER_ID] ??= emptyCard())[h] != null) return;
@@ -1155,7 +1170,7 @@ export function savePairings(
 
 /**
  * Pilot: flip a created tournament into today's live event. This is the
- * "publish" moment — the tournament, its pairings, and every player in the
+ * "publish" moment - the tournament, its pairings, and every player in the
  * field go to the cloud so any device that joins hydrates the whole thing.
  */
 export function startTournamentDay(tournamentId: string, round = 1) {
@@ -1395,7 +1410,7 @@ export function markerAttest(
 /**
  * Stage B: the player certifies their own marker-attested card. Computes the
  * tamper-evidence record (hash, device, location, clubhouse distance) and
- * appends it — the card is now "returned" in the R&A sense.
+ * appends it - the card is now "returned" in the R&A sense.
  */
 export async function playerCertify(
   playerId: string,
@@ -1848,6 +1863,12 @@ export function setAuth(email: string | null, userId: string | null) {
   });
 }
 
+export function setDeskWelcomed(v: boolean) {
+  mutate((d) => {
+    d.deskWelcomed = v;
+  });
+}
+
 export function setOnboarded(v: boolean) {
   mutate((d) => {
     d.onboarded = v;
@@ -1904,9 +1925,40 @@ export function updateTournament(t: Tournament) {
 
 /**
  * Remove a created tournament before it has started (a mistake, a cancelled
- * event). Anon can't DELETE rows, so we mark it `cancelled` in the cloud —
- * every device that holds it drops it — and remove it locally.
+ * event). Anon can't DELETE rows, so we mark it `cancelled` in the cloud -
+ * every device that holds it drops it - and remove it locally.
  */
+/**
+ * Take a seeded tournament out of the club's list.
+ *
+ * Separate from deleteTournament because the two are genuinely different acts:
+ * one removes a record the club made, the other hides an example they never
+ * made. Neither reaches into the seed data, which stays a constant.
+ */
+export function dismissTournament(id: string) {
+  mutate((draft) => {
+    if (!draft.dismissed.includes(id)) draft.dismissed.push(id);
+    if (draft.liveTournamentId === id) draft.liveTournamentId = null;
+  });
+}
+
+/**
+ * Make a seeded tournament the club's own so it can be edited.
+ *
+ * The wizard edits from `created`, so a seeded event has to be copied in
+ * before it can be changed. Done on the way into the editor rather than as a
+ * separate step, because a club editing an example expects to be editing, not
+ * to be told about the difference between seed data and their own records.
+ */
+export function adoptTournament(id: string) {
+  mutate((draft) => {
+    if (draft.created.some((t) => t.id === id)) return;
+    const seed = TOURNAMENTS.find((t) => t.id === id);
+    if (!seed) return;
+    draft.created.push({ ...seed });
+  });
+}
+
 export function deleteTournament(id: string) {
   mutate((draft) => {
     const t = draft.created.find((x) => x.id === id);
@@ -2078,7 +2130,7 @@ function demoAutoplay() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Lifecycle — call once from any layout                               */
+/* Lifecycle - call once from any layout                               */
 /* ------------------------------------------------------------------ */
 
 let started = false;
@@ -2107,7 +2159,7 @@ export function startSim() {
   leaderLoop();
   setInterval(leaderLoop, 1200);
 
-  // the simulated field only plays in demo mode — pilot data is all real
+  // the simulated field only plays in demo mode - pilot data is all real
   if (!IS_PILOT) {
     const scheduleField = () => {
       const delay = simStore.getState().demoMode ? 1600 : 6500;
@@ -2193,7 +2245,7 @@ export function applyRemoteScore(
 }
 
 /**
- * Apply one realtime row from another device. Never enqueues — these are
+ * Apply one realtime row from another device. Never enqueues - these are
  * inbound merges. Idempotent so a self-echo or a re-delivery is harmless.
  */
 export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
@@ -2353,9 +2405,21 @@ export function useSim<T>(selector: (s: SimState) => T): T {
   return useStore(simStore, selector);
 }
 
-export function allTournaments(created: Tournament[]): Tournament[] {
-  // pilot hides every seeded tournament — the club's own events only
-  return IS_PILOT ? created : [...created, ...TOURNAMENTS];
+export function allTournaments(
+  created: Tournament[],
+  dismissed: string[] = [],
+): Tournament[] {
+  // pilot hides every seeded tournament - the club's own events only
+  const all = IS_PILOT ? created : [...created, ...TOURNAMENTS];
+  const seen = new Set<string>();
+  return all.filter((t) => {
+    // The club's own copy wins over the seed of the same id. Editing a seeded
+    // tournament copies it into `created`, so without this the event would be
+    // listed twice: once as the club edited it, once as it shipped.
+    if (seen.has(t.id) || dismissed.includes(t.id)) return false;
+    seen.add(t.id);
+    return true;
+  });
 }
 
 export const LIVE_COURSE = COURSE;

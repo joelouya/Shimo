@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ *
- * M11 — club TV settings
+ * M11 - club TV settings
  * ------------------------------------------------------------------ */
 
 /* Short lines the club wants folded into the TV feature rotation:

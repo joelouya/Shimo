@@ -75,7 +75,7 @@ function IntegrityCard() {
     >
       {log.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
-          <Flag className="mx-auto size-4 text-muted-foreground/50" />
+          <Flag className="mx-auto size-4 text-muted-foreground" />
           <p className="mt-2 text-[13px] text-muted-foreground">
             Nothing flagged. Cards are scoring within expectation.
           </p>

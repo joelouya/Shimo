@@ -36,7 +36,7 @@ const buttonVariants = cva(
       variant: {
         default:
           "bg-primary text-primary-foreground shadow-xs hover:bg-ink-soft",
-        clay: "bg-clay text-white shadow-xs hover:bg-clay-deep",
+        clay: "bg-clay text-cream shadow-xs hover:bg-clay-deep",
         outline:
           "border border-input bg-transparent hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-accent",

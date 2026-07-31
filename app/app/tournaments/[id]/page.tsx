@@ -132,7 +132,7 @@ export default function TournamentDetailPage({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         >
-          <p className="smallcaps mt-6 text-primary-foreground/50">
+          <p className="smallcaps mt-6 text-primary-foreground/60">
             {t.format} · {formatDateLong(t.date)}
           </p>
           <h1 className="mt-2 font-serif text-[30px] leading-[1.1]">{t.name}</h1>
@@ -148,8 +148,13 @@ export default function TournamentDetailPage({
       </div>
 
       <div className="px-5">
-        {/* entry card overlapping the hero */}
-        <div className="-mt-4 rounded-2xl bg-card p-4 shadow-lift">
+        {/*
+          The card is pulled up under the hero on purpose. It needs its own
+          positioning to sit above it: the hero is `relative`, and a positioned
+          element paints over a static sibling whatever the DOM order, so
+          without this the hero clips the top of the card and eats its label.
+        */}
+        <div className="relative z-10 -mt-4 rounded-2xl bg-card p-4 shadow-lift">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="smallcaps text-muted-foreground">Entry</p>
@@ -359,7 +364,7 @@ export default function TournamentDetailPage({
                   key={d.name}
                   className="rounded-full border border-border bg-card px-3 py-1 text-xs text-ink-soft"
                 >
-                  {d.name} · HC {d.range[0]}–{d.range[1]}
+                  {d.name} · HC {d.range[0]}-{d.range[1]}
                 </span>
               ))}
             </div>
