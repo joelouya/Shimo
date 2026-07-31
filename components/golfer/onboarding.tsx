@@ -54,6 +54,7 @@ type Step =
   | "welcome"
   | "signin"
   | "profile"
+  | "cards"
   | "signature"
   | "permissions"
   | "install"
@@ -63,6 +64,7 @@ const ORDER: Step[] = [
   "welcome",
   "signin",
   "profile",
+  "cards",
   "signature",
   "permissions",
   "install",
@@ -186,7 +188,7 @@ function WhoArt() {
   );
 }
 
-function CardsArt() {
+function CardsArt({ markerName = "Your marker" }: { markerName?: string }) {
   /* Hole 3 is where they disagree. That is the whole point of the screen, so
      it is the only thing on it wearing a colour. */
   const yours = [4, 4, 5];
@@ -225,7 +227,7 @@ function CardsArt() {
         ))}
       </div>
       {row("Your card", yours, markers)}
-      {row("D. Kamau", markers, yours)}
+      {row(markerName, markers, yours)}
       <p className="border-t border-border pt-3 text-[13px] leading-relaxed text-muted-foreground">
         Hole 3 does not agree, so neither figure reaches the board until the
         desk has settled it.
@@ -293,7 +295,7 @@ const DEMO_STEPS = [
     icon: <ShieldCheck className="size-6" />,
     title: "Two cards, one result",
     body: "You keep your own score. David Kamau, playing with you, keeps a second copy of it. That is Rule 3.3b, and it is most of the reason Shimo exists.",
-    art: <CardsArt />,
+    art: <CardsArt markerName="D. Kamau" />,
   },
   {
     key: "both",
@@ -506,6 +508,7 @@ function OnboardingFlow() {
               onReject={() => go("signin")}
             />
           )}
+          {step === "cards" && <TwoCards onNext={() => go("signature")} />}
           {step === "signature" && (
             <SignatureSetup onNext={() => go("permissions")} />
           )}
@@ -844,6 +847,45 @@ function ConfirmProfile({
         </Reveal>
       </div>
     </StepBody>
+  );
+}
+
+/**
+ * Why there are two cards, told immediately before we ask for a signature.
+ *
+ * Without this the flow asks a player to set up a signature having never said
+ * what they will be signing. The two-card rule is the single thing that makes
+ * a Shimo card hold up afterwards, and the person who has to follow it was the
+ * one person never being told.
+ */
+function TwoCards({ onNext }: { onNext: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <StepBody
+        icon={<ShieldCheck className="size-6" />}
+        title="Two cards, one result"
+      >
+        <Reveal i={2}>
+          <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
+            Someone in your group keeps a second copy of your score, and you
+            keep one of theirs. Where the two disagree, the desk sees it before
+            the board does. That is Rule 3.3b, and it is why a card returned
+            through Shimo still holds up a week later.
+          </p>
+        </Reveal>
+        <Reveal i={3} className="mt-6">
+          <CardsArt />
+        </Reveal>
+      </StepBody>
+      <div className="mt-auto pt-8">
+        <Reveal i={4}>
+          <Button variant="clay" size="lg" className="w-full" onClick={onNext}>
+            Next
+            <ArrowRight className="size-4" />
+          </Button>
+        </Reveal>
+      </div>
+    </div>
   );
 }
 

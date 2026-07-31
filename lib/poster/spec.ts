@@ -43,7 +43,12 @@ export interface PosterSpec {
   title: string;
   dateLine: string;
   venueLine: string;
-  club: { name: string; logo?: string; accent?: string };
+  /**
+   * The club's own material. `image` is the course photograph they already
+   * uploaded for the clubhouse screen: it is the one thing that makes two
+   * clubs' posters look genuinely unalike rather than recoloured.
+   */
+  club: { name: string; logo?: string; accent?: string; image?: string };
   /** fixture: entry prices, one per available tier */
   fees?: PosterLine[];
   /** fixture: rounds, dates and tee times */
@@ -178,7 +183,12 @@ export function fixtureSpec(
     title: t.name,
     dateLine: dateSpan(start, end),
     venueLine: `${club.name} · ${courseLine}${tees}`,
-    club: { name: club.name, logo: identity.logoUrl, accent: identity.accent },
+    club: {
+      name: club.name,
+      logo: identity.logoUrl,
+      accent: identity.accent,
+      image: identity.tvBackgroundUrl,
+    },
     fees,
     schedule,
     eligibility: eligibilitySummary(t),

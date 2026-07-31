@@ -74,13 +74,14 @@ async function inline(url: string | undefined): Promise<string | undefined> {
 
 /** Resolve every remote image in the spec up front, in parallel. */
 async function withInlinedImages(spec: PosterSpec): Promise<PosterSpec> {
-  const [logo, ...marks] = await Promise.all([
+  const [logo, image, ...marks] = await Promise.all([
     inline(spec.club.logo),
+    inline(spec.club.image),
     ...(spec.sponsors ?? []).map((s) => inline(s.logoUrl)),
   ]);
   return {
     ...spec,
-    club: { ...spec.club, logo },
+    club: { ...spec.club, logo, image },
     sponsors: spec.sponsors?.map((s, i) => ({ ...s, logoUrl: marks[i] })),
   };
 }
@@ -92,9 +93,25 @@ async function withInlinedImages(spec: PosterSpec): Promise<PosterSpec> {
  * that carries on cream, one that carries on the navy band. A club that has
  * set nothing gets Shimo's clay, so a poster is never colourless.
  */
+/** `#rrggbb` plus an alpha, for the scrim over a club's photograph. */
+function rgba(hex: string, alpha: number) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 function palette(accent?: string) {
   const hex = (accent && normalizeHex(accent)) || CLAY;
-  return { base: hex, onLight: accentOnLight(hex), onDark: accentOnDark(hex) };
+  return {
+    base: hex,
+    onLight: accentOnLight(hex),
+    onDark: accentOnDark(hex),
+    /*
+     * The club's colour taken deep enough to carry cream text, and used as a
+     * ground rather than as a tint. This is the difference between a club
+     * having a colour on the poster and the poster being in the club's colour.
+     */
+    ground: accentOnLight(hex, 7),
+  };
 }
 
 /* ---------- pieces shared by both templates ---------- */
@@ -353,31 +370,243 @@ function SponsorFoot({
   );
 }
 
-/* ---------- fixture template ---------- */
+/* ---------- fixture template ---------- *
+ *
+ * Rebuilt around two decisions.
+ *
+ * The club takes the credit. The header ground is the club's own colour, or
+ * their course photograph when they have uploaded one for the clubhouse
+ * screen, rather than Shimo's navy. Shimo keeps one line at the foot. A poster
+ * that looks like the club made it gets posted; one that looks like software
+ * made it gets posted once.
+ *
+ * The prizes outrank the price. The old sheet set the entry fee in 34px
+ * Fraunces inside a bordered card and dropped the prize list entirely once the
+ * poster grew crowded, which is a fixture poster arguing against itself. What
+ * you are playing for is now the largest thing under the title and is never
+ * dropped; the fee is a phrase in the detail line, where a qualifying detail
+ * belongs.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The band the poster opens with: the club's photograph under a scrim mixed
+ * from their own colour, or that colour alone when there is no photograph.
+ *
+ * The scrim is weighted downward, the same trick the clubhouse screen uses, so
+ * the photograph stays a photograph at the top of the frame while the type
+ * below it sits on something dark enough to read against.
+ */
+function FixtureHero({
+  spec,
+  tone,
+  titleSize,
+  dense,
+}: {
+  spec: PosterSpec;
+  tone: ReturnType<typeof palette>;
+  titleSize: number;
+  /** true when the sheet below is carrying rounds as well as prizes */
+  dense?: boolean;
+}) {
+  /*
+   * The photograph gets its own band and the type sits below it on solid
+   * colour, rather than both sharing one scrimmed image.
+   *
+   * The scrimmed version was tested against a high-contrast image and failed
+   * the way it will fail in the field: a club uploads a bright sky or a
+   * bunker face, and cream type lands on top of it. A scrim heavy enough to
+   * guarantee legibility everywhere is heavy enough to hide the photograph it
+   * was protecting. Splitting them means no upload can ever make the title
+   * unreadable, and the picture stays a picture.
+   */
+  /*
+   * A championship carries a full prize list and a rounds block; a club medal
+   * carries prizes alone. Both get the same 1350px, and the dense one does not
+   * fit alongside a photograph: measured, it needs about 650px of body and a
+   * photo band leaves 512.
+   *
+   * So the photograph is what yields, not the foot of the sheet. Shrinking the
+   * hero instead was tried and produced a poster with the venue line sliced by
+   * the band edge and the entry details missing entirely. A club still gets
+   * their colour, their crest and their name on every poster; the picture is
+   * the one part a dense sheet cannot afford.
+   */
+  const photo = dense ? undefined : spec.club.image;
+  const photoH = 272;
+  const bandH = photo ? 500 : dense ? 578 : 604;
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {photo ? (
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            width: WIDTH,
+            height: photoH,
+          }}
+        >
+          <img
+            src={photo}
+            width={WIDTH}
+            height={photoH}
+            style={{ position: "absolute", top: 0, left: 0, objectFit: "cover" }}
+          />
+          {/* a breath of the club's colour, and a fade into the band below so
+              the two do not meet on a hard line */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: WIDTH,
+              height: photoH,
+              display: "flex",
+              backgroundImage: `linear-gradient(180deg, ${rgba(
+                tone.ground,
+                0.18,
+              )} 0%, ${rgba(tone.ground, 0.1)} 62%, ${rgba(
+                tone.ground,
+                1,
+              )} 100%)`,
+            }}
+          />
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: bandH,
+          backgroundColor: tone.ground,
+          padding: photo ? "40px 68px 52px" : "56px 68px 52px",
+        }}
+      >
+        <Masthead spec={spec} tone={tone} />
+
+        <div style={{ display: "flex", flex: 1 }} />
+
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div
+            style={{
+              fontFamily: "Inter",
+              fontWeight: 600,
+              fontSize: 23,
+              letterSpacing: 4,
+              textTransform: "uppercase",
+              color: rgba(CREAM, 0.72),
+            }}
+          >
+            {spec.eyebrow}
+          </div>
+          <div
+            style={{
+              fontFamily: "Fraunces",
+              fontWeight: 600,
+              fontSize: titleSize,
+              lineHeight: 1.02,
+              marginTop: 18,
+              color: CREAM,
+            }}
+          >
+            {spec.title}
+          </div>
+          <div
+            style={{
+              fontFamily: "Fraunces",
+              fontWeight: 600,
+              fontSize: 34,
+              marginTop: 22,
+              color: CREAM,
+            }}
+          >
+            {spec.dateLine}
+          </div>
+          <div style={{ fontSize: 24, marginTop: 10, color: rgba(CREAM, 0.75) }}>
+            {spec.venueLine}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** One of the three facts a player checks before entering. */
+function FixtureFact({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: ReturnType<typeof palette>;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+      <Label color={tone.onLight}>{label}</Label>
+      <div
+        style={{
+          fontFamily: "Fraunces",
+          fontWeight: 600,
+          fontSize: 27,
+          lineHeight: 1.25,
+          marginTop: 12,
+          color: NAVY,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
 
 function FixturePoster({ spec }: { spec: PosterSpec }) {
   const tone = palette(spec.club.accent);
   const fees = spec.fees ?? [];
   const schedule = spec.schedule ?? [];
-  // A championship carries a longer title and more rounds; give the headline
-  // less room when there is more below it to fit.
-  const titleSize = spec.title.length > 34 ? 72 : spec.title.length > 22 ? 84 : 96;
+  const prizes = spec.prizes ?? [];
+  const titleSize =
+    spec.title.length > 34 ? 74 : spec.title.length > 22 ? 86 : 98;
+
+  /* The fee reads as a phrase now, so several tiers cost one line rather than
+     a table: "KES 2,500, or KES 2,000 for members". */
+  /* One tier is a price; several are a small table read as a phrase. The
+     tier labels already say what they are, so they lead. */
+  const feeLine = !fees.length
+    ? undefined
+    : fees.length === 1
+      ? `Entry ${fees[0].value}`
+      : fees.map((f) => `${f.label} ${f.value}`).join("  ·  ");
 
   /*
-   * A club medal has one price and one tee time; a championship has three
-   * rounds, two rates and a cut to explain. Both are the same 1350px tall, so
-   * the spacing tightens once there is enough on the sheet to need it. Without
-   * this the dense poster loses its last line off the bottom.
+   * A championship's three rounds cannot be joined into one string and dropped
+   * in a third-width column: it wraps to five lines, runs off the sheet and
+   * takes the detail line with it. One round is a fact; several rounds are a
+   * block of their own.
    */
-  const blocks =
-    fees.length +
-    schedule.length +
-    (spec.cut ? 1 : 0) +
-    (spec.contacts?.length ? 1 : 0);
-  const dense = blocks >= 6;
-  const gapY = dense ? 30 : 38;
-  const prizes = spec.prizes ?? [];
-  const showPrizes = !dense && prizes.length > 0;
+  const multiRound = schedule.length > 1;
+  const teeLine = schedule.length === 1 ? schedule[0].value : undefined;
+
+  /*
+   * A multi-round sheet has no "First tee" fact, so the cut takes that column
+   * instead of being buried in the small print, where it wrapped the detail
+   * line onto a second line and had it sliced by the sponsor foot. The cut is
+   * the thing a player entering a championship most needs to know anyway.
+   */
+  const cutAsFact = multiRound && Boolean(spec.cut);
+  const detail = [
+    feeLine,
+    cutAsFact ? undefined : spec.cut,
+    spec.note,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+
+  /* Prizes are never dropped; when there are many they simply set tighter,
+     and tighter again when a rounds block is competing for the same page. */
+  const tightPrizes = prizes.length > 3 || multiRound;
+  /* The sheet is dense once a rounds block and a full prize list share it. */
+  const dense = multiRound && prizes.length > 2;
 
   return (
     <div
@@ -390,155 +619,46 @@ function FixturePoster({ spec }: { spec: PosterSpec }) {
         fontFamily: "Inter",
       }}
     >
-      <Header spec={spec} tone={tone} titleSize={titleSize} compact={dense} />
+      <FixtureHero
+        spec={spec}
+        tone={tone}
+        titleSize={titleSize}
+        dense={dense}
+      />
 
       <div
         style={{
           display: "flex",
           flexDirection: "column",
           flex: 1,
-          padding: `${dense ? 34 : 44}px 68px 0`,
+          padding: "44px 68px 0",
         }}
       >
-        {/* entry prices */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <Label color={tone.onLight}>Entry</Label>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              marginTop: 16,
-              backgroundColor: CARD,
-              borderRadius: 18,
-              border: "1px solid #e4ddce",
-              padding: "6px 28px",
-            }}
-          >
-            {fees.map((f, i) => (
-              <div
-                key={f.label}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: `${dense ? 15 : 18}px 0`,
-                  borderTop: i === 0 ? "none" : "1px solid #ece5d6",
-                }}
-              >
-                <div style={{ fontSize: 26, color: INK_SOFT }}>{f.label}</div>
-                <div
-                  style={{
-                    fontFamily: "Fraunces",
-                    fontWeight: 600,
-                    fontSize: 34,
-                    color: NAVY,
-                  }}
-                >
-                  {f.value}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* schedule and eligibility, side by side */}
-        <div style={{ display: "flex", gap: 40, marginTop: gapY }}>
-          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            <Label color={tone.onLight}>
-              {schedule.length > 1 ? "Rounds" : "Tee times"}
-            </Label>
-            <div
-              style={{ display: "flex", flexDirection: "column", marginTop: 14 }}
-            >
-              {schedule.map((r) => (
-                <div
-                  key={r.label}
-                  style={{ display: "flex", flexDirection: "column", marginTop: 12 }}
-                >
-                  <div style={{ fontSize: 24, fontWeight: 600, color: NAVY }}>
-                    {r.label}
-                  </div>
-                  <div style={{ fontSize: 22, color: STONE }}>{r.value}</div>
-                </div>
-              ))}
-              {spec.cut ? (
-                <div
-                  style={{
-                    display: "flex",
-                    marginTop: 16,
-                    fontSize: 21,
-                    color: tone.onLight,
-                  }}
-                >
-                  {spec.cut}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            <Label color={tone.onLight}>Who may enter</Label>
+        {prizes.length ? (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <Label color={tone.onLight}>Playing for</Label>
             <div
               style={{
                 display: "flex",
-                marginTop: 18,
-                fontSize: 24,
-                lineHeight: 1.45,
-                color: NAVY,
+                flexDirection: "column",
+                marginTop: tightPrizes ? 14 : 18,
               }}
             >
-              {spec.eligibility ?? "Open"}
-            </div>
-            {spec.closes ? (
-              <div
-                style={{ display: "flex", flexDirection: "column", marginTop: 26 }}
-              >
-                <Label color={tone.onLight}>Entries close</Label>
-                <div
-                  style={{
-                    display: "flex",
-                    marginTop: 12,
-                    fontSize: 24,
-                    lineHeight: 1.4,
-                    color: NAVY,
-                  }}
-                >
-                  {spec.closes}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* A club medal is thin on structure but rich on prizes, and prizes are
-            what the entry sheet is really selling. They go in only when there
-            is room, so a championship keeps its rounds and its cut instead. */}
-        {showPrizes ? (
-          <div
-            style={{ display: "flex", flexDirection: "column", marginTop: gapY }}
-          >
-            <Label color={tone.onLight}>Playing for</Label>
-            <div
-              style={{ display: "flex", flexDirection: "column", marginTop: 6 }}
-            >
-              {prizes.map((p) => (
+              {prizes.map((p, i) => (
                 <div
                   key={p.label}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "baseline",
-                    gap: 28,
-                    paddingTop: 13,
-                    paddingBottom: 13,
-                    borderBottom: "1px solid #e8e0d0",
+                    paddingTop: i === 0 ? 0 : tightPrizes ? 12 : 16,
                   }}
                 >
                   <div
                     style={{
-                      display: "flex",
-                      fontSize: 23,
+                      fontFamily: "Fraunces",
                       fontWeight: 600,
+                      fontSize: tightPrizes ? 32 : 38,
                       color: NAVY,
                     }}
                   >
@@ -546,11 +666,9 @@ function FixturePoster({ spec }: { spec: PosterSpec }) {
                   </div>
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      flex: 1,
-                      fontSize: 22,
-                      color: STONE,
+                      fontSize: tightPrizes ? 24 : 26,
+                      color: INK_SOFT,
+                      marginLeft: 28,
                     }}
                   >
                     {p.value}
@@ -561,28 +679,81 @@ function FixturePoster({ spec }: { spec: PosterSpec }) {
           </div>
         ) : null}
 
-        {/* Whatever room is left falls here, so a club event with one round
-            and one price reads as generous margin rather than a hole above the
-            small print. */}
-        <div style={{ display: "flex", flex: 1, minHeight: dense ? 22 : 34 }} />
-
-        {/* how to enter */}
-        {spec.contacts?.length ? (
+        {multiRound ? (
           <div
             style={{
               display: "flex",
               flexDirection: "column",
-              paddingTop: dense ? 24 : 30,
-              borderTop: "1px solid #e4ddce",
+              marginTop: prizes.length ? 30 : 0,
+              paddingTop: prizes.length ? 26 : 0,
+              borderTop: prizes.length ? "1px solid #e4ddce" : "none",
             }}
           >
-            <Label color={STONE}>To enter</Label>
+            <Label color={tone.onLight}>Rounds</Label>
+            <div
+              style={{ display: "flex", flexDirection: "column", marginTop: 12 }}
+            >
+              {schedule.map((r) => (
+                <div
+                  key={r.label}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    paddingTop: 8,
+                  }}
+                >
+                  <div
+                    style={{ fontFamily: "Fraunces", fontWeight: 600, fontSize: 26, color: NAVY }}
+                  >
+                    {r.label}
+                  </div>
+                  <div style={{ fontSize: 23, color: INK_SOFT, marginLeft: 24 }}>
+                    {r.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "flex",
+            gap: 36,
+            marginTop: prizes.length || multiRound ? (multiRound ? 30 : 42) : 0,
+            paddingTop: prizes.length || multiRound ? (multiRound ? 26 : 34) : 0,
+            borderTop:
+              prizes.length || multiRound ? "1px solid #e4ddce" : "none",
+          }}
+        >
+          {teeLine ? (
+            <FixtureFact label="First tee" value={teeLine} tone={tone} />
+          ) : null}
+          {spec.closes ? (
+            <FixtureFact label="Entries close" value={spec.closes} tone={tone} />
+          ) : null}
+          {spec.eligibility ? (
+            <FixtureFact
+              label="Who may enter"
+              value={spec.eligibility}
+              tone={tone}
+            />
+          ) : null}
+          {cutAsFact ? (
+            <FixtureFact label="Cut" value={spec.cut!} tone={tone} />
+          ) : null}
+        </div>
+
+        {spec.contacts?.length ? (
+          <div style={{ display: "flex", flexDirection: "column", marginTop: 34 }}>
+            <Label color={tone.onLight}>To enter</Label>
             <div
               style={{
                 display: "flex",
                 flexWrap: "wrap",
-                gap: 28,
-                marginTop: 14,
+                gap: 24,
+                marginTop: 12,
               }}
             >
               {spec.contacts.map((c) => (
@@ -594,17 +765,19 @@ function FixturePoster({ spec }: { spec: PosterSpec }) {
           </div>
         ) : null}
 
-        {spec.note ? (
+        <div style={{ display: "flex", flex: 1 }} />
+
+        {detail ? (
           <div
             style={{
               display: "flex",
-              paddingTop: dense ? 14 : 22,
-              paddingBottom: dense ? 20 : 26,
-              fontSize: 19,
+              fontSize: 22,
               color: STONE,
+              paddingTop: 22,
+              paddingBottom: 30,
             }}
           >
-            {spec.note}
+            {detail}
           </div>
         ) : null}
       </div>
