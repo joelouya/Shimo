@@ -130,3 +130,22 @@ $$;
 
 revoke all on function resolve_guest_code(text) from public;
 grant execute on function resolve_guest_code(text) to anon, authenticated;
+
+/* ------------------------------------------------------------------ *
+ * Contest holes
+ *
+ * Nearest the pin, longest drive, the hole-in-one car. Their own column
+ * rather than a shape inside `sponsors`, because a contest happens at a place
+ * on the course, it is usually the thing a category sponsor actually bought,
+ * and the player standing on that tee should be able to see whose contest it
+ * is. Shape:
+ *   [{ id, name, hole, round?, prize?, sponsorId?, result? }]
+ * ------------------------------------------------------------------ */
+alter table tournaments
+  add column if not exists contests jsonb;
+
+/* Sponsors the club has worked with before, so a recurring corporate calendar
+   does not mean retyping the same eight companies and re-uploading the same
+   eight logos every quarter. Same Sponsor shape as tournaments.sponsors. */
+alter table clubs
+  add column if not exists sponsor_book jsonb;

@@ -306,7 +306,7 @@ export default function AdminDashboard() {
             ))}
             <div className="border-t border-border/60 bg-secondary/30 px-5 py-3">
               <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Every attested card is sealed and export-ready for the club's
+                Every attested card is sealed and export-ready for the club&apos;s
                 handicap returns.
               </p>
             </div>

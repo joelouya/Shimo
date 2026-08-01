@@ -2253,6 +2253,105 @@ section("Guests");
   })());
 }
 
+/* ------------------------------------------------------------------ *
+ * Sponsor inventory
+ *
+ * A corporate day is sold as a set of positions. What has to hold is that the
+ * order never changes between renders, that a club cannot promise two people
+ * top billing without being told, and that what a sponsor paid never leaks
+ * onto a surface anyone else can see.
+ * ------------------------------------------------------------------ */
+section("Sponsor inventory");
+{
+  const SP = await jiti.import("../lib/sponsors.ts");
+  const mk = (id, name, tier, extra = {}) => ({ id, name, tier, ...extra });
+
+  check("the old tier names still parse",
+    SP.normaliseTier("prize") === "category" &&
+    SP.normaliseTier("partner") === "supporting" &&
+    SP.normaliseTier(undefined) === "supporting");
+
+  const set = [
+    mk("s4", "Zulu Supplies", "supporting"),
+    mk("s2", "Beta Insurance", "presenting"),
+    mk("s1", "Acme Bank", "title"),
+    mk("s3", "Delta Drinks", "category", { category: "Halfway house" }),
+    mk("s5", "Alpha Fuels", "supporting"),
+  ];
+  check("billing order runs title, presenting, category, supporting",
+    SP.inBillingOrder(set).map((s) => s.id).join(",") === "s1,s2,s3,s5,s4");
+  check("same-tier sponsors keep a stable order between renders", (() => {
+    const a = SP.inBillingOrder(set).map((s) => s.id).join(",");
+    const b = SP.inBillingOrder([...set].reverse()).map((s) => s.id).join(",");
+    return a === b;
+  })());
+  check("the title sponsor is findable", SP.titleSponsor(set).name === "Acme Bank");
+
+  check("a title sponsor appears everywhere",
+    SP.placementsOf(set.find((s) => s.id === "s1")).length === 6);
+  check("a supporting sponsor gets the poster and the recap, not the screen", (() => {
+    const p = SP.placementsOf(set.find((s) => s.id === "s4"));
+    return p.includes("poster") && p.includes("recap") && !p.includes("tv");
+  })());
+  check("an explicit placement overrides the tier default", (() => {
+    const bought = mk("s9", "Screen Only", "supporting", { placements: ["tv"] });
+    return SP.appearsOn(bought, "tv") && !SP.appearsOn(bought, "poster");
+  })());
+  check("a surface returns its sponsors in billing order",
+    SP.sponsorsOn(set, "tv").map((s) => s.id).join(",") === "s1,s2");
+
+  /* ---- what stops a club publishing ---- */
+  check("no sponsors at all blocks a corporate day",
+    !SP.canPublish([]) && SP.sponsorProblems([])[0].message.includes("at least one"));
+  check("two title sponsors is caught", (() => {
+    const two = [mk("a", "One", "title"), mk("b", "Two", "title")];
+    return SP.sponsorProblems(two).some((p) => /top billing/.test(p.message));
+  })());
+  check("a category sponsor with no category is caught",
+    SP.sponsorProblems([mk("c", "Vague Co", "category")])
+      .some((p) => /what they bought/.test(p.message)));
+  check("a missing contact warns but does not block", (() => {
+    const one = [mk("d", "Acme", "title")];
+    return SP.sponsorProblems(one).some((p) => /nowhere to go/.test(p.message)) &&
+      SP.canPublish(one);
+  })());
+  check("a contest pointing at a departed sponsor is caught", (() => {
+    const contests = [{ id: "c1", name: "Nearest the pin", hole: 7, sponsorId: "gone" }];
+    return SP.sponsorProblems([mk("d", "Acme", "title")], contests)
+      .some((p) => /no longer on the sheet/.test(p.message));
+  })());
+
+  /* ---- contests ---- */
+  const contests = [
+    { id: "c1", name: "Nearest the pin", hole: 7, sponsorId: "s3" },
+    { id: "c2", name: "Longest drive", hole: 12, sponsorId: "s3" },
+    { id: "c3", name: "Hole in one", hole: 16, sponsorId: "s1" },
+  ];
+  check("a player on a contest hole can see whose it is",
+    SP.contestOnHole(contests, 7).sponsorId === "s3");
+  check("an ordinary hole has no contest",
+    SP.contestOnHole(contests, 8) === undefined);
+  check("a sponsor's contests come back in hole order",
+    SP.contestsFor(contests, "s3").map((c) => c.hole).join(",") === "7,12");
+
+  /* ---- the club's book ---- */
+  S.rememberSponsor("muthaiga", mk("s1", "Acme Bank", "title", {
+    contestId: "c3", contributionKES: 500000, contact: { name: "A. Person" },
+  }));
+  const book = () => st().clubIdentity.muthaiga?.sponsorBook ?? [];
+  check("a sponsor is kept for next time", book().length === 1);
+  check("the contest link does not follow into the book",
+    book()[0].contestId === undefined);
+  check("what they paid does not follow into the book",
+    book()[0].contributionKES === undefined);
+  check("the contact does follow, because that is the reusable part",
+    book()[0].contact.name === "A. Person");
+  check("remembering the same sponsor updates rather than duplicates", (() => {
+    S.rememberSponsor("muthaiga", mk("other-id", "acme bank", "presenting"));
+    return book().length === 1 && SP.normaliseTier(book()[0].tier) === "presenting";
+  })());
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

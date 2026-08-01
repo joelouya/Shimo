@@ -68,7 +68,15 @@ import {
   tournamentToRow,
 } from "@/lib/sync/mappers";
 import type { HydrationSnapshot } from "@/lib/sync/remote";
-import type { ClubIdentity, HoleScores, Player, Tournament, GuestEntry } from "@/lib/types";
+import type {
+  ClubIdentity,
+  Contest,
+  GuestEntry,
+  HoleScores,
+  Player,
+  Sponsor,
+  Tournament,
+} from "@/lib/types";
 
 const COURSE = COURSES.find((c) => c.id === "muthaiga-main")!;
 const LIVE_T = TOURNAMENTS.find((t) => t.id === LIVE_TOURNAMENT_ID)!;
@@ -1282,6 +1290,91 @@ export function linkMemberEmail(id: string, email: string) {
     m.active = true;
     enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
   });
+}
+
+/* ---- sponsor inventory ------------------------------------------- *
+ *
+ * What a club sold, kept where the tournament can honour it. The book at club
+ * level exists because a recurring corporate calendar means the same eight
+ * companies every quarter, and retyping them is how logos end up inconsistent
+ * between two events for the same sponsor.
+ * ------------------------------------------------------------------ */
+
+export function setTournamentSponsors(tournamentId: string, sponsors: Sponsor[]) {
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === tournamentId);
+    if (!t) return;
+    t.sponsors = sponsors;
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+}
+
+export function setTournamentContests(tournamentId: string, contests: Contest[]) {
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === tournamentId);
+    if (!t) return;
+    t.contests = contests;
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+}
+
+/** Record who won a contest, after the day. */
+export function setContestResult(
+  tournamentId: string,
+  contestId: string,
+  result: Contest["result"],
+) {
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === tournamentId);
+    const c = t?.contests?.find((x) => x.id === contestId);
+    if (!t || !c) return;
+    c.result = result;
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+}
+
+/**
+ * Keep a sponsor in the club's book for next time.
+ *
+ * Matched on name because that is what a club retypes. Updating rather than
+ * appending means the logo a club fixed once stays fixed.
+ */
+export function rememberSponsor(clubId: string, sponsor: Sponsor) {
+  mutate((draft) => {
+    const identity = (draft.clubIdentity[clubId] ??= { clubId });
+    const book = (identity.sponsorBook ??= []);
+    const key = sponsor.name.trim().toLowerCase();
+    const at = book.findIndex((s) => s.name.trim().toLowerCase() === key);
+    /* The contest link and the contribution belong to one event, not to the
+       book: last quarter's hole 7 is not this quarter's. */
+    const entry: Sponsor = { ...sponsor, contestId: undefined, contributionKES: undefined };
+    if (at >= 0) book[at] = { ...book[at], ...entry, id: book[at].id };
+    else book.unshift(entry);
+  });
+}
+
+/**
+ * Copy one event's sponsor set onto another.
+ *
+ * The recurring-calendar case: the same backers, a new date. Fresh ids so the
+ * two events' sponsors are separate records, and contest links dropped because
+ * the contests belong to the event they were bought on.
+ */
+export function copySponsorsFrom(fromId: string, toId: string): number {
+  let copied = 0;
+  mutate((draft) => {
+    const from = draft.created.find((x) => x.id === fromId);
+    const to = draft.created.find((x) => x.id === toId);
+    if (!from?.sponsors?.length || !to) return;
+    to.sponsors = from.sponsors.map((s, i) => ({
+      ...s,
+      id: `sp-${Date.now().toString(36)}-${i}`,
+      contestId: undefined,
+    }));
+    copied = to.sponsors.length;
+    enqueueEntity(draft, "tournaments", tournamentToRow(to), { conflict: "id" });
+  });
+  return copied;
 }
 
 /* ---- guests ------------------------------------------------------ *

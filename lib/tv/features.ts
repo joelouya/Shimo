@@ -17,6 +17,7 @@
  */
 
 import type { CumulativeRow } from "@/lib/scoring";
+import { inBillingOrder } from "@/lib/sponsors";
 import { toPar } from "@/lib/utils";
 import type { SettledHole } from "./trust";
 import type { FeatureCard, FeatureKind, ProducerConfig, TvSnapshot } from "./types";
@@ -159,10 +160,7 @@ function finalBoard(ctx: Ctx, base: Base): FeatureCard | null {
 function thanks(ctx: Ctx, base: Base): FeatureCard | null {
   const list = ctx.snapshot.tournament.sponsors ?? [];
   if (!list.length) return null;
-  const order = { title: 0, prize: 1, category: 2, partner: 3 } as const;
-  const sorted = [...list].sort(
-    (a, b) => (order[a.tier ?? "partner"] ?? 3) - (order[b.tier ?? "partner"] ?? 3),
-  );
+  const sorted = inBillingOrder(list);
   return {
     ...base,
     eyebrow: "With thanks to",

@@ -28,6 +28,12 @@ export interface ClubIdentity {
   /** short lines the club wants folded into the TV feature rotation */
   tvMessages?: string[];
   /**
+   * Sponsors the club has worked with before, kept at club level so a
+   * recurring corporate calendar does not mean retyping the same eight
+   * companies and re-uploading the same eight logos every quarter.
+   */
+  sponsorBook?: Sponsor[];
+  /**
    * The club's course records, held here rather than on a tournament because a
    * record belongs to the course and outlives every event played on it. Kept
    * per tee set: a record off the white tees is not a record off the red.
@@ -209,14 +215,101 @@ export interface FeeTier {
   until?: string;
 }
 
-/** Where a sponsor sits in the billing. Title gets the most room. */
-export type SponsorTier = "title" | "prize" | "category" | "partner";
+/**
+ * Where a sponsor sits in the billing.
+ *
+ * Four tiers, and the order is the whole point: a corporate day is sold as a
+ * set of positions, and a club that promised someone top billing has to be
+ * able to deliver it on every surface without remembering to.
+ *
+ * "prize" and "partner" were the earlier names and still parse, because a
+ * tournament created before this shipped should not lose its sponsors.
+ */
+export type SponsorTier =
+  | "title"
+  | "presenting"
+  | "category"
+  | "supporting"
+  /** @deprecated read as "category" */
+  | "prize"
+  /** @deprecated read as "supporting" */
+  | "partner";
+
+/**
+ * A surface a sponsor can appear on.
+ *
+ * Held per sponsor rather than derived from the tier alone, because what a
+ * club sold is not always what a tier implies: a beverage sponsor may have
+ * bought the clubhouse screen and nothing else.
+ */
+export type SponsorSurface =
+  | "poster"
+  | "tournament-page"
+  | "leaderboard"
+  | "tv"
+  | "contest"
+  | "recap";
+
+/** Who the recap pack goes to. A person, not an inbox. */
+export interface SponsorContact {
+  name: string;
+  email?: string;
+  phone?: string;
+  /** "Marketing Manager", so the club knows who they are talking to */
+  role?: string;
+}
 
 export interface Sponsor {
   id: string;
   name: string;
   logoUrl?: string;
   tier?: SponsorTier;
+  /**
+   * The sponsor's own colour, used only inside their own moments: their
+   * section of a recap pack, their contest marker. It never takes over a
+   * Shimo surface, and it never displaces the club's colour.
+   */
+  accent?: string;
+  /** for a category sponsor: what they bought. "Halfway house", "Hole 7". */
+  category?: string;
+  /** absent means the tier's default placements */
+  placements?: SponsorSurface[];
+  contact?: SponsorContact;
+  /**
+   * What they contributed. Private: internal tracking for the club, and it
+   * never reaches a poster, a screen, or a recap pack. A sponsor should not
+   * learn what another sponsor paid from a document the club sent them.
+   */
+  contributionKES?: number;
+  /** the contest this sponsor backs, when they bought one */
+  contestId?: string;
+}
+
+/**
+ * A contest hole: nearest the pin, longest drive, a hole-in-one prize.
+ *
+ * Its own concept rather than a prize, because it happens at a place on the
+ * course, it is usually what a category sponsor actually bought, and the
+ * player standing on that tee should be able to see whose contest it is.
+ */
+export interface Contest {
+  id: string;
+  /** "Nearest the pin", "Longest drive", "Hole in one" */
+  name: string;
+  /** 1 to 18 */
+  hole: number;
+  /** which round, for a multi-round event. Absent means round 1. */
+  round?: number;
+  /** what the winner gets, in the club's own words */
+  prize?: string;
+  /** the sponsor who bought it */
+  sponsorId?: string;
+  /** filled in after the day: who won and with what */
+  result?: {
+    playerId: string;
+    /** "1.4 m", "312 y", or whatever the club measured */
+    detail?: string;
+  };
 }
 
 export interface Prize {
@@ -287,6 +380,8 @@ export interface Tournament {
   fieldProfile?: "championship" | "club" | "stableford" | "team";
   /** who is backing the event; absent means none */
   sponsors?: Sponsor[];
+  /** nearest-the-pin, longest drive, hole-in-one. Absent means none. */
+  contests?: Contest[];
   status: TournamentStatus;
   /** mirrored from `membership`; true when the event is members-only */
   membersOnly: boolean;

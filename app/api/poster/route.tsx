@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 import { accentOnDark, accentOnLight, normalizeHex } from "@/lib/contrast";
+import { inBillingOrder, normaliseTier } from "@/lib/sponsors";
 import type { PosterSpec } from "@/lib/poster/spec";
 import type { Sponsor } from "@/lib/types";
 
@@ -266,10 +267,7 @@ function SponsorFoot({
   credit: boolean;
   tone: ReturnType<typeof palette>;
 }) {
-  const order = { title: 0, prize: 1, category: 2, partner: 3 };
-  const sorted = [...sponsors].sort(
-    (a, b) => (order[a.tier ?? "partner"] ?? 3) - (order[b.tier ?? "partner"] ?? 3),
-  );
+  const sorted = inBillingOrder(sponsors);
   // Three or four backers can be billed properly; past that everyone shares the
   // row evenly and the title sponsor loses its label rather than the row losing
   // a sponsor. The strip is one line high in every case.
@@ -287,7 +285,7 @@ function SponsorFoot({
       {sorted.length ? (
         <div style={{ display: "flex", alignItems: "center", gap }}>
           {sorted.map((s) => {
-            const isTitle = s.tier === "title" && roomy;
+            const isTitle = normaliseTier(s.tier) === "title" && roomy;
             /*
              * Every mark gets the same box and is fitted inside it. One club
              * sends a square crest and the next a wordmark five times as wide;
