@@ -25,6 +25,12 @@ colors:
   clay-lift: "#d4744f"
   cream: "#f7f3ec"
 typography:
+  display-lg:
+    fontFamily: "Fraunces, Georgia, 'Times New Roman', serif"
+    fontSize: "34px"
+    fontWeight: 400
+    lineHeight: 1.05
+    fontVariation: "opsz, SOFT"
   display:
     fontFamily: "Fraunces, Georgia, 'Times New Roman', serif"
     fontSize: "30px"
