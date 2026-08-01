@@ -140,8 +140,8 @@ export default function ProfilePage() {
         )}
         {IS_PILOT && (
           <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-            Your index syncs from the KGU. The trend builds as attested rounds
-            come in.
+            Your index comes from the club roster. The trend builds as attested
+            rounds come in.
           </p>
         )}
       </section>

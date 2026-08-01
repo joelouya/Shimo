@@ -222,7 +222,23 @@ export default function SettingsPage() {
           {IS_PILOT && <IntegrityCard />}
           <CsvImportCard />
           {!IS_PILOT && (
-          <Card title="Payments" sub="Entry fees, settled to the club weekly">
+          <Card
+            title="Payments"
+            sub="Illustrative only. Shimo does not settle money today"
+          >
+            {/*
+              Demo-only, and labelled. Whether M-PESA settlement ships at all
+              is an open commercial decision, and the entity/Daraja path is an
+              unresolved legal question. A screen shown to prospective clubs
+              and to the KGU must not imply a working integration exists.
+              See docs/COMMITMENTS.md.
+            */}
+            <div className="mb-3 rounded-xl border border-amber-flag/25 bg-amber-wash/50 px-4 py-3">
+              <p className="text-[12.5px] leading-relaxed text-ink-soft">
+                A worked example of how settlement would look. Nothing here is
+                connected to Safaricom or to a bank, and no money moves.
+              </p>
+            </div>
             <div className="flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3.5">
               <div>
                 <p className="text-[13.5px] font-medium text-foreground">
@@ -232,10 +248,7 @@ export default function SettingsPage() {
                   Muthaiga Golf Club · KES settlement
                 </p>
               </div>
-              <Badge variant="claySoft">
-                <Check className="size-3" />
-                Connected
-              </Badge>
+              <Badge variant="secondary">Example</Badge>
             </div>
             <div className="mt-3 flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3.5">
               <div>
@@ -246,31 +259,36 @@ export default function SettingsPage() {
                   For visitors and diaspora members
                 </p>
               </div>
-              <Badge variant="claySoft">
-                <Check className="size-3" />
-                Connected
-              </Badge>
+              <Badge variant="secondary">Example</Badge>
             </div>
           </Card>
           )}
 
+          {/*
+            Handicapping is the one place the product must be scrupulous about
+            what it is. Kenya's national WHS engine is run by Club Systems
+            under an R&A federation initiative; Shimo runs the tournament day
+            and produces a sealed, submission-ready result that feeds it.
+            Approved submission is being pursued and is not yet secured, so
+            this card says what is true today and nothing more. See
+            docs/COMMITMENTS.md.
+          */}
           <Card
             title="Handicapping"
-            sub="Kenya Golf Union · World Handicap System"
+            sub="Works with the handicap system your club already uses"
           >
             <div className="flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3.5">
               <div>
                 <p className="text-[13.5px] font-medium text-foreground">
-                  KGU handicap sync
+                  Submission-ready results
                 </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Attested cards post automatically · indexes pull nightly
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Every certified card is sealed and exportable for the club&apos;s
+                  handicap returns. Direct submission to the national system is
+                  being arranged and is not live yet.
                 </p>
               </div>
-              <Badge variant="claySoft">
-                <Check className="size-3" />
-                Active
-              </Badge>
+              <Badge variant="secondary">Export</Badge>
             </div>
           </Card>
 

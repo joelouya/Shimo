@@ -235,7 +235,7 @@ export default function AdminDashboard() {
             <StatTile label="Members" value="486" sub="12 joined this quarter" />
             <StatTile label="Tournaments · July" value="4" sub="2 open for entries" />
             <StatTile label="Rounds scored on Shimo" value="1,248" sub="since March" />
-            <StatTile label="Entry revenue · July" value="KES 428k" sub="via M-PESA & card" />
+            <StatTile label="Cards certified · July" value="312" sub="sealed and export-ready" />
           </>
         )}
       </div>
@@ -306,8 +306,8 @@ export default function AdminDashboard() {
             ))}
             <div className="border-t border-border/60 bg-secondary/30 px-5 py-3">
               <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Results publish to the KGU handicap system automatically the
-                moment cards are attested.
+                Every attested card is sealed and export-ready for the club's
+                handicap returns.
               </p>
             </div>
           </div>

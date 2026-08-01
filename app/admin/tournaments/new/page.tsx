@@ -1082,9 +1082,9 @@ function CreateTournamentInner() {
                 {!IS_PILOT && (
                   <div className="rounded-xl border border-clay/20 bg-clay-wash/50 px-4 py-3.5">
                     <p className="text-[12.5px] leading-relaxed text-ink-soft">
-                      Players pay on registration by M-PESA or card, and Shimo
-                      settles to the club account weekly. Withdrawals before the
-                      close date refund automatically.
+                      An illustration of how entry payment could work. Shimo
+                      does not take payments or settle to a club account today,
+                      so collect entry fees the way the club already does.
                     </p>
                   </div>
                 )}

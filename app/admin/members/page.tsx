@@ -109,8 +109,8 @@ export default function MembersPage() {
             The Muthaiga roster
           </h1>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            {members.length} playing members on Shimo · handicaps sync nightly
-            from the KGU
+            {members.length} playing members on Shimo · handicaps from the club
+            roster
           </p>
         </div>
         <Button variant="clay" onClick={openAdd}>
