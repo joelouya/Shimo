@@ -2352,6 +2352,87 @@ section("Sponsor inventory");
   })());
 }
 
+/* ------------------------------------------------------------------ *
+ * Corporate and charity days
+ * ------------------------------------------------------------------ */
+section("Corporate and charity days");
+{
+  const SP = await jiti.import("../lib/sponsors.ts");
+  const sponsors = [
+    { id: "sp1", name: "Acme Bank", tier: "title", contact: { name: "A. Person" } },
+    { id: "sp2", name: "Delta Drinks", tier: "category", category: "Halfway house",
+      contact: { name: "D. Person" } },
+  ];
+  const contests = [
+    { id: "ct1", name: "Nearest the pin", hole: 7, sponsorId: "sp2", prize: "A watch" },
+  ];
+
+  check("a sound corporate inventory may publish",
+    SP.canPublish(sponsors, contests));
+  check("the same day with no sponsors may not",
+    !SP.canPublish([], contests));
+
+  /* A real corporate day in the store, not a literal in this file. */
+  S.createTournament({
+    ...T,
+    id: "t-corp-day",
+    name: "Acme Corporate Golf Day",
+    eventKind: "corporate",
+    presentedBy: { name: "Acme Bank" },
+    rounds: [T.rounds[0]],
+    sponsors,
+    contests,
+  });
+  const day = () => st().created.find((x) => x.id === "t-corp-day");
+
+  check("the day knows what kind of day it is", day().eventKind === "corporate");
+  check("the brand leads and the club is the venue",
+    day().presentedBy.name === "Acme Bank" && day().clubId === "sigona");
+  check("contests survive into the store", day().contests.length === 1);
+  check("a contest keeps its sponsor", day().contests[0].sponsorId === "sp2");
+
+  S.setTournamentContests("t-corp-day", [
+    ...contests,
+    { id: "ct2", name: "Longest drive", hole: 12 },
+  ]);
+  check("contests can be edited after publishing", day().contests.length === 2);
+
+  S.setContestResult("t-corp-day", "ct1", { playerId: "p-joe", detail: "1.4 m" });
+  check("a contest result is recorded against the contest", (() => {
+    const c = day().contests.find((x) => x.id === "ct1");
+    return c.result.playerId === "p-joe" && c.result.detail === "1.4 m";
+  })());
+  check("recording one result leaves the others alone",
+    day().contests.find((x) => x.id === "ct2").result === undefined);
+
+  S.setTournamentSponsors("t-corp-day", [
+    ...sponsors,
+    { id: "sp3", name: "Zulu Supplies", tier: "supporting" },
+  ]);
+  check("the sponsor set can grow after publishing", day().sponsors.length === 3);
+  check("the title sponsor is unchanged by a later addition",
+    SP.titleSponsor(day().sponsors).name === "Acme Bank");
+
+  /* A charity day is for its beneficiary; sponsors are who paid for it.
+     Conflating the two would put the charity into the poster's logo strip. */
+  S.createTournament({
+    ...T,
+    id: "t-charity-day",
+    name: "Junior Golf Charity Day",
+    eventKind: "charity",
+    beneficiary: { name: "Junior Golf Foundation", targetKES: 2000000 },
+    rounds: [T.rounds[0]],
+    sponsors,
+  });
+  const charity = () => st().created.find((x) => x.id === "t-charity-day");
+  check("a charity day names its beneficiary",
+    charity().beneficiary.name === "Junior Golf Foundation");
+  check("the beneficiary is not one of the sponsors",
+    !charity().sponsors.some((x) => x.name === "Junior Golf Foundation"));
+  check("what was raised is absent until the club enters it",
+    charity().beneficiary.raisedKES === undefined);
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

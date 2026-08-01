@@ -285,6 +285,31 @@ export interface Sponsor {
   contestId?: string;
 }
 
+export type EventKind = "standard" | "corporate" | "charity";
+
+export interface EventBrand {
+  name: string;
+  logoUrl?: string;
+  /** their colour, used where the day is branded rather than the club */
+  accent?: string;
+}
+
+/**
+ * The organisation a charity day is raising for.
+ *
+ * `raisedKES` is entered by the club after the fact, never computed from entry
+ * fees: what a day raises includes an auction, a raffle and cheques written in
+ * the car park, and a figure Shimo derived from entries alone would be wrong
+ * in a document the beneficiary reads.
+ */
+export interface Beneficiary {
+  name: string;
+  /** "Junior golf development", in the club's own words */
+  cause?: string;
+  targetKES?: number;
+  raisedKES?: number;
+}
+
 /**
  * A contest hole: nearest the pin, longest drive, a hole-in-one prize.
  *
@@ -378,6 +403,26 @@ export interface Tournament {
    * wants different coverage at a championship and at a Saturday medal.
    */
   fieldProfile?: "championship" | "club" | "stableford" | "team";
+  /**
+   * What kind of day this is.
+   *
+   * Corporate and charity days share every part of the scoring, attestation
+   * and integrity model with a club medal. What differs is who is in the
+   * field, whose name is on it, and what happens the week afterwards. Absent
+   * means a standard club event, so nothing created before this changes.
+   */
+  eventKind?: EventKind;
+  /**
+   * The corporate or charity brand the day belongs to.
+   *
+   * On these days the host club is the venue, not the owner: it is the NCBA
+   * Corporate Golf Day at Muthaiga, and the running order of those two names
+   * is something a sponsor notices. Shimo's own identity is unaffected; this
+   * changes whose name leads, not the design system.
+   */
+  presentedBy?: EventBrand;
+  /** charity days: who the day is actually for */
+  beneficiary?: Beneficiary;
   /** who is backing the event; absent means none */
   sponsors?: Sponsor[];
   /** nearest-the-pin, longest drive, hole-in-one. Absent means none. */

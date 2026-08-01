@@ -41,6 +41,8 @@ import { SponsorStrip, tierLabel } from "@/components/sponsor-strip";
 import { uploadSponsorLogo, validateLogo } from "@/lib/sync/storage";
 import { REMOTE_CONFIGURED } from "@/lib/sync/client";
 import type {
+  Contest,
+  EventKind,
   FeeAudience,
   FeeTier,
   Format,
@@ -50,9 +52,23 @@ import type {
   SponsorTier,
   Tournament,
 } from "@/lib/types";
+import {
+  canPublish,
+  normaliseTier,
+  sponsorProblems,
+  TIER_LABEL,
+} from "@/lib/sponsors";
 import { cn, formatDateLong, formatKES } from "@/lib/utils";
 
-const STEPS = [
+/**
+ * The wizard's shape depends on what kind of day it is.
+ *
+ * A club medal has no contests and its sponsors are optional, so showing a
+ * caddymaster a Contests step for the Saturday medal is eight clicks of noise.
+ * A corporate day is the opposite: the sponsors are why it exists, so that
+ * step is required and a Contests step appears beside it.
+ */
+const BASE_STEPS = [
   { n: 1, label: "Basics" },
   { n: 2, label: "Rounds" },
   { n: 3, label: "Eligibility" },
@@ -60,9 +76,16 @@ const STEPS = [
   { n: 5, label: "Format details" },
   { n: 6, label: "Prizes" },
   { n: 7, label: "Sponsors" },
-  { n: 8, label: "Review & publish" },
 ];
-const LAST_STEP = 8;
+const CONTESTS_STEP = { n: 8, label: "Contests" };
+const REVIEW_STEP = { n: 9, label: "Review & publish" };
+
+function stepsFor(kind: EventKind) {
+  return kind === "standard"
+    ? [...BASE_STEPS, REVIEW_STEP]
+    : [...BASE_STEPS, CONTESTS_STEP, REVIEW_STEP];
+}
+const LAST_STEP = REVIEW_STEP.n;
 
 const ALL_FORMATS: Format[] = [
   "Stableford",
@@ -95,6 +118,12 @@ interface Draft {
   fee: number;
   tiers: FeeTier[];
   sponsors: Sponsor[];
+  contests: Contest[];
+  eventKind: EventKind;
+  presentedByName: string;
+  beneficiaryName: string;
+  beneficiaryCause: string;
+  beneficiaryTarget: string;
   maxPlayers: number;
   regOpens: string;
   regCloses: string;
@@ -131,6 +160,12 @@ const INITIAL: Draft = {
     { id: "standard", label: "Standard entry", amount: 2500, audience: "all" },
   ],
   sponsors: [],
+  contests: [],
+  eventKind: "standard",
+  presentedByName: "",
+  beneficiaryName: "",
+  beneficiaryCause: "",
+  beneficiaryTarget: "",
   maxPlayers: 120,
   regOpens: "2026-07-20",
   regCloses: "2026-08-20",
@@ -168,6 +203,12 @@ function draftFromTournament(t: Tournament): Draft {
     fee: t.entryFee,
     tiers: tiersOf(t),
     sponsors: t.sponsors ?? [],
+    contests: t.contests ?? [],
+    eventKind: t.eventKind ?? "standard",
+    presentedByName: t.presentedBy?.name ?? "",
+    beneficiaryName: t.beneficiary?.name ?? "",
+    beneficiaryCause: t.beneficiary?.cause ?? "",
+    beneficiaryTarget: t.beneficiary?.targetKES ? String(t.beneficiary.targetKES) : "",
     maxPlayers: t.maxPlayers,
     regOpens: INITIAL.regOpens,
     regCloses: t.regCloses,
@@ -212,10 +253,13 @@ function SponsorRow({
   sponsor,
   onChange,
   onRemove,
+  full,
 }: {
   sponsor: Sponsor;
   onChange: (patch: Partial<Sponsor>) => void;
   onRemove: () => void;
+  /** true on a corporate or charity day, where the inventory matters */
+  full?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -251,20 +295,20 @@ function SponsorRow({
           onChange={(e) => onChange({ name: e.target.value })}
         />
         <Select
-          value={sponsor.tier ?? "partner"}
+          value={normaliseTier(sponsor.tier)}
           onValueChange={(v) => onChange({ tier: v as SponsorTier })}
         >
           <SelectTrigger className="w-[150px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {(["title", "prize", "category", "partner"] as SponsorTier[]).map(
-              (tr) => (
-                <SelectItem key={tr} value={tr}>
-                  {tierLabel(tr)}
-                </SelectItem>
-              ),
-            )}
+            {(
+              ["title", "presenting", "category", "supporting"] as SponsorTier[]
+            ).map((tr) => (
+              <SelectItem key={tr} value={tr}>
+                {TIER_LABEL[tr as keyof typeof TIER_LABEL]}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <button
@@ -275,6 +319,68 @@ function SponsorRow({
           <X className="size-4" />
         </button>
       </div>
+
+      {/*
+        The inventory a corporate day is actually sold as. Hidden on a club
+        event, where a sponsor is a logo at the foot of a poster and asking a
+        caddymaster for a contact person and a contribution value would be
+        five fields of nothing.
+      */}
+      {full && (
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+          {normaliseTier(sponsor.tier) === "category" && (
+            <Input
+              className="col-span-2"
+              placeholder="What they bought, e.g. Halfway house"
+              value={sponsor.category ?? ""}
+              onChange={(e) => onChange({ category: e.target.value })}
+            />
+          )}
+          <Input
+            placeholder="Contact person"
+            value={sponsor.contact?.name ?? ""}
+            onChange={(e) =>
+              onChange({ contact: { ...sponsor.contact, name: e.target.value } })
+            }
+          />
+          <Input
+            type="email"
+            placeholder="Their email, for the recap"
+            value={sponsor.contact?.email ?? ""}
+            onChange={(e) =>
+              onChange({
+                contact: {
+                  ...sponsor.contact,
+                  name: sponsor.contact?.name ?? "",
+                  email: e.target.value,
+                },
+              })
+            }
+          />
+          <Input
+            inputMode="numeric"
+            placeholder="Contribution, KES"
+            value={
+              sponsor.contributionKES ? String(sponsor.contributionKES) : ""
+            }
+            onChange={(e) =>
+              onChange({
+                contributionKES:
+                  Number(e.target.value.replace(/[^0-9]/g, "")) || undefined,
+              })
+            }
+          />
+          <Input
+            placeholder="Brand colour, e.g. #1e7a4c"
+            value={sponsor.accent ?? ""}
+            onChange={(e) => onChange({ accent: e.target.value })}
+          />
+          <p className="col-span-2 text-[11px] leading-relaxed text-muted-foreground">
+            The contribution is for the club&apos;s own records. It never
+            appears on a poster, a screen, or a recap pack.
+          </p>
+        </div>
+      )}
 
       <div className="mt-2.5 flex items-center gap-3">
         <div className="flex h-11 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-secondary/40">
@@ -424,6 +530,33 @@ function CreateTournamentInner() {
       ],
     }));
 
+  const updateContest = (i: number, patch: Partial<Contest>) =>
+    setDraft((d) => ({
+      ...d,
+      contests: d.contests.map((c, j) => (j === i ? { ...c, ...patch } : c)),
+    }));
+
+  const addContest = () =>
+    setDraft((d) => ({
+      ...d,
+      contests: [
+        ...d.contests,
+        {
+          id: `ct-${Date.now().toString(36)}-${d.contests.length}`,
+          name: "Nearest the pin",
+          /* Par threes are where these live, and 7 is a reasonable first
+             guess that the club will change to the right hole anyway. */
+          hole: 7,
+        },
+      ],
+    }));
+
+  const removeContest = (i: number) =>
+    setDraft((d) => ({
+      ...d,
+      contests: d.contests.filter((_, j) => j !== i),
+    }));
+
   const removeSponsor = (i: number) =>
     setDraft((d) => ({ ...d, sponsors: d.sponsors.filter((_, j) => j !== i) }));
 
@@ -467,9 +600,25 @@ function CreateTournamentInner() {
 
   const course = courseById(draft.courseId);
   const club = clubById(course.clubId);
+  const steps = useMemo(() => stepsFor(draft.eventKind), [draft.eventKind]);
 
   const canContinue = useMemo(() => {
-    if (step === 1) return draft.name.trim().length >= 3 && !!draft.date;
+    if (step === 1)
+      return (
+        draft.name.trim().length >= 3 &&
+        !!draft.date &&
+        /* A charity day exists for its beneficiary; naming them is not a
+           detail to fill in later. */
+        (draft.eventKind !== "charity" || draft.beneficiaryName.trim().length > 1)
+      );
+    /* Sponsors are the reason a corporate day happens, so it cannot be
+       published without at least one, and the club is told which sponsor is
+       incomplete rather than being blocked by a general "check the form". */
+    if (step === 7 && draft.eventKind !== "standard")
+      return canPublish(
+        draft.sponsors.filter((x) => x.name.trim()),
+        draft.contests,
+      );
     if (step === 4) return draft.fee >= 0 && draft.maxPlayers > 0;
     return true;
   }, [step, draft]);
@@ -486,6 +635,20 @@ function CreateTournamentInner() {
       entryFee: draft.fee,
       feeTiers: draft.tiers.filter((x) => x.label.trim()),
       sponsors: draft.sponsors.filter((x) => x.name.trim()),
+      contests: draft.contests.filter((c) => c.name.trim()),
+      eventKind: draft.eventKind,
+      presentedBy: draft.presentedByName.trim()
+        ? { name: draft.presentedByName.trim() }
+        : undefined,
+      beneficiary: draft.beneficiaryName.trim()
+        ? {
+            name: draft.beneficiaryName.trim(),
+            cause: draft.beneficiaryCause.trim() || undefined,
+            targetKES: draft.beneficiaryTarget.trim()
+              ? Number(draft.beneficiaryTarget.replace(/[^0-9]/g, ""))
+              : undefined,
+          }
+        : undefined,
       status: editing ? editing.status : "upcoming",
       membersOnly: draft.membership === "members",
       membership: draft.membership,
@@ -556,7 +719,12 @@ function CreateTournamentInner() {
       <div className="mt-8 grid grid-cols-[220px_1fr] gap-10">
         {/* step rail */}
         <ol className="flex flex-col gap-1">
-          {STEPS.map((s) => {
+          {/*
+            The number shown is the position in this wizard, not the step's
+            internal id. A club event skips Contests, and printing the raw id
+            made its rail read 1 to 7 and then 9.
+          */}
+          {steps.map((s, i) => {
             const done = step > s.n;
             const active = step === s.n;
             return (
@@ -579,7 +747,7 @@ function CreateTournamentInner() {
                       !done && !active && "border-border",
                     )}
                   >
-                    {done ? <Check className="size-3" /> : s.n}
+                    {done ? <Check className="size-3" /> : i + 1}
                   </span>
                   {s.label}
                 </button>
@@ -599,6 +767,105 @@ function CreateTournamentInner() {
           <div className="rounded-2xl bg-card p-7 shadow-card">
             {step === 1 && (
               <div className="flex flex-col gap-5">
+                {/*
+                  Asked first because it changes the rest of the wizard. A club
+                  medal has no contests and optional sponsors; a corporate day
+                  is the opposite, and finding that out on step seven means
+                  going back.
+                */}
+                <Field label="What kind of day is this?">
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        ["standard", "Club event", "Members, ordinary fixture"],
+                        ["corporate", "Corporate day", "A company's day at the club"],
+                        ["charity", "Charity day", "Played for a beneficiary"],
+                      ] as const
+                    ).map(([kind, label, sub]) => {
+                      const active = draft.eventKind === kind;
+                      return (
+                        <button
+                          key={kind}
+                          type="button"
+                          onClick={() => set("eventKind", kind)}
+                          className={cn(
+                            "rounded-xl border p-3 text-left transition-[color,background-color,border-color] cursor-pointer",
+                            active
+                              ? "border-clay bg-clay-wash/60"
+                              : "border-border bg-card hover:border-stone/50",
+                          )}
+                        >
+                          <p
+                            className={cn(
+                              "text-[13.5px] font-medium",
+                              active ? "text-clay-deep" : "text-foreground",
+                            )}
+                          >
+                            {label}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                            {sub}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+
+                {draft.eventKind !== "standard" && (
+                  <Field
+                    label="Presented by"
+                    hint="The company or organisation whose day this is. Their name leads and the club is named as the venue, which is the running order a sponsor expects."
+                  >
+                    <Input
+                      placeholder="e.g. NCBA"
+                      value={draft.presentedByName}
+                      onChange={(e) => set("presentedByName", e.target.value)}
+                    />
+                  </Field>
+                )}
+
+                {draft.eventKind === "charity" && (
+                  <div className="rounded-xl border border-border bg-secondary/40 p-4">
+                    <p className="smallcaps text-muted-foreground">
+                      Who the day is for
+                    </p>
+                    <div className="mt-3 flex flex-col gap-4">
+                      <Field label="Beneficiary">
+                        <Input
+                          placeholder="The organisation receiving the proceeds"
+                          value={draft.beneficiaryName}
+                          onChange={(e) => set("beneficiaryName", e.target.value)}
+                        />
+                      </Field>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field label="What it is for">
+                          <Input
+                            placeholder="Optional"
+                            value={draft.beneficiaryCause}
+                            onChange={(e) =>
+                              set("beneficiaryCause", e.target.value)
+                            }
+                          />
+                        </Field>
+                        <Field
+                          label="Target"
+                          hint="Optional. What is actually raised is entered after the day."
+                        >
+                          <Input
+                            inputMode="numeric"
+                            placeholder="KES"
+                            value={draft.beneficiaryTarget}
+                            onChange={(e) =>
+                              set("beneficiaryTarget", e.target.value)
+                            }
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <Field label="Tournament name">
                   <Input
                     autoFocus
@@ -1313,11 +1580,42 @@ function CreateTournamentInner() {
               <div className="flex flex-col gap-4">
                 <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
                   <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                    Optional. Sponsors appear on the tournament page, at the foot
-                    of the leaderboard, on the results export and on any poster
-                    you generate. A title sponsor is given the most room.
+                    {draft.eventKind === "standard"
+                      ? "Optional. Sponsors appear on the tournament page, at the foot of the leaderboard, on the results export and on any poster you generate. A title sponsor is given the most room."
+                      : "This is what the day is sold as, so at least one sponsor is needed before it can be published. Each tier gets a set of surfaces automatically, and everyone with a contact person gets a recap pack after the day."}
                   </p>
                 </div>
+
+                {/*
+                  Named problems rather than a disabled button. A club stuck on
+                  this step needs to know which sponsor is incomplete, not that
+                  something somewhere is.
+                */}
+                {draft.eventKind !== "standard" &&
+                  (() => {
+                    const problems = sponsorProblems(
+                      draft.sponsors.filter((x) => x.name.trim()),
+                      draft.contests,
+                    );
+                    if (!problems.length) return null;
+                    return (
+                      <div className="rounded-xl border border-amber-flag/25 bg-amber-wash/50 px-4 py-3.5">
+                        <p className="smallcaps text-amber-flag">
+                          Before publishing
+                        </p>
+                        <ul className="mt-2 space-y-1.5">
+                          {problems.map((pr, i) => (
+                            <li
+                              key={i}
+                              className="text-[12.5px] leading-relaxed text-ink-soft"
+                            >
+                              {pr.message}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
 
                 {draft.sponsors.map((sp, i) => (
                   <SponsorRow
@@ -1325,6 +1623,7 @@ function CreateTournamentInner() {
                     sponsor={sp}
                     onChange={(patch) => updateSponsor(i, patch)}
                     onRemove={() => removeSponsor(i)}
+                    full={draft.eventKind !== "standard"}
                   />
                 ))}
 
@@ -1349,7 +1648,102 @@ function CreateTournamentInner() {
               </div>
             )}
 
-            {step === 8 && (
+            {step === 8 && draft.eventKind !== "standard" && (
+              <div className="flex flex-col gap-4">
+                <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
+                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                    Nearest the pin, longest drive, the hole-in-one car. A
+                    player standing on that tee sees whose contest it is, and
+                    the sponsor who bought it gets the result in their recap.
+                    Optional.
+                  </p>
+                </div>
+
+                {draft.contests.map((c, i) => (
+                  <div
+                    key={c.id}
+                    className="rounded-xl border border-border bg-card/60 p-4"
+                  >
+                    <div className="grid grid-cols-[1fr_5rem] gap-3">
+                      <Field label="Contest">
+                        <Input
+                          placeholder="e.g. Nearest the pin"
+                          value={c.name}
+                          onChange={(e) =>
+                            updateContest(i, { name: e.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Hole">
+                        <Input
+                          inputMode="numeric"
+                          value={String(c.hole)}
+                          onChange={(e) =>
+                            updateContest(i, {
+                              hole: Math.max(
+                                1,
+                                Math.min(18, Number(e.target.value) || 1),
+                              ),
+                            })
+                          }
+                        />
+                      </Field>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <Field label="Prize">
+                        <Input
+                          placeholder="Optional"
+                          value={c.prize ?? ""}
+                          onChange={(e) =>
+                            updateContest(i, { prize: e.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Sponsored by">
+                        <Select
+                          value={c.sponsorId ?? ""}
+                          onValueChange={(v) =>
+                            updateContest(i, { sponsorId: v || undefined })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Nobody yet" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {draft.sponsors
+                              .filter((sp) => sp.name.trim())
+                              .map((sp) => (
+                                <SelectItem key={sp.id} value={sp.id}>
+                                  {sp.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                    </div>
+                    <button
+                      onClick={() => removeContest(i)}
+                      className="mt-3 text-[12.5px] text-muted-foreground hover:text-destructive cursor-pointer"
+                    >
+                      Remove this contest
+                    </button>
+                  </div>
+                ))}
+
+                {draft.contests.length === 0 && (
+                  <p className="text-[13.5px] text-muted-foreground">
+                    No contest holes on this day.
+                  </p>
+                )}
+
+                <Button variant="outline" className="w-fit" onClick={addContest}>
+                  <Plus className="size-4" />
+                  Add a contest hole
+                </Button>
+              </div>
+            )}
+
+            {step === 9 && (
               <div>
                 <div className="flex flex-col divide-y divide-border/60">
                   {[

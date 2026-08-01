@@ -149,3 +149,25 @@ alter table tournaments
    eight logos every quarter. Same Sponsor shape as tournaments.sponsors. */
 alter table clubs
   add column if not exists sponsor_book jsonb;
+
+/* ------------------------------------------------------------------ *
+ * Corporate and charity days
+ *
+ * Same scoring, same attestation, same integrity record as a club medal.
+ * What differs is who is in the field, whose name is on the day, and what
+ * happens the week afterwards.
+ * ------------------------------------------------------------------ */
+alter table tournaments
+  /* 'standard' | 'corporate' | 'charity'. Null reads as standard, so nothing
+     created before this changes. */
+  add column if not exists event_kind text,
+  /* The brand the day belongs to: { name, logoUrl?, accent? }. On these days
+     the host club is the venue rather than the owner, and the running order
+     of those two names is something a sponsor notices. */
+  add column if not exists presented_by jsonb,
+  /* Charity days: { name, cause?, targetKES?, raisedKES? }. raisedKES is
+     entered by the club, never derived from entry fees: what a day raises
+     includes an auction, a raffle and cheques written in the car park, and a
+     figure computed from entries alone would be wrong in a document the
+     beneficiary reads. */
+  add column if not exists beneficiary jsonb;
