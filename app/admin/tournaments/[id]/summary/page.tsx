@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ClubCrest, ClubSurface } from "@/components/club-brand";
 import { SponsorStrip } from "@/components/sponsor-strip";
+import { RecapPanel } from "@/components/admin/recap-panel";
 import { COURSES, clubById, courseById, playerById } from "@/lib/data";
 import { roundKey, roundsOf } from "@/lib/rounds";
 import {
@@ -63,6 +64,7 @@ export default function TournamentSummaryPage({
   const created = useSim((s) => s.created);
   const pairings = useSim((s) => s.pairings);
   const roster = useSim((s) => s.roster);
+  const guests = useSim((s) => s.guests);
   const scores = useSim((s) => s.scores);
 
   const t = allTournaments(created).find((x) => x.id === id);
@@ -82,7 +84,9 @@ export default function TournamentSummaryPage({
       ),
     ];
     const field = fieldIds
-      .map((pid) => roster.find((p) => p.id === pid) ?? safePlayer(pid))
+      /* Guests are half the field on a corporate day and are not on the
+         roster, so this has to be the lookup that knows about them. */
+      .map((pid) => guests.find((g) => g.id === pid) ?? roster.find((p) => p.id === pid) ?? safePlayer(pid))
       .filter((p): p is Player => !!p);
     const course = courseById(t.courseId);
     const mode: ViewMode = t.format === "Stableford" ? "points" : "net";
@@ -124,7 +128,7 @@ export default function TournamentSummaryPage({
       .filter((d) => d.rows.length > 0);
 
     return { overall, divisions: divs };
-  }, [t, id, pairings, roster, scores]);
+  }, [t, id, pairings, roster, guests, scores]);
 
   if (!t) {
     return (
@@ -351,6 +355,23 @@ export default function TournamentSummaryPage({
           )}
         </div>
       </section>
+
+      {/*
+        Corporate and charity days end here rather than at a results screen:
+        the club's next job is the sponsors, and this is the step the research
+        says costs them four to twelve hours by hand.
+      */}
+      {t.eventKind && t.eventKind !== "standard" && (
+        <RecapPanel
+          tournament={t}
+          winners={overall.slice(0, 3).map((r, i) => ({
+            position: String(i + 1),
+            name: r.player.name,
+            detail: r.player.guest?.company ?? clubById(r.player.clubId).name,
+            score: mode === "points" ? `${r.points} pts` : toPar(r.netToPar),
+          }))}
+        />
+      )}
     </div>
   );
 }

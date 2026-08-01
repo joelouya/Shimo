@@ -1083,7 +1083,10 @@ export function enterMarkerScoreFor(
 
 /** Quiet integrity heuristic: log unusual cards for committee review. */
 function checkIntegrity(draft: SimState, pid: string) {
-  const player = draft.roster.find((p) => p.id === pid);
+  /* Guests were invisible here, which meant an unusual card from the half of
+     a corporate field that is not on the roster was never reviewed. A
+     self-declared handicap is exactly the case this heuristic is for. */
+  const player = playerInField(draft, pid);
   if (!player || player.handicap < 15) return;
   const st = rowStats(
     player,
@@ -1220,7 +1223,10 @@ export function unpublishCard(pid: string, opts: { by: string; reason: string })
 }
 
 function playerName(draft: SimState, pid: string) {
-  return draft.roster.find((p) => p.id === pid)?.name ?? pid;
+  /* Guests appear in the audit trail like anybody else, and a Committee
+     reading "g-m4x1q9-abc" instead of a name is a record that does not do
+     its job. */
+  return playerInField(draft, pid)?.name ?? pid;
 }
 
 export function setDeskName(name: string) {
@@ -1907,8 +1913,12 @@ export async function playerCertify(
   // the course of the round being certified, which may differ per round
   const course =
     COURSES.find((c) => c.id === roundOf(t, round).courseId) ?? COURSE;
-  const player =
-    s.roster.find((p) => p.id === playerId) ?? playerById(playerId);
+  /*
+   * Guests certify their own cards, so this cannot be a roster lookup. The
+   * acceptance run caught it: a guest could be attested for and then crashed
+   * on certifying, which is the exact step the whole product exists for.
+   */
+  const player = playerInField(s, playerId) ?? playerById(playerId);
 
   const hash = await sha256Hex(
     scorePayload({

@@ -34,7 +34,15 @@ const RANK: Record<SponsorTier, number> = {
 };
 
 /** Collapse the deprecated names so everything downstream sees four tiers. */
-export function normaliseTier(tier?: SponsorTier): SponsorTier {
+/**
+ * The four tiers a sponsor can actually be in, after the legacy names are
+ * folded away. Narrower than SponsorTier on purpose: normaliseTier exists
+ * precisely to guarantee one of these, and typing it as the wider union made
+ * every caller re-check for tiers that can no longer come out of it.
+ */
+export type CanonicalTier = "title" | "presenting" | "category" | "supporting";
+
+export function normaliseTier(tier?: SponsorTier): CanonicalTier {
   if (tier === "prize") return "category";
   if (tier === "partner") return "supporting";
   return tier ?? "supporting";
