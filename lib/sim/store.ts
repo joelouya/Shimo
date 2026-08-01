@@ -46,6 +46,7 @@ import {
   type AuditRecord,
 } from "@/lib/integrity";
 import { IS_PILOT } from "@/lib/mode";
+import { newInviteToken } from "@/lib/membership";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import {
   auditToRow,
@@ -1146,6 +1147,128 @@ export function updateRosterMember(id: string, patch: Partial<Player>) {
     draft.roster = draft.roster.map((m) => (m.id === id ? { ...m, ...patch } : m));
     const updated = draft.roster.find((m) => m.id === id);
     if (updated) enqueueEntity(draft, "players", playerToRow(updated), { conflict: "id" });
+  });
+}
+
+/* ---- membership invitations ------------------------------------- *
+ *
+ * The club grants membership; the app does not infer it from an email
+ * address. Every action here is the club acting on its own roster, which is
+ * why they all live beside addRosterMember rather than beside auth.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Give a member an invitation, or replace the one they have.
+ *
+ * Re-inviting mints a fresh token rather than resending the old one, so a link
+ * that went to a stale address or into the wrong WhatsApp group stops working
+ * the moment the club issues another. That is the whole reason a club would
+ * press resend, and reusing the token would defeat it.
+ */
+export function inviteMember(id: string): string | null {
+  let token: string | null = null;
+  mutate((draft) => {
+    const m = draft.roster.find((p) => p.id === id);
+    if (!m) return;
+    token = newInviteToken();
+    m.invite = { token, sentAt: new Date().toISOString() };
+    enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
+  });
+  return token;
+}
+
+/**
+ * The token to put on the clipboard.
+ *
+ * Returns the one they already have if it is still usable, and mints only when
+ * there is nothing to hand over. Copying a link should not quietly invalidate
+ * the link the club emailed an hour ago; that is what "issue a new invitation"
+ * is for, and it says so.
+ */
+export function ensureInviteToken(id: string): string | null {
+  const m = simStore.getState().roster.find((p) => p.id === id);
+  if (!m) return null;
+  if (m.invite?.token && !m.invite.activatedAt) return m.invite.token;
+  return inviteMember(id);
+}
+
+/**
+ * Invite everyone who has not already claimed their row.
+ *
+ * Deliberately skips activated members: a club pressing "invite everyone"
+ * after adding twenty people should not invalidate the four hundred links
+ * already in use.
+ */
+export function inviteAllMembers(): number {
+  let issued = 0;
+  mutate((draft) => {
+    const now = new Date().toISOString();
+    for (const m of draft.roster) {
+      if (m.invite?.activatedAt) continue;
+      if (m.active === false) continue;
+      m.invite = { token: newInviteToken(), sentAt: now };
+      enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
+      issued++;
+    }
+  });
+  return issued;
+}
+
+/**
+ * Claim a roster row with an invitation token.
+ *
+ * Returns the member on success and null on a token that is unknown, already
+ * claimed, or belongs to a deactivated membership. The caller cannot tell
+ * which: a page that says "already used" to a stranger tells them the token
+ * was real.
+ */
+export function activateInvite(token: string, email?: string): Player | null {
+  let claimed: Player | null = null;
+  mutate((draft) => {
+    const m = draft.roster.find((p) => p.invite?.token === token);
+    if (!m || !m.invite) return;
+    if (m.invite.activatedAt) return;
+    if (m.active === false) return;
+    m.invite.activatedAt = new Date().toISOString();
+    if (email) m.invite.claimedBy = email.trim().toLowerCase();
+    m.active = true;
+    claimed = { ...m };
+    enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
+  });
+  return claimed;
+}
+
+/** Switch a membership off, or back on. Cards and results are untouched. */
+export function setMemberActive(id: string, active: boolean) {
+  mutate((draft) => {
+    const m = draft.roster.find((p) => p.id === id);
+    if (!m) return;
+    m.active = active;
+    enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
+  });
+}
+
+/**
+ * Attach an address to a roster row by hand.
+ *
+ * For the ordinary case where a member signed in with the address they
+ * actually use rather than the one the club has on file. Marks the row
+ * activated, because a club doing this has just done the identity check the
+ * invitation exists to perform.
+ */
+export function linkMemberEmail(id: string, email: string) {
+  mutate((draft) => {
+    const m = draft.roster.find((p) => p.id === id);
+    if (!m) return;
+    const now = new Date().toISOString();
+    m.invite = {
+      token: m.invite?.token ?? newInviteToken(),
+      sentAt: m.invite?.sentAt ?? now,
+      activatedAt: m.invite?.activatedAt ?? now,
+      claimedBy: email.trim().toLowerCase(),
+    };
+    m.active = true;
+    enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
   });
 }
 

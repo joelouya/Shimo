@@ -2039,6 +2039,98 @@ section("First run");
   })());
 }
 
+/* ------------------------------------------------------------------ *
+ * Membership access
+ *
+ * The gate that makes "member" mean something. Every branch is checked here
+ * rather than by signing in and out of a phone, which is the whole reason
+ * memberAccess is a pure function over the roster.
+ * ------------------------------------------------------------------ */
+section("Membership access");
+{
+  const M = await jiti.import("../lib/membership.ts");
+  const base = { id: "p-x", clubId: "muthaiga", name: "Test Member",
+                 handicap: 12, gender: "M", email: "test@example.com" };
+
+  check("nobody signed in is signed out",
+    M.memberAccess([base], null).kind === "signed-out");
+  check("an email off the roster is not a member",
+    M.memberAccess([base], "stranger@example.com").kind === "not-a-member");
+  check("a stranger is told what to do instead", (() => {
+    const msg = M.accessMessage(M.memberAccess([base], "stranger@example.com"));
+    return msg && /registration link/i.test(msg.body);
+  })());
+
+  /* Demo keeps open access; the pilot branches are exercised through the
+     store below, where IS_PILOT is whatever the harness was built with. */
+  check("a roster email resolves to its row",
+    M.rosterRowFor([base], "TEST@Example.com ")?.id === "p-x");
+  check("a claimed address resolves to its row", (() => {
+    const claimed = { ...base, email: "old@example.com",
+      invite: { token: "t", claimedBy: "new@example.com" } };
+    return M.rosterRowFor([claimed], "new@example.com")?.id === "p-x";
+  })());
+
+  check("a token is long and unguessable", (() => {
+    const t = M.newInviteToken();
+    return t.length === 20 && /^[a-z2-9]+$/.test(t);
+  })());
+  check("two tokens never collide", (() => {
+    const seen = new Set();
+    for (let i = 0; i < 500; i++) seen.add(M.newInviteToken());
+    return seen.size === 500;
+  })());
+  check("tokens avoid look-alike characters", (() => {
+    let all = "";
+    for (let i = 0; i < 200; i++) all += M.newInviteToken();
+    return !/[ilo01]/.test(all);
+  })());
+
+  /* ---- the club's own actions ---- */
+  const rosterBefore = st().roster.length;
+  S.addRosterMember({ ...base, id: "p-invite-test", email: "invitee@example.com" });
+  const token = S.inviteMember("p-invite-test");
+  check("inviting mints a token", typeof token === "string" && token.length === 20);
+  check("an invited member is not yet activated",
+    !st().roster.find((p) => p.id === "p-invite-test").invite.activatedAt);
+
+  check("copying reuses an unclaimed link rather than breaking it",
+    S.ensureInviteToken("p-invite-test") === token);
+
+  const claimed = S.activateInvite(token, "invitee@example.com");
+  check("the right token claims the row", claimed?.id === "p-invite-test");
+  check("the same token cannot claim twice",
+    S.activateInvite(token, "someone@else.com") === null);
+  check("an unknown token claims nothing",
+    S.activateInvite("nosuchtokennosuchto", "x@y.com") === null);
+
+  S.setMemberActive("p-invite-test", false);
+  check("a switched-off member cannot be claimed", (() => {
+    const t2 = S.inviteMember("p-invite-test");
+    return S.activateInvite(t2, "invitee@example.com") === null;
+  })());
+  check("switching off keeps the member on the roster",
+    st().roster.some((p) => p.id === "p-invite-test"));
+
+  S.linkMemberEmail("p-invite-test", "Actual@Address.com");
+  const linked = st().roster.find((p) => p.id === "p-invite-test");
+  check("linking an address activates and reactivates",
+    linked.active === true && Boolean(linked.invite.activatedAt));
+  check("linking lower-cases the address",
+    linked.invite.claimedBy === "actual@address.com");
+  check("the linked address now resolves to the member",
+    M.rosterRowFor(st().roster, "actual@address.com").id === "p-invite-test");
+
+  check("bulk invites skip members who already claimed", (() => {
+    const before = st().roster.filter((p) => p.invite?.activatedAt).length;
+    S.inviteAllMembers();
+    const after = st().roster.filter((p) => p.invite?.activatedAt).length;
+    return after === before;
+  })());
+  check("the roster did not lose anyone along the way",
+    st().roster.length === rosterBefore + 1);
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

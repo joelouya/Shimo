@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { clubById } from "@/lib/data";
 import { AUTH_AVAILABLE, sendLoginCode, signOut, verifyLoginCode } from "@/lib/sync/auth";
 import { IS_PILOT } from "@/lib/mode";
+import { accessMessage, memberAccess } from "@/lib/membership";
 import { useAuthReconcile } from "@/lib/sim/hooks";
 import {
   authedPlayerId,
@@ -781,6 +782,67 @@ function SignIn({
   );
 }
 
+/**
+ * The end of the road for an email that cannot become a member.
+ *
+ * Deliberately not an error. Someone reading this is standing in a clubhouse
+ * wanting to play golf, and the club, not the app, is the thing that can
+ * actually resolve it. So it names the state, says who fixes it, and offers
+ * the one path that is still open: following the day without an account.
+ */
+function NoMembership() {
+  const email = useSim((s) => s.authEmail);
+  const roster = useSim((s) => s.roster);
+  const access = useMemo(() => memberAccess(roster, email), [roster, email]);
+  const message = accessMessage(access);
+
+  return (
+    <StepBody
+      icon={<ShieldCheck className="size-6" />}
+      title={message?.title ?? "We could not find your membership"}
+    >
+      <Reveal i={2}>
+        <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
+          {message?.body}
+        </p>
+      </Reveal>
+      {email && (
+        <Reveal i={3}>
+          <p className="mt-5 rounded-xl bg-secondary/60 px-4 py-3 text-[13px] text-muted-foreground">
+            Signed in as <span className="text-foreground">{email}</span>
+          </p>
+        </Reveal>
+      )}
+      <div className="mt-auto space-y-2 pt-8">
+        <Reveal i={4}>
+          <Button
+            variant="clay"
+            size="lg"
+            className="w-full"
+            onClick={() => setOnboarded(true)}
+          >
+            Follow the day without an account
+            <ArrowRight className="size-4" />
+          </Button>
+        </Reveal>
+        <Reveal i={5}>
+          <Button
+            variant="ghost"
+            size="lg"
+            className="w-full text-muted-foreground"
+            onClick={async () => {
+              await signOut();
+              setAuth(null, null);
+            }}
+          >
+            Try a different email
+          </Button>
+        </Reveal>
+      </div>
+    </StepBody>
+  );
+}
+
 function ConfirmProfile({
   onNext,
   onReject,
@@ -795,7 +857,13 @@ function ConfirmProfile({
     [roster, matchId],
   );
 
-  if (!player) return null;
+  /*
+   * An email the roster does not recognise used to render nothing at all, so
+   * a stranger who signed in got a blank screen and a member whose club had
+   * not invited them got the same blank screen. Both now get told which of
+   * those happened and what to do about it.
+   */
+  if (!player) return <NoMembership />;
   const club = clubById(player.clubId);
 
   return (
@@ -816,7 +884,7 @@ function ConfirmProfile({
             {initials(player.name)}
           </div>
           <div className="min-w-0">
-            <p className="font-serif text-[20px] leading-tight text-foreground">
+            <p className="font-serif text-[19px] leading-tight text-foreground">
               {player.name}
             </p>
             <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -963,7 +1031,7 @@ function SignatureSetup({ onNext }: { onNext: () => void }) {
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
               placeholder="Choose a 4-digit PIN"
-              className="mt-4 h-12 text-center text-[20px] tracking-[0.3em] tnum"
+              className="mt-4 h-12 text-center text-[19px] tracking-[0.3em] tnum"
             />
           </motion.div>
         )}

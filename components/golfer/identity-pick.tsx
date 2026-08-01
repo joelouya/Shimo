@@ -104,7 +104,7 @@ export function IdentityGate() {
           <div className="flex size-11 items-center justify-center rounded-xl bg-cream/10">
             <UserRound className="size-5 text-clay-wash" />
           </div>
-          <p className="mt-3 font-serif text-[20px] leading-tight">
+          <p className="mt-3 font-serif text-[19px] leading-tight">
             Follow your round
           </p>
           <p className="mt-1.5 text-[14px] leading-relaxed text-primary-foreground/65">

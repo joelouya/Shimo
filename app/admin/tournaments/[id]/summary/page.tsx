@@ -249,7 +249,7 @@ export default function TournamentSummaryPage({
                       {d.name}
                     </p>
                   </div>
-                  <p className="mt-2 font-serif text-[20px] text-foreground">
+                  <p className="mt-2 font-serif text-[19px] text-foreground">
                     {w.player.name}
                   </p>
                   <p className="text-[12px] text-muted-foreground">

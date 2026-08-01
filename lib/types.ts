@@ -87,6 +87,45 @@ export interface Player {
   memberNo?: string;
   /** ISO yyyy-mm-dd. Only needed for age-restricted events (juniors, seniors). */
   dob?: string;
+
+  /* ---- membership access, pilot only ------------------------------ *
+   *
+   * Being on the roster is what makes someone a member. Before this, any
+   * email that arrived through a magic link was matched against the roster
+   * and, if it missed, produced a blank profile: the difference between a
+   * member and a stranger was cosmetic. These fields make it enforceable.
+   * ------------------------------------------------------------------ */
+
+  /**
+   * The club's invitation to this member. Present once the club has generated
+   * one; `activatedAt` is set when the member follows it and claims the row.
+   */
+  invite?: MemberInvite;
+
+  /**
+   * A deactivated member keeps every card they ever returned and stops being
+   * able to sign in. Absent means active: a roster imported before this
+   * existed is not silently locked out.
+   */
+  active?: boolean;
+}
+
+export interface MemberInvite {
+  /**
+   * Unguessable and single-use. This is a credential: following it claims a
+   * named person's membership, their handicap and their scoring history.
+   */
+  token: string;
+  /** ISO datetime the club last sent or copied it */
+  sentAt?: string;
+  /** ISO datetime the member claimed the row. Absent means not yet activated. */
+  activatedAt?: string;
+  /**
+   * The email that claimed it, which need not be the roster email: a member
+   * who signs in with a different address is linked here rather than being
+   * turned away or duplicated.
+   */
+  claimedBy?: string;
 }
 
 /** Who may enter, beyond handicap and gender. */

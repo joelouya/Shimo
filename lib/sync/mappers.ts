@@ -127,6 +127,11 @@ export function playerToRow(p: Player) {
     email: p.email ?? null,
     member_no: p.memberNo ?? null,
     dob: p.dob ?? null,
+    invite_token: p.invite?.token ?? null,
+    invite_sent_at: p.invite?.sentAt ?? null,
+    invite_activated_at: p.invite?.activatedAt ?? null,
+    invite_claimed_by: p.invite?.claimedBy ?? null,
+    active: p.active !== false,
     updated_at: new Date().toISOString(),
   };
 }
@@ -141,6 +146,17 @@ export function rowToPlayer(r: Record<string, unknown>): Player {
     email: (r.email as string) ?? undefined,
     memberNo: (r.member_no as string) ?? undefined,
     dob: (r.dob as string) ?? undefined,
+    /* A row from a database that predates M13 has no token, which reads as
+       "never invited" rather than as an error. */
+    invite: r.invite_token
+      ? {
+          token: r.invite_token as string,
+          sentAt: (r.invite_sent_at as string) ?? undefined,
+          activatedAt: (r.invite_activated_at as string) ?? undefined,
+          claimedBy: (r.invite_claimed_by as string) ?? undefined,
+        }
+      : undefined,
+    active: r.active === false ? false : undefined,
   };
 }
 
