@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Flag,
   Image as ImageIcon,
+  Link as LinkIcon,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -87,6 +88,7 @@ function TournamentRow({
   onEdit,
   onDelete,
   onEnd,
+  onCopyRegistration,
 }: {
   t: Tournament;
   isNew?: boolean;
@@ -94,6 +96,7 @@ function TournamentRow({
   onEdit: (t: Tournament) => void;
   onDelete: (t: Tournament) => void;
   onEnd: (t: Tournament) => void;
+  onCopyRegistration: (t: Tournament) => void;
 }) {
   return (
     <div
@@ -193,6 +196,15 @@ function TournamentRow({
                   Poster
                 </Link>
               </DropdownMenuItem>
+              {/*
+                The link an organiser forwards to a corporate field. Copied
+                rather than opened, because the club's job with it is to paste
+                it into an email or a WhatsApp group.
+              */}
+              <DropdownMenuItem onSelect={() => onCopyRegistration(t)}>
+                <LinkIcon />
+                Copy registration link
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => onDelete(t)}>
                 <Trash2 />
@@ -263,6 +275,14 @@ export default function AdminTournamentsPage() {
 
   const deleteIsRemoval = toDelete ? !createdIds.has(toDelete.id) : false;
 
+  const [registrationFor, setRegistrationFor] = useState<Tournament | null>(null);
+  function copyRegistration(t: Tournament) {
+    void navigator.clipboard.writeText(
+      `${window.location.origin}/register/${t.id}`,
+    );
+    setRegistrationFor(t);
+  }
+
   return (
     <div>
       <header className="flex items-end justify-between">
@@ -297,6 +317,7 @@ export default function AdminTournamentsPage() {
                     isNew={createdIds.has(t.id) && !IS_PILOT}
                     isCreated={createdIds.has(t.id)}
                     onEdit={onEdit}
+                    onCopyRegistration={copyRegistration}
                     onDelete={setToDelete}
                     onEnd={setToEnd}
                   />
@@ -338,6 +359,31 @@ export default function AdminTournamentsPage() {
             >
               <Trash2 className="size-4" />
               {deleteIsRemoval ? "Remove it" : "Delete tournament"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* The registration link, and what it means to hand it out. */}
+      <Dialog
+        open={!!registrationFor}
+        onOpenChange={(o) => !o && setRegistrationFor(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registration link copied</DialogTitle>
+            <DialogDescription className="leading-relaxed">
+              Anyone with this link can put themselves on the sheet for{" "}
+              <span className="font-medium text-foreground">
+                {registrationFor?.name}
+              </span>
+              . They register as a guest, not as a member, and they never reach
+              the club roster. Send it to the field, not to the public.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="clay" onClick={() => setRegistrationFor(null)}>
+              Understood
             </Button>
           </DialogFooter>
         </DialogContent>

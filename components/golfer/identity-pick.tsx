@@ -8,6 +8,7 @@
  */
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { UserRound, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -119,6 +120,18 @@ export function IdentityGate() {
           >
             I&apos;m in this tournament
           </Button>
+          {/*
+            A guest has no roster row to pick from, so the list above is empty
+            for them. Their way in is the code on their registration, which is
+            deliberately offered here rather than hidden behind a menu: on a
+            corporate day most of the field arrives this way.
+          */}
+          <Link
+            href="/enter"
+            className="mt-3 block text-center text-[13px] text-clay-wash underline-offset-4 transition-colors duration-[var(--dur-hover)] hover:underline"
+          >
+            Playing as a guest? Enter your code
+          </Link>
         </div>
       )}
     </div>

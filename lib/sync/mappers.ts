@@ -132,6 +132,11 @@ export function playerToRow(p: Player) {
     invite_activated_at: p.invite?.activatedAt ?? null,
     invite_claimed_by: p.invite?.claimedBy ?? null,
     active: p.active !== false,
+    is_guest: Boolean(p.guest),
+    company: p.guest?.company ?? null,
+    handicap_self_declared: p.guest?.selfDeclaredHandicap ?? false,
+    guest_notes: p.guest?.notes ?? null,
+    sponsor_list_consent: p.guest?.sponsorListConsent ?? false,
     updated_at: new Date().toISOString(),
   };
 }
@@ -157,6 +162,15 @@ export function rowToPlayer(r: Record<string, unknown>): Player {
         }
       : undefined,
     active: r.active === false ? false : undefined,
+    guest: r.is_guest
+      ? {
+          company: (r.company as string) ?? undefined,
+          selfDeclaredHandicap: r.handicap_self_declared === true,
+          notes: (r.guest_notes as string) ?? undefined,
+          sponsorListConsent: r.sponsor_list_consent === true,
+          since: (r.updated_at as string) ?? new Date().toISOString(),
+        }
+      : undefined,
   };
 }
 

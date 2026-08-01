@@ -47,6 +47,7 @@ import {
 } from "@/lib/integrity";
 import { IS_PILOT } from "@/lib/mode";
 import { newInviteToken } from "@/lib/membership";
+import { entryForCode, newGuestCode } from "@/lib/guests";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import {
   auditToRow,
@@ -67,7 +68,7 @@ import {
   tournamentToRow,
 } from "@/lib/sync/mappers";
 import type { HydrationSnapshot } from "@/lib/sync/remote";
-import type { ClubIdentity, HoleScores, Player, Tournament } from "@/lib/types";
+import type { ClubIdentity, HoleScores, Player, Tournament, GuestEntry } from "@/lib/types";
 
 const COURSE = COURSES.find((c) => c.id === "muthaiga-main")!;
 const LIVE_T = TOURNAMENTS.find((t) => t.id === LIVE_TOURNAMENT_ID)!;
@@ -261,6 +262,13 @@ export interface SimState {
   pendingEchoes: EchoTask[];
   /** the club's member roster (editable in Members) */
   roster: Player[];
+  /**
+   * Everyone who has played as a guest, kept apart from the roster so a guest
+   * never silently becomes a member. A repeat guest keeps one row here.
+   */
+  guests: Player[];
+  /** one row per guest per tournament, carrying their access code */
+  guestEntries: GuestEntry[];
   /** saved pairings per roundKey(tournamentId, round) */
   pairings: Record<string, SavedGroup[]>;
   /** which tournament is being played today (null = none) */
@@ -399,6 +407,8 @@ export function buildInitialState(): SimState {
     extraAmberFired: false,
     pendingEchoes: [],
     roster,
+    guests: [],
+    guestEntries: [],
     pairings: IS_PILOT
       ? {}
       : {
@@ -538,6 +548,8 @@ function normalize(saved: SimState): SimState {
   out.auditLog ??= [];
   out.outbox ??= [];
   out.roster ??= base.roster;
+  out.guests ??= [];
+  out.guestEntries ??= [];
   out.created ??= [];
   out.dismissed ??= [];
   out.deskWelcomed ??= false;
@@ -1272,6 +1284,131 @@ export function linkMemberEmail(id: string, email: string) {
   });
 }
 
+/* ---- guests ------------------------------------------------------ *
+ *
+ * A guest is a player the club has not vouched for. They score, they mark for
+ * a partner, and their certification is worth what a member's is. What differs
+ * is that they are never on the roster, so nothing here writes to it.
+ * ------------------------------------------------------------------ */
+
+export interface GuestRegistrationInput {
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  handicap?: number;
+  notes?: string;
+  sponsorListConsent: boolean;
+  gender?: "M" | "F";
+}
+
+/**
+ * Put a guest on the sheet for one tournament.
+ *
+ * Returns the entry, whose code is the only thing the guest needs on the day.
+ * A repeat guest is matched on email and keeps their existing row rather than
+ * accumulating one per event, so the second time their organisation and
+ * handicap are already there. Matched on email alone: names collide, and
+ * merging two people called James Mwangi would corrupt a scorecard.
+ *
+ * Re-registering for a tournament they are already in returns the entry they
+ * have rather than minting a second code, because the ordinary cause is
+ * someone submitting the form twice.
+ */
+export function registerGuest(
+  tournamentId: string,
+  input: GuestRegistrationInput,
+  clubId = "muthaiga",
+): GuestEntry {
+  let entry!: GuestEntry;
+  mutate((draft) => {
+    const email = (input.email ?? "").trim().toLowerCase();
+    const existing = email
+      ? draft.guests.find((g) => (g.email ?? "").toLowerCase() === email)
+      : undefined;
+
+    const guest: Player = existing ?? {
+      id: `g-${Date.now().toString(36)}-${newGuestCode().replace("-", "")}`,
+      clubId,
+      name: input.name.trim(),
+      handicap: input.handicap ?? 0,
+      gender: input.gender ?? "M",
+      email: input.email?.trim() || undefined,
+      phone: input.phone?.trim() || undefined,
+      guest: {
+        company: input.company?.trim() || undefined,
+        selfDeclaredHandicap: input.handicap !== undefined,
+        notes: input.notes?.trim() || undefined,
+        sponsorListConsent: input.sponsorListConsent,
+        since: new Date().toISOString(),
+      },
+    };
+
+    if (existing) {
+      /* A returning guest may have changed employer, gained a handicap, or
+         changed their mind about the sponsor list. Take the newer answers and
+         keep the identity. */
+      existing.name = input.name.trim() || existing.name;
+      existing.phone = input.phone?.trim() || existing.phone;
+      if (input.handicap !== undefined) existing.handicap = input.handicap;
+      existing.guest = {
+        ...existing.guest!,
+        company: input.company?.trim() || existing.guest!.company,
+        selfDeclaredHandicap:
+          input.handicap !== undefined || existing.guest!.selfDeclaredHandicap,
+        notes: input.notes?.trim() || existing.guest!.notes,
+        sponsorListConsent: input.sponsorListConsent,
+      };
+    } else {
+      draft.guests.unshift(guest);
+      ensureCard(draft, guest.id);
+    }
+
+    const already = draft.guestEntries.find(
+      (e) => e.tournamentId === tournamentId && e.guestId === guest.id,
+    );
+    if (already) {
+      entry = already;
+      return;
+    }
+
+    entry = {
+      tournamentId,
+      guestId: guest.id,
+      code: newGuestCode(),
+      registeredAt: new Date().toISOString(),
+    };
+    draft.guestEntries.push(entry);
+    enqueueEntity(draft, "players", playerToRow(guest), { conflict: "id" });
+  });
+  return entry;
+}
+
+/** Everyone registered for one tournament as a guest. */
+export function guestsIn(s: SimState, tournamentId: string): Player[] {
+  const ids = new Set(
+    s.guestEntries.filter((e) => e.tournamentId === tournamentId).map((e) => e.guestId),
+  );
+  return s.guests.filter((g) => ids.has(g.id));
+}
+
+/**
+ * Resolve an access code to the player it belongs to.
+ *
+ * Returns the tournament as well, because a code is only ever good for one and
+ * the caller needs to know which before it opens a card.
+ */
+export function guestForCode(
+  s: SimState,
+  code: string,
+): { player: Player; tournamentId: string } | null {
+  const entry = entryForCode(s.guestEntries, code);
+  if (!entry) return null;
+  const player = s.guests.find((g) => g.id === entry.guestId);
+  if (!player) return null;
+  return { player, tournamentId: entry.tournamentId };
+}
+
 /** Pairings are per round: leaders get re-paired for the next one. */
 export function savePairings(
   tournamentId: string,
@@ -1361,7 +1498,7 @@ export function cutAfterRound(
       .flatMap((x) => fieldOfRound(s, t.id, x.number)),
   );
   const players = [...ids]
-    .map((pid) => s.roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid))
+    .map((pid) => playerInField(s, pid))
     .filter((p): p is Player => !!p);
   const mode = t.format === "Stableford" ? "points" : "net";
   const rows = cumulativeStandings(players, upTo, t.handicapAllowance, mode);
@@ -1413,7 +1550,7 @@ export function orderByStandings(
   ids: string[],
 ): string[] {
   const players = ids
-    .map((pid) => s.roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid))
+    .map((pid) => playerInField(s, pid))
     .filter((p): p is Player => !!p);
   const mode = t.format === "Stableford" ? "points" : "net";
   const rows = cumulativeStandings(
@@ -1999,6 +2136,21 @@ export function setOnboarded(v: boolean) {
 }
 
 /** Roster player matched to the signed-in email, if any. */
+/**
+ * Resolve a player id against everyone who could be in a field.
+ *
+ * Roster first, then guests, then the seed players demo mode plays with. One
+ * place, because a lookup that knows about members but not guests turns a
+ * corporate day into a board full of blanks.
+ */
+export function playerInField(s: SimState, pid: string): Player | undefined {
+  return (
+    s.roster.find((p) => p.id === pid) ??
+    s.guests.find((p) => p.id === pid) ??
+    PLAYERS.find((p) => p.id === pid)
+  );
+}
+
 export function authedPlayerId(s: SimState): string | null {
   if (!s.authEmail) return null;
   const email = s.authEmail.toLowerCase();

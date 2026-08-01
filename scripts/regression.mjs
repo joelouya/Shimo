@@ -2131,6 +2131,128 @@ section("Membership access");
     st().roster.length === rosterBefore + 1);
 }
 
+/* ------------------------------------------------------------------ *
+ * Guests
+ *
+ * The field on a corporate day is mostly people the club has never met. They
+ * score, they mark, and their certification is worth what a member's is. What
+ * has to hold is that they never become members by accident, that a code
+ * reaches exactly one card, and that nobody reaches a sponsor without saying
+ * they were willing to.
+ * ------------------------------------------------------------------ */
+section("Guests");
+{
+  const G = await jiti.import("../lib/guests.ts");
+
+  check("a code is six characters, grouped and unambiguous", (() => {
+    const c = G.newGuestCode();
+    return /^[a-z2-9]{3}-[a-z2-9]{3}$/.test(c) && !/[ilo01]/.test(c);
+  })());
+  check("codes do not collide across a full field", (() => {
+    const seen = new Set();
+    for (let i = 0; i < 2000; i++) seen.add(G.newGuestCode());
+    return seen.size === 2000;
+  })());
+  check("a code typed in capitals, spaced, without the dash still works",
+    G.normaliseCode("  ABC 123 ") === "abc-123");
+
+  check("a name is required, everything else is not",
+    G.validateRegistration({ name: "J", sponsorListConsent: false }).length === 1 &&
+    G.validateRegistration({ name: "James Mwangi", sponsorListConsent: false }).length === 0);
+  check("a handicap outside the real range is refused",
+    G.validateRegistration({ name: "James Mwangi", handicap: 99, sponsorListConsent: false })
+      .some((p) => p.field === "handicap"));
+  check("no handicap at all is fine",
+    G.validateRegistration({ name: "James Mwangi", sponsorListConsent: false }).length === 0);
+
+  /* ---- registering ---- */
+  const rosterBefore = st().roster.length;
+  const e1 = S.registerGuest("t-corp-test", {
+    name: "James Mwangi", email: "james@acme.co.ke", company: "Acme",
+    handicap: 18, sponsorListConsent: false,
+  });
+  check("registering yields a code", /^[a-z2-9]{3}-[a-z2-9]{3}$/.test(e1.code));
+  check("a guest never lands on the member roster",
+    st().roster.length === rosterBefore &&
+    !st().roster.some((p) => p.email === "james@acme.co.ke"));
+  check("a guest is a player everywhere scoring looks", (() => {
+    const found = S.playerInField(st(), e1.guestId);
+    return found?.name === "James Mwangi";
+  })());
+  check("a declared handicap is marked as the player's own claim", (() => {
+    const g = st().guests.find((x) => x.id === e1.guestId);
+    return G.handicapProvenance(g) === "self-declared";
+  })());
+  check("a guest with no handicap is not treated as scratch", (() => {
+    const e = S.registerGuest("t-corp-test", {
+      name: "No Handicap", email: "nh@acme.co.ke", sponsorListConsent: false,
+    });
+    const g = st().guests.find((x) => x.id === e.guestId);
+    return G.handicapProvenance(g) === "none";
+  })());
+
+  /* ---- the code opens one card, in one event ---- */
+  check("a code opens its own player", (() => {
+    const hit = S.guestForCode(st(), e1.code);
+    return hit?.player.id === e1.guestId && hit.tournamentId === "t-corp-test";
+  })());
+  check("a code typed loosely still opens it",
+    S.guestForCode(st(), e1.code.replace("-", "").toUpperCase())?.player.id === e1.guestId);
+  check("a wrong code opens nothing", S.guestForCode(st(), "zzz-999") === null);
+  check("a code is scoped to one tournament", (() => {
+    const other = S.registerGuest("t-other-test", {
+      name: "James Mwangi", email: "james@acme.co.ke", sponsorListConsent: false,
+    });
+    return other.code !== e1.code &&
+      S.guestForCode(st(), other.code).tournamentId === "t-other-test";
+  })());
+
+  /* ---- a repeat guest keeps one identity ---- */
+  check("playing a second event does not duplicate the person",
+    st().guests.filter((g) => g.email === "james@acme.co.ke").length === 1);
+  check("but does give a separate entry per event",
+    st().guestEntries.filter((e) => e.guestId === e1.guestId).length === 2);
+  check("submitting the same form twice does not mint a second code", (() => {
+    const again = S.registerGuest("t-corp-test", {
+      name: "James Mwangi", email: "james@acme.co.ke", sponsorListConsent: false,
+    });
+    return again.code === e1.code;
+  })());
+
+  /* ---- consent ---- */
+  check("consent is off unless it was given",
+    G.sponsorListable(st().guests).length === 0);
+  check("a guest who agrees is listable", (() => {
+    S.registerGuest("t-corp-test", {
+      name: "Willing Guest", email: "willing@acme.co.ke", sponsorListConsent: true,
+    });
+    const listable = G.sponsorListable(st().guests);
+    return listable.length === 1 && listable[0].name === "Willing Guest";
+  })());
+  check("changing their mind on a later event is honoured", (() => {
+    S.registerGuest("t-other-test", {
+      name: "Willing Guest", email: "willing@acme.co.ke", sponsorListConsent: false,
+    });
+    return G.sponsorListable(st().guests).length === 0;
+  })());
+  check("notes never travel with the sponsor-listable set", (() => {
+    S.registerGuest("t-corp-test", {
+      name: "Noted Guest", email: "noted@acme.co.ke",
+      notes: "Nut allergy", sponsorListConsent: true,
+    });
+    /* The club holds the note; the consented set is what a pack may draw on,
+       and the pack renders name and organisation only. */
+    const g = st().guests.find((x) => x.email === "noted@acme.co.ke");
+    return g.guest.notes === "Nut allergy" &&
+      G.sponsorListable(st().guests).some((x) => x.id === g.id);
+  })());
+
+  check("guests in one tournament are only that tournament's guests", (() => {
+    const inCorp = S.guestsIn(st(), "t-corp-test").map((g) => g.name).sort();
+    return inCorp.includes("James Mwangi") && inCorp.includes("Noted Guest");
+  })());
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

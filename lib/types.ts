@@ -108,6 +108,66 @@ export interface Player {
    * existed is not silently locked out.
    */
   active?: boolean;
+
+  /**
+   * Present when this player is a guest rather than a member. Absent on every
+   * roster row, and the only thing that distinguishes the two.
+   */
+  guest?: GuestProfile;
+}
+
+/**
+ * A guest is a player the club has not vouched for.
+ *
+ * On a corporate or charity day most of the field is guests, which is the
+ * whole reason this exists. They score, they mark for each other, and their
+ * certification is worth exactly what a member's is: the integrity chain never
+ * asks whether the person signing is a member, only whether they kept the
+ * card. What differs is provenance, not standing.
+ *
+ * Held on Player rather than as a parallel type, because everything
+ * downstream of a tee time treats a guest identically and forking Player would
+ * mean forking scoring, pairings, cards, attestation and the board with it.
+ * The distinguishing fact is that guests never enter `roster`.
+ */
+export interface GuestProfile {
+  /** the organisation they are playing for, which is the unit a corporate
+      day is actually organised around */
+  company?: string;
+  /**
+   * True when the handicap on the Player row is the guest's own claim rather
+   * than a WHS index. Surfaced wherever it affects a result, so a net placing
+   * on a corporate day is never mistaken for a WHS-grade figure.
+   */
+  selfDeclaredHandicap: boolean;
+  /**
+   * Dietary and accessibility notes. Operational data for the club and, some
+   * of it, health data. Never leaves the club and never reaches a sponsor
+   * under any setting. See docs/COMMITMENTS.md.
+   */
+  notes?: string;
+  /**
+   * Whether this guest agreed to appear in a sponsor's participant list.
+   * Explicit, captured at registration, and false unless they said yes.
+   */
+  sponsorListConsent: boolean;
+  /** first time we saw them, so a repeat guest keeps one profile */
+  since: string;
+}
+
+/**
+ * One guest's place in one tournament.
+ *
+ * The code is how they reach their own scorecard on the day without an
+ * account. Scoped to a single tournament on purpose: a code that opened every
+ * event a guest ever played would be a password by another name.
+ */
+export interface GuestEntry {
+  tournamentId: string;
+  guestId: string;
+  /** unguessable, and only ever good for this one tournament */
+  code: string;
+  registeredAt: string;
 }
 
 export interface MemberInvite {
