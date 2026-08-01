@@ -2663,6 +2663,133 @@ section("Exposure");
   })());
 }
 
+/* ------------------------------------------------------------------ *
+ * The sponsor recap pack
+ *
+ * The rule the whole feature turns on: a pack states only what was observed.
+ * These check the spec builder, which is where a fabricated number would have
+ * to enter from.
+ * ------------------------------------------------------------------ */
+section("Sponsor recap");
+{
+  const R = await jiti.import("../lib/recap/spec.ts");
+
+  const sponsor = {
+    id: "sp1", name: "Zawadi Bank", tier: "title", accent: "#1e5f8c",
+    contact: { name: "Grace Njeri", email: "grace@example.com" },
+    contributionKES: 750000,
+  };
+  const tournament = {
+    id: "t-recap", name: "Zawadi Corporate Golf Day", clubId: "muthaiga",
+    format: "Stableford", fieldSize: 120,
+    eventKind: "corporate", presentedBy: { name: "Zawadi Bank" },
+    contests: [
+      { id: "c1", name: "Nearest the pin", hole: 7, sponsorId: "sp1",
+        result: { playerId: "p-njoroge", detail: "1.4 m" } },
+      { id: "c2", name: "Longest drive", hole: 12, sponsorId: "sp-other" },
+    ],
+  };
+  const card = (holes) => {
+    const c = Array(18).fill(null);
+    for (const h of holes) c[h] = 4;
+    return c;
+  };
+  const cards = { a: card([6]), b: card([6]), c: card([0]) };
+  const events = [
+    { tournamentId: "t-recap", surface: "board", device: "d1", at: 1 },
+    { tournamentId: "t-recap", surface: "board", device: "d1", at: 2 },
+    { tournamentId: "t-recap", surface: "board", device: "d2", at: 3 },
+  ];
+  const build = (over = {}) =>
+    R.recapSpec({
+      sponsor, tournament, club: { name: "Muthaiga Golf Club" },
+      events, cards, winners: [], consented: [], withheld: 0,
+      dateLine: "Saturday, 22 August 2026", venueLine: "Muthaiga · White tees",
+      nameOf: (id) => (id === "p-njoroge" ? "Peter Njoroge" : undefined),
+      ...over,
+    });
+
+  const spec = build();
+  const fig = (label) => spec.figures.find((f) => f.label.includes(label));
+
+  check("board views come from what was observed",
+    fig("live board").value.measured && fig("live board").value.value === "2");
+  check("a figure nobody could observe is marked, not guessed",
+    fig("Social").value.measured === false &&
+    /social accounts/i.test(fig("Social").value.why));
+  check("no clubhouse screen means no invented screen time",
+    fig("clubhouse screen").value.measured === false);
+  check("every figure is a Measure, so a bare number cannot reach a page",
+    spec.figures.every((f) => typeof f.value.measured === "boolean"));
+
+  check("only this sponsor's contest appears",
+    spec.contests.length === 1 && spec.contests[0].name === "Nearest the pin");
+  check("the contest winner is resolved from an id, not stored as a name",
+    spec.contests[0].winner === "Peter Njoroge");
+  check("who faced the contest is counted, not taken from the field size",
+    spec.contests[0].faced.value === "2" &&
+    spec.contests[0].faced.value !== String(tournament.fieldSize));
+  check("a contest nobody won says so rather than inventing a winner", (() => {
+    const s2 = build({
+      sponsor: { ...sponsor, id: "sp-other" },
+    });
+    return s2.contests[0].winner === undefined;
+  })());
+
+  check("the private contribution never reaches the pack",
+    !JSON.stringify(spec).includes("750000"));
+  check("a sponsor's contact is named for delivery, not printed as data",
+    spec.sponsor.contact === "Grace Njeri" &&
+    !JSON.stringify(spec.figures).includes("grace@example.com"));
+
+  /* ---- consent ---- */
+  check("nobody appears in the list without consent",
+    spec.participants.length === 0);
+  check("those withheld are counted so the pack can be honest", (() => {
+    const s2 = build({
+      consented: [{ id: "g1", name: "Alice Wanjiru", guest: { company: "Zawadi Bank" } }],
+      withheld: 41,
+    });
+    return s2.participants.length === 1 && s2.participantsWithheld === 41;
+  })());
+  check("a listed guest brings a name and organisation and nothing else", (() => {
+    const s2 = build({
+      consented: [{
+        id: "g1", name: "Alice Wanjiru", email: "alice@example.com",
+        phone: "+254700000000",
+        guest: { company: "Zawadi Bank", notes: "Nut allergy",
+                 sponsorListConsent: true, selfDeclaredHandicap: false },
+      }],
+    });
+    const blob = JSON.stringify(s2.participants);
+    return blob.includes("Alice Wanjiru") && blob.includes("Zawadi Bank") &&
+      !blob.includes("alice@example.com") && !blob.includes("+254700000000") &&
+      !blob.includes("Nut allergy");
+  })());
+
+  /* ---- charity ---- */
+  check("what a charity day raised is absent until the club enters it", (() => {
+    const s2 = build({
+      tournament: { ...tournament, eventKind: "charity",
+        beneficiary: { name: "Junior Golf Foundation", targetKES: 2000000 } },
+    });
+    return s2.raised.amount.measured === false &&
+      /auction|raffle/i.test(s2.raised.amount.why);
+  })());
+  check("once entered, it is reported as given", (() => {
+    const s2 = build({
+      tournament: { ...tournament, eventKind: "charity",
+        beneficiary: { name: "Junior Golf Foundation", raisedKES: 2450000 } },
+    });
+    return s2.raised.amount.measured === true &&
+      s2.raised.amount.value.includes("2,450,000");
+  })());
+
+  check("the filename is one a club can find six weeks later",
+    R.recapFileName(spec) ===
+      "zawadi-corporate-golf-day-zawadi-bank-recap.pdf");
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

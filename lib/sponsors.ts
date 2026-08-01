@@ -94,6 +94,22 @@ const DEFAULT_PLACEMENTS: Record<
   supporting: ["poster", "recap"],
 };
 
+/**
+ * What each surface is called when a sponsor is being told about it.
+ *
+ * "tournament-page" is an implementation detail; "The event page" is what
+ * someone reading a recap understands. Kept here so the pack and the admin
+ * panel name the same thing the same way.
+ */
+export const SURFACE_LABEL: Record<SponsorSurface, string> = {
+  poster: "The event poster",
+  "tournament-page": "The event page",
+  leaderboard: "The live leaderboard",
+  tv: "The clubhouse screen",
+  contest: "Your contest hole",
+  recap: "This recap",
+};
+
 export function placementsOf(s: Sponsor): SponsorSurface[] {
   if (s.placements?.length) return s.placements;
   return DEFAULT_PLACEMENTS[
