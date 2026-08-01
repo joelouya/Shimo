@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -28,8 +28,11 @@ import { CertificationPanel } from "@/components/admin/certification-panel";
 import { LiveBadge } from "@/components/live-dot";
 import { DEMO_USER_ID, playerById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
-import { useActiveTournament, useStandings,
-  useRoundScores
+import {
+  useActiveTournament,
+  useRoundScores,
+  useSlowClock,
+  useStandings,
 } from "@/lib/sim/hooks";
 import {
   endTournamentDay,
@@ -38,10 +41,13 @@ import {
   useSim,
   type OpsFlag,
   type SavedGroup,
+  groupHolesPlayed,
 } from "@/lib/sim/store";
 import { roundsOf } from "@/lib/rounds";
 import type { Player } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
+import { formatElapsed, paceReadings, type PaceReading } from "@/lib/pace";
+import { roundKey } from "@/lib/rounds";
 
 function timeAgo(ts: number) {
   const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -121,7 +127,15 @@ function FlagCard({ flag, onReview }: { flag: OpsFlag; onReview: () => void }) {
   );
 }
 
-function GroupCard({ g, byId }: { g: SavedGroup; byId: Map<string, Player> }) {
+function GroupCard({
+  g,
+  byId,
+  pace,
+}: {
+  g: SavedGroup;
+  byId: Map<string, Player>;
+  pace?: PaceReading;
+}) {
   const scores = useRoundScores();
   const events = useSim((s) => s.events);
   const allFlags = useSim((s) => s.flags);
@@ -163,7 +177,26 @@ function GroupCard({ g, byId }: { g: SavedGroup; byId: Map<string, Player> }) {
           </p>
           <p className="mt-0.5 text-[10.5px] text-muted-foreground tnum">
             Teed off {g.teeTime}
+            {pace?.elapsed !== undefined && (
+              <> · out {formatElapsed(pace.elapsed)}</>
+            )}
           </p>
+          {/*
+            Quiet on purpose. A group behind the field is a word between the
+            caddymaster and a starter, not an alarm, and it is never shown to
+            the players. See lib/pace.ts.
+          */}
+          {pace?.outOfPosition && (
+            <p className="mt-1 text-[10.5px] text-amber-flag">
+              {pace.behind} min behind the field
+            </p>
+          )}
+          {pace?.total !== undefined && (
+            <p className="mt-1 text-[10.5px] text-muted-foreground tnum">
+              {formatElapsed(pace.front)} out · {formatElapsed(pace.back)} back
+              · {formatElapsed(pace.total)} round
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p
@@ -347,6 +380,29 @@ export default function LiveOpsPage() {
   );
 
   const byId = new Map((active?.players ?? []).map((p) => [p.id, p] as const));
+
+  /*
+   * Pace, read off scoring that happened anyway. Recomputed on each render
+   * rather than stored, because "how far behind the field" only means anything
+   * relative to where the field is right now.
+   */
+  const now = useSlowClock();
+  const paceState = useSim((s) => s.pace);
+  const paceThreshold = useSim((s) => s.paceThresholdMin);
+  const pairings = useSim((s) => s.pairings);
+  const allScores = useSim((s) => s.scores);
+  const paceBy = useMemo(() => {
+    if (!active) return new Map<string, PaceReading>();
+    const key = roundKey(active.tournament.id, active.round ?? 1);
+    const rows = Object.values(paceState).filter((p) => p.key === key);
+    const holes = groupHolesPlayed({ pairings, scores: allScores } as never, key);
+    return new Map(
+      paceReadings(rows, holes, now, paceThreshold).map(
+        (r) => [r.groupId, r] as const,
+      ),
+    );
+    // `scores` participates so the readings move as cards come in
+  }, [active, paceState, paceThreshold, pairings, allScores, now]);
   const fieldIds = active ? active.groups.flatMap((g) => g.playerIds) : [];
   const scoresIn = fieldIds.reduce(
     (a: number, pid: string) =>
@@ -468,7 +524,7 @@ export default function LiveOpsPage() {
       <div className="mt-6 grid grid-cols-[1fr_300px] gap-6">
         <div className="grid grid-cols-3 gap-3">
           {active.groups.map((g) => (
-            <GroupCard key={g.id} g={g} byId={byId} />
+            <GroupCard key={g.id} g={g} byId={byId} pace={paceBy.get(g.id)} />
           ))}
           {active.groups.length === 0 && (
             <p className="col-span-3 rounded-2xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">

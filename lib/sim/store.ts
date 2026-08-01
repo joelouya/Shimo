@@ -48,6 +48,7 @@ import {
 import { IS_PILOT } from "@/lib/mode";
 import { newInviteToken } from "@/lib/membership";
 import { entryForCode, newGuestCode } from "@/lib/guests";
+import { stampsFor, type GroupPace } from "@/lib/pace";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import {
   auditToRow,
@@ -277,6 +278,10 @@ export interface SimState {
   guests: Player[];
   /** one row per guest per tournament, carrying their access code */
   guestEntries: GuestEntry[];
+  /** pace stamps, keyed `${roundKey}:${groupId}` */
+  pace: Record<string, GroupPace>;
+  /** minutes behind the field before a group is flagged in Live Ops */
+  paceThresholdMin: number;
   /** saved pairings per roundKey(tournamentId, round) */
   pairings: Record<string, SavedGroup[]>;
   /** which tournament is being played today (null = none) */
@@ -417,6 +422,8 @@ export function buildInitialState(): SimState {
     roster,
     guests: [],
     guestEntries: [],
+    pace: {},
+    paceThresholdMin: 15,
     pairings: IS_PILOT
       ? {}
       : {
@@ -558,6 +565,8 @@ function normalize(saved: SimState): SimState {
   out.roster ??= base.roster;
   out.guests ??= [];
   out.guestEntries ??= [];
+  out.pace ??= {};
+  out.paceThresholdMin ??= 15;
   out.created ??= [];
   out.dismissed ??= [];
   out.deskWelcomed ??= false;
@@ -892,11 +901,68 @@ function ensureCard(draft: SimState, pid: string, key = liveKey(draft)) {
   markerCardsFor(draft, key)[pid] ??= emptyCard();
 }
 
+/**
+ * Stamp a group's pace off the back of a score that was going to be entered
+ * anyway.
+ *
+ * Called from every score-entry path rather than from one, because a corporate
+ * day mixes phones and the desk and a pace record that only sees one of them
+ * measures nothing. Passive by design: nobody presses anything, which is the
+ * only reason to trust the numbers.
+ */
+function capturePace(draft: SimState, key: string, pid: string) {
+  const group = (draft.pairings[key] ?? []).find((g) =>
+    g.playerIds.includes(pid),
+  );
+  if (!group) return;
+
+  /* Holes the group has played: any hole with a score from anyone in it.
+     Counted rather than read off a hole number, so a shotgun start needs no
+     special case. */
+  const cards = cardsFor(draft, key);
+  let after = 0;
+  for (let h = 0; h < 18; h++) {
+    if (group.playerIds.some((id) => cards[id]?.[h] != null)) after++;
+  }
+
+  const paceKey = `${key}:${group.id}`;
+  const row = (draft.pace[paceKey] ??= { key, groupId: group.id });
+  const before = row.finishedAt ? 18 : row.turnAt ? 9 : row.startedAt ? 1 : 0;
+  const marks = stampsFor(before, after);
+  const now = new Date().toISOString();
+  if (marks.start && !row.startedAt) row.startedAt = now;
+  if (marks.turn && !row.turnAt) row.turnAt = now;
+  if (marks.finish && !row.finishedAt) row.finishedAt = now;
+}
+
+/** Holes played per group, for the pace readings. */
+export function groupHolesPlayed(
+  s: SimState,
+  key: string,
+): Record<string, number> {
+  const cards = roundScores(s, key);
+  const out: Record<string, number> = {};
+  for (const g of s.pairings[key] ?? []) {
+    let n = 0;
+    for (let h = 0; h < 18; h++) {
+      if (g.playerIds.some((id) => cards[id]?.[h] != null)) n++;
+    }
+    out[g.id] = n;
+  }
+  return out;
+}
+
+/** Every group's pace in one round. */
+export function pacesFor(s: SimState, key: string): GroupPace[] {
+  return Object.values(s.pace).filter((p) => p.key === key);
+}
+
 export function enterOwnScore(holeIdx: number, gross: number) {
   mutate((draft) => {
     const key = liveKey(draft);
     ensureCard(draft, DEMO_USER_ID, key);
     cardsFor(draft, key)[DEMO_USER_ID][holeIdx] = gross;
+    capturePace(draft, key, DEMO_USER_ID);
     markerCardsFor(draft, key)[DEMO_USER_ID][holeIdx] = null; // marker re-confirms
     pushEvent(draft, DEMO_USER_ID, holeIdx, gross);
     queueEcho(draft, { kind: "marker-joe", hole: holeIdx, at: Date.now() + 1700 });
@@ -967,6 +1033,7 @@ export function enterOwnScorePilot(holeIdx: number, gross: number) {
     const key = liveKey(draft);
     ensureCard(draft, me, key);
     cardsFor(draft, key)[me][holeIdx] = gross;
+    capturePace(draft, key, me);
     pushEvent(draft, me, holeIdx, gross);
     enqueueOp(draft, "score", {
       playerId: me,
@@ -1039,6 +1106,9 @@ export function setBulkScore(pid: string, holeIdx: number, gross: number | null)
     const prev = cards[pid][holeIdx];
     cards[pid][holeIdx] = gross;
     markerCardsFor(draft, key)[pid][holeIdx] = gross;
+    // the desk types whole cards, so a group can cross the turn and the last
+    // hole inside one entry; capturePace handles both stamps at once
+    capturePace(draft, key, pid);
     if (gross != null && gross !== prev) pushEvent(draft, pid, holeIdx, gross);
     if (IS_PILOT) checkIntegrity(draft, pid);
     else maybeNotifyPosition(draft);
@@ -2577,11 +2647,13 @@ function applyScoreRow(
   }
   if (source === "player") {
     cardsFor(draft, key)[pid][holeIdx] = gross;
+    capturePace(draft, key, pid);
     return;
   }
   // desk, resolved discrepancies, and anything older that predates sources
   cardsFor(draft, key)[pid][holeIdx] = gross;
   markerCardsFor(draft, key)[pid][holeIdx] = gross;
+  capturePace(draft, key, pid);
 }
 
 export function applyRemoteScore(

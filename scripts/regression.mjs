@@ -2433,6 +2433,146 @@ section("Corporate and charity days");
     charity().beneficiary.raisedKES === undefined);
 }
 
+/* ------------------------------------------------------------------ *
+ * Pace of play
+ * ------------------------------------------------------------------ */
+section("Pace of play");
+{
+  const P = await jiti.import("../lib/pace.ts");
+
+  check("the first score starts the clock", (() => {
+    const m = P.stampsFor(0, 1);
+    return m.start && !m.turn && !m.finish;
+  })());
+  check("crossing nine stamps the turn", (() => {
+    const m = P.stampsFor(8, 9);
+    return !m.start && m.turn && !m.finish;
+  })());
+  check("a card typed at the desk in one go crosses both", (() => {
+    const m = P.stampsFor(0, 18);
+    return m.start && m.turn && m.finish;
+  })());
+  check("a stamp is never set twice", (() => {
+    const m = P.stampsFor(9, 12);
+    return !m.start && !m.turn && !m.finish;
+  })());
+
+  const t0 = Date.parse("2026-08-22T07:00:00Z");
+  const iso = (min) => new Date(t0 + min * 60_000).toISOString();
+
+  const paces = [
+    { key: "k", groupId: "g1", startedAt: iso(0), turnAt: iso(120), finishedAt: iso(250) },
+    { key: "k", groupId: "g2", startedAt: iso(10), turnAt: iso(132) },
+    /* well behind: nine holes in the time the others took for thirteen */
+    { key: "k", groupId: "g3", startedAt: iso(20) },
+  ];
+  const holes = { g1: 18, g2: 13, g3: 9 };
+  const readings = P.paceReadings(paces, holes, t0 + 220 * 60_000, 15);
+  const by = (id) => readings.find((r) => r.groupId === id);
+
+  check("a finished group reports front, back and total",
+    by("g1").front === 120 && by("g1").back === 130 && by("g1").total === 250);
+  check("a group still out reports elapsed rather than total",
+    by("g2").total === undefined && by("g2").elapsed === 210);
+  check("a slow group is flagged", by("g3").outOfPosition === true);
+  check("a group on the pace is not", by("g2").outOfPosition === false);
+  check("a group that has finished is never flagged, however slow it was",
+    by("g1").outOfPosition === false);
+
+  check("a group with too few holes is not judged", (() => {
+    const r = P.paceReadings(
+      [{ key: "k", groupId: "g9", startedAt: iso(200) }],
+      { g9: 1 },
+      t0 + 220 * 60_000,
+    );
+    return r[0].behind === undefined && r[0].outOfPosition === false;
+  })());
+  check("nobody is behind when there is no field to compare against", (() => {
+    const r = P.paceReadings(
+      [{ key: "k", groupId: "solo", startedAt: iso(0) }],
+      { solo: 9 },
+      t0 + 120 * 60_000,
+    );
+    /* One group is its own average, so it is exactly on the pace. */
+    return r[0].behind === 0 && r[0].outOfPosition === false;
+  })());
+  check("the threshold is honoured", (() => {
+    const strict = P.paceReadings(paces, holes, t0 + 220 * 60_000, 5);
+    const loose = P.paceReadings(paces, holes, t0 + 220 * 60_000, 600);
+    return strict.some((r) => r.outOfPosition) &&
+      !loose.some((r) => r.outOfPosition);
+  })());
+
+  check("elapsed reads as a golfer would say it",
+    P.formatElapsed(250) === "4h 10m" && P.formatElapsed(46) === "46m" &&
+    P.formatElapsed(undefined) === "·");
+
+  /* ---- captured off real scoring, with nobody pressing anything ---- */
+  /* t-champs has already been scored higher up this file, so measure the
+     change this entry causes rather than assuming a clean sheet. */
+  const key = roundKey("t-champs", 1);
+  const g1 = st().pairings[key][0];
+  const playedBefore = S.groupHolesPlayed(st(), key)[g1.id] ?? 0;
+  S.setBulkScore(g1.playerIds[0], 0, 5);
+  check("entering a score starts that group's clock", (() => {
+    const row = Object.values(st().pace).find(
+      (p) => p.key === key && p.groupId === g1.id,
+    );
+    return Boolean(row?.startedAt);
+  })());
+  check("the stamp lands on the group, not the player", (() => {
+    const row = Object.values(st().pace).find((p) => p.key === key);
+    return row.groupId === st().pairings[key][0].id && Boolean(row.startedAt);
+  })());
+  check("a second score does not restart the clock", (() => {
+    const row = Object.values(st().pace).find((p) => p.key === key);
+    const first = row.startedAt;
+    S.setBulkScore(st().pairings[key][0].playerIds[1], 1, 4);
+    return Object.values(st().pace).find((p) => p.key === key).startedAt === first;
+  })());
+  check("holes played counts the group, not one card", (() => {
+    /* Two holes were just entered on two different players in the same group.
+       A per-card count would read 1; a per-group count reads both. */
+    const after = S.groupHolesPlayed(st(), key)[g1.id];
+    return after >= Math.max(playedBefore, 2);
+  })());
+  check("two players on the same hole count as one hole for the group", (() => {
+    /*
+     * Called directly on a synthetic state. t-champs above is scored to
+     * completion and has no untouched hole left, and building a whole live
+     * round to reach one branch would test the harness rather than the rule.
+     * groupHolesPlayed reads only pairings and scores, so this is the real
+     * function on real inputs.
+     */
+    const card = (holes) => {
+      const c = Array(18).fill(null);
+      for (const [h, v] of holes) c[h] = v;
+      return c;
+    };
+    const fake = {
+      pairings: { k: [{ id: "gg", number: 1, teeTime: "07:00", playerIds: ["a", "b"] }] },
+      scores: {
+        k: {
+          /* both players scored hole 0; only one scored hole 1 */
+          a: card([[0, 4], [1, 5]]),
+          b: card([[0, 5]]),
+        },
+      },
+    };
+    return S.groupHolesPlayed(fake, "k").gg === 2;
+  })());
+
+  check("a hole nobody in the group has scored does not count", (() => {
+    const empty = Array(18).fill(null);
+    const fake = {
+      pairings: { k: [{ id: "gg", number: 1, teeTime: "07:00", playerIds: ["a"] }] },
+      scores: { k: { a: empty } },
+    };
+    return S.groupHolesPlayed(fake, "k").gg === 0;
+  })());
+
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

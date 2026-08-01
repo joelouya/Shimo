@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import {
   COURSES,
@@ -342,4 +342,23 @@ export function useSyncStatus() {
   const pending = outbox.filter((o) => o.status === "pending").length;
   const failed = outbox.filter((o) => o.status === "failed").length;
   return { online, pending, failed, lastSyncedAt };
+}
+
+/**
+ * A clock that ticks slowly.
+ *
+ * Pace of play moves in minutes, so reading `Date.now()` during render is both
+ * impure, which the React Compiler rightly refuses, and pointlessly precise.
+ * Thirty seconds is finer than any decision a caddymaster makes with it.
+ *
+ * Lives here rather than in lib/pace.ts so that module stays free of React and
+ * can keep being imported by the headless harness.
+ */
+export function useSlowClock(everyMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(id);
+  }, [everyMs]);
+  return now;
 }
