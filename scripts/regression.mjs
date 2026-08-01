@@ -2573,6 +2573,96 @@ section("Pace of play");
 
 }
 
+/* ------------------------------------------------------------------ *
+ * Exposure
+ *
+ * The rule this whole module exists to enforce: a figure is either observed
+ * or it is reported as not measured. Nothing is estimated. A recap pack is a
+ * document a club hands a paying backer, and the product's first claim is
+ * that its numbers hold up.
+ * ------------------------------------------------------------------ */
+section("Exposure");
+{
+  const E = await jiti.import("../lib/exposure.ts");
+
+  const ev = (surface, device, seconds) => ({
+    tournamentId: "t-x", surface, device, at: Date.now(),
+    ...(seconds !== undefined ? { seconds } : {}),
+  });
+
+  const events = [
+    ev("board", "d1"), ev("board", "d1"), ev("board", "d2"), ev("board", "d3"),
+    ev("tournament", "d1"),
+    ev("tv", "tvbox", 60), ev("tv", "tvbox", 60), ev("tv", "tvbox", 60),
+    /* another tournament entirely, which must not leak in */
+    { tournamentId: "t-other", surface: "board", device: "d9", at: Date.now() },
+  ];
+  const sum = E.summarise(events, "t-x");
+  const of = (s) => sum.find((x) => x.surface === s);
+
+  check("one person refreshing is not forty people",
+    of("board").unique === 3 && of("board").total === 4);
+  check("another tournament's views do not leak in",
+    of("board").unique === 3);
+  check("a surface nobody opened reports zero, not nothing",
+    of("tournament").unique === 1 && sum.length === 3);
+  check("the television reports time, not opens",
+    of("tv").seconds === 180 && of("tv").unique === 1);
+  check("only the television carries seconds",
+    of("board").seconds === undefined);
+
+  check("an unmeasured figure is a value, not a gap", (() => {
+    const m = E.notMeasured(E.UNMEASURED.social);
+    return m.measured === false && /social accounts/i.test(m.why);
+  })());
+  check("a measured figure carries its value",
+    E.measured(42).measured === true && E.measured(42).value === 42);
+  check("every unmeasured reason explains itself",
+    Object.values(E.UNMEASURED).every((w) => w.length > 40));
+
+  /* ---- contest engagement is counted, never assumed ---- */
+  const card = (holes) => {
+    const c = Array(18).fill(null);
+    for (const [h, v] of holes) c[h] = v;
+    return c;
+  };
+  const cards = {
+    a: card([[6, 3]]),          // played the 7th
+    b: card([[6, 4]]),          // played the 7th
+    c: card([[0, 5]]),          // did not reach it
+    d: card([]),                // no card at all
+  };
+  check("only players who actually played the hole are counted",
+    E.contestEngagement(cards, 7) === 2);
+  check("a field size is never used as a stand-in",
+    E.contestEngagement(cards, 7) !== Object.keys(cards).length);
+  check("a hole outside the round counts nobody",
+    E.contestEngagement(cards, 19) === 0 && E.contestEngagement(cards, 0) === 0);
+
+  check("a duration reads the way a person would say it",
+    E.formatDuration(13320) === "3h 42m" && E.formatDuration(600) === "10 min");
+
+  /* ---- captured off the real store ---- */
+  const before = st().exposure.length;
+  S.recordExposure("t-corp-day", "board");
+  S.recordExposure("t-corp-day", "tv", 60);
+  check("recording appends", st().exposure.length === before + 2);
+  check("a row carries no personal data", (() => {
+    const row = st().exposure[st().exposure.length - 1];
+    return Object.keys(row).sort().join(",") ===
+      "at,device,seconds,surface,tournamentId";
+  })());
+  check("an empty tournament id records nothing", (() => {
+    const n = st().exposure.length;
+    S.recordExposure("", "board");
+    return st().exposure.length === n;
+  })());
+  check("the store rolls up the same way the pure function does", (() => {
+    const rolled = E.summarise(S.exposureFor(st(), "t-corp-day"), "t-corp-day");
+    return rolled.find((x) => x.surface === "tv").seconds === 60;
+  })());
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

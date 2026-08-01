@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use , useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, Check, Flag, Lock, MapPin, Trophy } from "lucide-react";
@@ -21,6 +21,7 @@ import { isMultiRound, roundsOf } from "@/lib/rounds";
 import { availableTiers, isTiered, tierFor, tierPhrase } from "@/lib/pricing";
 import {
   allTournaments,
+  recordExposure,
   registerForTournament,
   useSim,
 } from "@/lib/sim/store";
@@ -89,6 +90,11 @@ export default function TournamentDetailPage({
   const created = useSim((s) => s.created);
   const registrations = useSim((s) => s.registrations);
   const t = allTournaments(created).find((x) => x.id === id);
+
+  /* The tournament's own page, counted the same way as the board. */
+  useEffect(() => {
+    if (t) recordExposure(t.id, "tournament");
+  }, [t]);
 
   if (!t) {
     return (

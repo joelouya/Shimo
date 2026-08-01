@@ -10,6 +10,7 @@ import { clubById, courseById } from "@/lib/data";
 import type { StandingRow, ViewMode } from "@/lib/scoring";
 import { usePublicBoard, publicStandings } from "@/lib/sync/public-board";
 import { cn, toPar } from "@/lib/utils";
+import { recordExposure } from "@/lib/sim/store";
 
 function ago(ts: number | null, now: number) {
   if (!ts) return "just now";
@@ -41,6 +42,16 @@ export default function PublicLeaderboard({
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  /*
+   * One row per open, so a sponsor can be told how many devices actually
+   * looked at the board their name is on. Recorded once per mount rather than
+   * on every render or every score: the claim is "this many people opened it",
+   * and anything finer would be a number that flatters.
+   */
+  useEffect(() => {
+    recordExposure(tournamentId, "board");
+  }, [tournamentId]);
 
   // default the view to the format's natural scoring, until a viewer picks one
   const naturalMode: ViewMode =

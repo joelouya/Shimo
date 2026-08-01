@@ -49,6 +49,8 @@ import { IS_PILOT } from "@/lib/mode";
 import { newInviteToken } from "@/lib/membership";
 import { entryForCode, newGuestCode } from "@/lib/guests";
 import { stampsFor, type GroupPace } from "@/lib/pace";
+import type { ExposureEvent, Surface } from "@/lib/exposure";
+import { CLIENT_ID } from "@/lib/sync/client";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import {
   auditToRow,
@@ -278,6 +280,11 @@ export interface SimState {
   guests: Player[];
   /** one row per guest per tournament, carrying their access code */
   guestEntries: GuestEntry[];
+  /**
+   * What Shimo observed, so a recap pack can only ever report what happened.
+   * Append-only and carrying no personal data. See lib/exposure.ts.
+   */
+  exposure: ExposureEvent[];
   /** pace stamps, keyed `${roundKey}:${groupId}` */
   pace: Record<string, GroupPace>;
   /** minutes behind the field before a group is flagged in Live Ops */
@@ -422,6 +429,7 @@ export function buildInitialState(): SimState {
     roster,
     guests: [],
     guestEntries: [],
+    exposure: [],
     pace: {},
     paceThresholdMin: 15,
     pairings: IS_PILOT
@@ -565,6 +573,7 @@ function normalize(saved: SimState): SimState {
   out.roster ??= base.roster;
   out.guests ??= [];
   out.guestEntries ??= [];
+  out.exposure ??= [];
   out.pace ??= {};
   out.paceThresholdMin ??= 15;
   out.created ??= [];
@@ -1570,6 +1579,55 @@ export function guestForCode(
   const player = s.guests.find((g) => g.id === entry.guestId);
   if (!player) return null;
   return { player, tournamentId: entry.tournamentId };
+}
+
+/* ---- exposure ---------------------------------------------------- */
+
+/**
+ * Record that a surface was seen.
+ *
+ * Deliberately blunt: one row per open, plus periodic rows from the television
+ * carrying the seconds they account for. No sessions, no funnels, no attempt
+ * to be clever, because the only claims this needs to support are "this many
+ * devices opened the board" and "it was on a screen this long", and anything
+ * more elaborate would be a number nobody could defend to a sponsor.
+ *
+ * A board view during a tournament is not a personal event: `device` is the
+ * per-device id the sync layer already generates, and it never leaves the
+ * club's own data.
+ */
+export function recordExposure(
+  tournamentId: string,
+  surface: Surface,
+  seconds?: number,
+) {
+  if (!tournamentId) return;
+  mutate((draft) => {
+    draft.exposure.push({
+      tournamentId,
+      surface,
+      device: CLIENT_ID,
+      at: Date.now(),
+      ...(seconds !== undefined ? { seconds } : {}),
+    });
+    enqueueEntity(
+      draft,
+      "exposure_events",
+      {
+        tournament_id: tournamentId,
+        surface,
+        device: CLIENT_ID,
+        at: new Date().toISOString(),
+        seconds: seconds ?? null,
+      },
+      { conflict: "" },
+    );
+  });
+}
+
+/** Everything observed for one tournament. */
+export function exposureFor(s: SimState, tournamentId: string) {
+  return s.exposure.filter((e) => e.tournamentId === tournamentId);
 }
 
 /** Pairings are per round: leaders get re-paired for the next one. */

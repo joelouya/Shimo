@@ -171,3 +171,50 @@ alter table tournaments
      figure computed from entries alone would be wrong in a document the
      beneficiary reads. */
   add column if not exists beneficiary jsonb;
+
+/* ------------------------------------------------------------------ *
+ * Exposure
+ *
+ * What Shimo actually observed, so a sponsor recap can never state a figure
+ * nobody measured. The product's first claim is that its numbers hold up, and
+ * an invented impression count in a document a club hands a paying backer
+ * would forfeit that claim in the most expensive place available.
+ *
+ * Deliberately thin. A row is a surface, a tournament, a coarse device id and
+ * a moment. No names, no addresses, no cross-site anything, and no path back
+ * to a person. There is no "reach" column because reach is a word for a
+ * number nobody counted.
+ * ------------------------------------------------------------------ */
+create table if not exists exposure_events (
+  id            bigint generated always as identity primary key,
+  tournament_id text not null,
+  /* 'board' | 'tournament' | 'tv' */
+  surface       text not null,
+  /* per-device, stable for one device, useless anywhere else. Enough to tell
+     forty people looking from one person refreshing forty times, which is the
+     only thing it is for. */
+  device        text not null,
+  at            timestamptz not null default now(),
+  /* television only: the seconds this heartbeat accounts for, so an afternoon
+     that ends when someone pulls the plug still counts what it ran */
+  seconds       integer
+);
+
+create index if not exists exposure_events_tournament_idx
+  on exposure_events (tournament_id, surface);
+
+alter table exposure_events enable row level security;
+
+/* Anyone may write one: the board and the television both record without a
+   session. Reads are open because the club's own admin reads them back, and a
+   row reveals nothing about anybody. */
+drop policy if exists "exposure write" on exposure_events;
+create policy "exposure write" on exposure_events
+  for insert to anon, authenticated with check (true);
+
+drop policy if exists "exposure read" on exposure_events;
+create policy "exposure read" on exposure_events
+  for select to anon, authenticated using (true);
+
+/* No update and no delete. A recap is only worth anything if the record
+   behind it cannot be tidied up afterwards. */

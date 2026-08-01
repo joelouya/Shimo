@@ -23,6 +23,7 @@ import { accentOnDark, DEFAULT_ACCENT, normalizeHex } from "@/lib/contrast";
 import { roundsOf } from "@/lib/rounds";
 import { cumulativeStandings } from "@/lib/scoring";
 import { isStale, useTvFeed } from "@/lib/tv/feed";
+import { recordExposure } from "@/lib/sim/store";
 import { initialState, modeOf, reduce } from "@/lib/tv/producer";
 import type { ProducerEvent } from "@/lib/tv/producer";
 import type { ProducerState, TvSnapshot } from "@/lib/tv/types";
@@ -74,6 +75,24 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   useEffect(() => {
     if (soundingId) playChime();
   }, [soundingId]);
+
+  /*
+   * How long the screen actually ran, reported as it goes rather than at the
+   * end. A clubhouse television is switched off by someone pulling a plug or
+   * closing a laptop, so an afternoon that never gets a clean shutdown still
+   * has to count the four hours it was up. Every beat accounts for the
+   * interval just elapsed, so the total can only ever undercount by one beat.
+   *
+   * Sixty seconds, because the claim is "it was on this screen for three and
+   * a half hours" and a finer figure would be precision nobody asked for on a
+   * connection that drops.
+   */
+  useEffect(() => {
+    if (!id) return;
+    const beat = 60;
+    const t = setInterval(() => recordExposure(id, "tv", beat), beat * 1000);
+    return () => clearInterval(t);
+  }, [id]);
 
   // only for the staleness note; nothing else on this screen watches a clock
   const [now, setNow] = useState(() => Date.now());
