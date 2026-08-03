@@ -244,6 +244,38 @@ export function recapSpec(args: {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Publishing
+ * ------------------------------------------------------------------ */
+
+/**
+ * The token in a sponsor's link.
+ *
+ * Unguessable, because the first version of this addressed packs as
+ * /recap/<tournament>/<sponsor> and two sponsors at the same event could edit
+ * one into the other. A corporate day routinely has two banks on it, and a
+ * participant list is not something one of them should be able to read by
+ * changing a word in a URL.
+ *
+ * Longer than a guest code and shorter than a member invitation, which is
+ * about right for what it opens: a document, not a person's membership, and
+ * one that stays live for as long as the sponsor cares to look at it.
+ */
+const ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+
+export function newRecapToken(): string {
+  const bytes = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(bytes);
+  let out = "";
+  for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
+  return out;
+}
+
+/** Where a sponsor's copy lives. Relative, so it works on any host. */
+export function recapPath(token: string) {
+  return `/recap/${token}`;
+}
+
 /** The filename a club will look for in their downloads folder six weeks later. */
 export function recapFileName(spec: RecapSpec) {
   const slug = (s: string) =>

@@ -283,6 +283,11 @@ export interface Sponsor {
   contributionKES?: number;
   /** the contest this sponsor backs, when they bought one */
   contestId?: string;
+  /**
+   * The token in this sponsor's recap link, once the club has published one.
+   * Kept so re-publishing keeps the address the club already emailed.
+   */
+  recapToken?: string;
 }
 
 export type EventKind = "standard" | "corporate" | "charity";

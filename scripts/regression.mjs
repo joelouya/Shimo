@@ -2790,6 +2790,39 @@ section("Sponsor recap");
       "zawadi-corporate-golf-day-zawadi-bank-recap.pdf");
 }
 
+/* ------------------------------------------------------------------ *
+ * Sponsor links
+ *
+ * The token is the only thing keeping two sponsors at the same event out of
+ * each other's packs, and a participant list is inside one.
+ * ------------------------------------------------------------------ */
+section("Sponsor links");
+{
+  const R = await jiti.import("../lib/recap/spec.ts");
+
+  check("a token is long and unguessable", (() => {
+    const t = R.newRecapToken();
+    return t.length === 12 && /^[a-z2-9]+$/.test(t);
+  })());
+  check("tokens avoid look-alike characters", (() => {
+    let all = "";
+    for (let i = 0; i < 300; i++) all += R.newRecapToken();
+    return !/[ilo01]/.test(all);
+  })());
+  check("two tokens never collide", (() => {
+    const seen = new Set();
+    for (let i = 0; i < 3000; i++) seen.add(R.newRecapToken());
+    return seen.size === 3000;
+  })());
+  check("a link carries nothing but the token", (() => {
+    const t = R.newRecapToken();
+    const path = R.recapPath(t);
+    /* The old scheme was /recap/<tournament>/<sponsor>, which one sponsor
+       could edit into another's. Nothing identifying may survive here. */
+    return path === `/recap/${t}` && path.split("/").length === 3;
+  })());
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
