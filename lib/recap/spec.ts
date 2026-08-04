@@ -98,6 +98,12 @@ export interface RecapSpec {
    */
   participants: { name: string; company?: string }[];
   participantsWithheld: number;
+  /**
+   * The club's photographs of the day, already inlined by the renderer. Empty
+   * is the normal state for a while: a club uploads these after the event, and
+   * the pack has to be worth sending before they do.
+   */
+  photos: { url: string; caption?: string }[];
   /** the live page this pack points at */
   url?: string;
   generatedAt: string;
@@ -239,6 +245,12 @@ export function recapSpec(args: {
       company: g.guest?.company,
     })),
     participantsWithheld: withheld,
+    /* Four is what a page holds at a size worth looking at. A club that
+       uploads forty is choosing an album, not a recap page. */
+    photos: (t.photos ?? []).slice(0, 4).map((ph) => ({
+      url: ph.url,
+      caption: ph.caption,
+    })),
     url: args.url,
     generatedAt: (args.now ?? new Date()).toISOString(),
   };

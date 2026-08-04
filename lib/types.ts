@@ -292,6 +292,13 @@ export interface Sponsor {
 
 export type EventKind = "standard" | "corporate" | "charity";
 
+export interface EventPhoto {
+  id: string;
+  url: string;
+  /** the club's own words, printed under the photograph */
+  caption?: string;
+}
+
 export interface EventBrand {
   name: string;
   logoUrl?: string;
@@ -428,6 +435,12 @@ export interface Tournament {
   presentedBy?: EventBrand;
   /** charity days: who the day is actually for */
   beneficiary?: Beneficiary;
+  /**
+   * Photographs from the day, uploaded by the club afterwards and folded into
+   * every sponsor's recap. Ordered as the club arranged them, because the
+   * first one is the one that leads the page.
+   */
+  photos?: EventPhoto[];
   /** who is backing the event; absent means none */
   sponsors?: Sponsor[];
   /** nearest-the-pin, longest drive, hole-in-one. Absent means none. */

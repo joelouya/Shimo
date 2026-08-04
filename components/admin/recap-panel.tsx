@@ -20,10 +20,12 @@ import { useMemo, useRef, useState } from "react";
 import {
   Check,
   Download,
+  ImagePlus,
   Link as LinkIcon,
   Loader2,
   Mail,
   TriangleAlert,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -31,9 +33,12 @@ import { Button } from "@/components/ui/button";
 import { COURSES, clubById } from "@/lib/data";
 import {
   exposureFor,
+  setTournamentPhotos,
   setTournamentSponsors,
   useSim,
 } from "@/lib/sim/store";
+import { REMOTE_CONFIGURED } from "@/lib/sync/client";
+import { uploadEventPhoto } from "@/lib/sync/storage";
 import { dateSpan } from "@/lib/poster/spec";
 import {
   newRecapToken,
@@ -47,7 +52,7 @@ import { inBillingOrder, TIER_LABEL } from "@/lib/sponsors";
 import { sponsorListable } from "@/lib/guests";
 import { roundKey, roundsOf, tournamentDates } from "@/lib/rounds";
 import { normaliseTier } from "@/lib/sponsors";
-import type { Sponsor, Tournament } from "@/lib/types";
+import type { EventPhoto, Sponsor, Tournament } from "@/lib/types";
 
 type State = "idle" | "working" | "done" | "failed";
 type LinkState =
@@ -55,6 +60,134 @@ type LinkState =
   | { kind: "working" }
   | { kind: "ready"; url: string }
   | { kind: "failed"; why: string };
+
+/**
+ * The club's photographs of the day.
+ *
+ * A club takes these anyway and currently emails them to sponsors separately
+ * from the recap, which is precisely the manual step the pack exists to
+ * remove. Four make a page; beyond that a club is choosing an album rather
+ * than a recap, so the rest are kept and the page uses the first four.
+ *
+ * Uploading is optional and the pack is worth sending without it: photographs
+ * arrive days later, and a recap that waits for them arrives after the
+ * sponsor has stopped caring.
+ */
+function PhotoStrip({ tournament }: { tournament: Tournament }) {
+  const photos = tournament.photos ?? [];
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const add = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setProblem(null);
+    if (!REMOTE_CONFIGURED) {
+      setProblem(
+        "Photographs need the club's database configured, because they have to be reachable from the sponsor's own browser.",
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const added: EventPhoto[] = [];
+      for (const file of Array.from(files)) {
+        if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) continue;
+        const { url } = await uploadEventPhoto(
+          tournament.clubId,
+          tournament.id,
+          file,
+        );
+        added.push({ id: `ph-${Date.now().toString(36)}-${added.length}`, url });
+      }
+      if (!added.length) {
+        setProblem("Those files were not photographs Shimo can use. PNG or JPEG.");
+      } else {
+        setTournamentPhotos(tournament.id, [...photos, ...added]);
+      }
+    } catch (e) {
+      console.error("photo upload failed", e);
+      setProblem("The upload did not finish. Check the connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-6 rounded-2xl bg-card p-5 shadow-card">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="smallcaps text-muted-foreground">Photographs</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+            {photos.length
+              ? `${photos.length} uploaded. The first four appear in every sponsor's pack.`
+              : "Optional. Add them and every pack gains a page of the day."}
+          </p>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          multiple
+          className="hidden"
+          onChange={(e) => add(e.target.files)}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          {busy ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <ImagePlus className="size-3" />
+          )}
+          {busy ? "Uploading" : "Add photographs"}
+        </Button>
+      </div>
+
+      {problem && (
+        <p className="mt-3 text-[13px] leading-relaxed text-amber-flag">
+          {problem}
+        </p>
+      )}
+
+      {photos.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-3">
+          {photos.map((ph, i) => (
+            <div key={ph.id} className="relative">
+              {/* the club's own photograph; nothing for the optimiser to do */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={ph.url}
+                alt=""
+                className="h-20 w-28 rounded-lg object-cover"
+              />
+              {i < 4 && (
+                <span className="absolute left-1 top-1 rounded bg-primary/85 px-1.5 py-px text-[10px] text-primary-foreground">
+                  In the pack
+                </span>
+              )}
+              <button
+                aria-label="Remove this photograph"
+                onClick={() =>
+                  setTournamentPhotos(
+                    tournament.id,
+                    photos.filter((x) => x.id !== ph.id),
+                  )
+                }
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-card p-1 text-muted-foreground shadow-card transition-colors hover:text-destructive cursor-pointer"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function RecapPanel({
   tournament,
@@ -369,6 +502,8 @@ export function RecapPanel({
           );
         })}
       </div>
+
+      <PhotoStrip tournament={tournament} />
 
       <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
         {consented.length} of {inThisEvent.length}{" "}

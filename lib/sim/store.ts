@@ -74,6 +74,7 @@ import type { HydrationSnapshot } from "@/lib/sync/remote";
 import type {
   ClubIdentity,
   Contest,
+  EventPhoto,
   GuestEntry,
   HoleScores,
   Player,
@@ -1656,6 +1657,16 @@ export function recordExposure(
 /** Everything observed for one tournament. */
 export function exposureFor(s: SimState, tournamentId: string) {
   return s.exposure.filter((e) => e.tournamentId === tournamentId);
+}
+
+/** The club's photographs of the day, in the order they arranged them. */
+export function setTournamentPhotos(tournamentId: string, photos: EventPhoto[]) {
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === tournamentId);
+    if (!t) return;
+    t.photos = photos;
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
 }
 
 /** Pairings are per round: leaders get re-paired for the next one. */

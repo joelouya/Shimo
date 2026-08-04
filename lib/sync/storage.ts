@@ -125,6 +125,35 @@ export async function uploadSponsorLogo(
   return { url: data.publicUrl, width: TARGET_PX, height: TARGET_PX };
 }
 
+/**
+ * A photograph from the day, for a sponsor's recap.
+ *
+ * Kept in the public bucket, unlike card evidence, because these are the shots
+ * a club already puts on their own feed: a prizegiving, a tee shot, a corporate
+ * group behind a banner. The distinction that matters is that a scorecard
+ * photograph carries handwriting and signatures and this does not.
+ *
+ * Not upserted. A club uploading eight photographs is adding eight, not
+ * replacing one, so the path carries its own key.
+ */
+export async function uploadEventPhoto(
+  clubId: string,
+  tournamentId: string,
+  file: File,
+): Promise<{ url: string }> {
+  const sb = await supabase();
+  const blob = await shrinkOnly(file);
+  const key = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const path = `${clubId}/events/${tournamentId}/${key}.png`;
+  const { error } = await sb.storage.from("club-assets").upload(path, blob, {
+    contentType: "image/png",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = sb.storage.from("club-assets").getPublicUrl(path);
+  return { url: data.publicUrl };
+}
+
 /** Upload and return the public URL. Overwrites the club's previous logo. */
 export async function uploadClubLogo(
   clubId: string,

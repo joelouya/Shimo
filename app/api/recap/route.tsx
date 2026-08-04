@@ -68,6 +68,49 @@ const fonts = [
   },
 ];
 
+/**
+ * Pull every remote image into the document before laying it out.
+ *
+ * Satori lays out lazily, so an image that fails to fetch mid-layout throws
+ * after the response headers have gone out and the caller gets a truncated
+ * PDF rather than an error. A club's photograph from a phone is exactly the
+ * kind of asset that is slow or missing, so it is resolved up front and
+ * dropped if it will not come.
+ */
+const MAX_IMAGE_BYTES = 4_000_000;
+
+async function inline(url: string | undefined): Promise<string | undefined> {
+  if (!url) return undefined;
+  if (url.startsWith("data:")) return url;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return undefined;
+    const type = res.headers.get("content-type") ?? "image/png";
+    if (!/^image\/(png|jpeg|jpg|webp)/.test(type)) return undefined;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength > MAX_IMAGE_BYTES) return undefined;
+    return `data:${type};base64,${buf.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+async function withInlinedImages(spec: RecapSpec): Promise<RecapSpec> {
+  const [logo, ...photos] = await Promise.all([
+    inline(spec.sponsor.logo),
+    ...(spec.photos ?? []).map((p) => inline(p.url)),
+  ]);
+  return {
+    ...spec,
+    sponsor: { ...spec.sponsor, logo },
+    /* A photograph that would not load is left out rather than rendered as a
+       hole in the grid. */
+    photos: (spec.photos ?? [])
+      .map((p, i) => ({ ...p, url: photos[i] }))
+      .filter((p): p is { url: string; caption?: string } => Boolean(p.url)),
+  };
+}
+
 /** The sponsor's own colour where it is theirs to have, ours where it is not. */
 function tone(accent?: string) {
   const hex = (accent && normalizeHex(accent)) || CLAY;
@@ -574,6 +617,83 @@ function ResultPage({ spec }: { spec: RecapSpec }) {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * Page four: the day, as photographed
+ *
+ * Only exists when the club has uploaded something. A gallery page with a
+ * placeholder on it is worse than no gallery page: it tells a sponsor the club
+ * did not finish, on a document whose whole job is to look finished.
+ * ------------------------------------------------------------------ */
+
+function PhotosPage({ spec }: { spec: RecapSpec }) {
+  const t = tone(spec.sponsor.accent);
+  const photos = spec.photos.slice(0, 4);
+  /* One photograph gets the page. Two to four share a grid, because a
+     half-empty grid reads as a photograph that failed to load. */
+  const solo = photos.length === 1;
+
+  return (
+    <Page spec={spec} foot={spec.event.club.name}>
+      <Label color={t.onLight}>The day</Label>
+      <div
+        style={{
+          fontFamily: "Fraunces",
+          fontWeight: 600,
+          fontSize: 56,
+          marginTop: 16,
+          color: NAVY,
+        }}
+      >
+        {spec.event.title}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 20,
+          marginTop: 34,
+        }}
+      >
+        {photos.map((p, i) => (
+          <div
+            key={p.url + i}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              width: solo ? 1072 : 526,
+            }}
+          >
+            <img
+              src={p.url}
+              width={solo ? 1072 : 526}
+              /* Sized to fill the page rather than to be safe. At 380 a
+                 four-up grid left six hundred pixels of empty A4 under it,
+                 which reads as a page that ran out of photographs. */
+              height={solo ? 960 : 520}
+              style={{ objectFit: "cover", borderRadius: 18 }}
+            />
+            {p.caption ? (
+              <div
+                style={{
+                  display: "flex",
+                  fontSize: 20,
+                  marginTop: 12,
+                  color: STONE,
+                }}
+              >
+                {p.caption}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", flex: 1 }} />
+    </Page>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 
 async function png(node: React.ReactElement) {
@@ -593,6 +713,8 @@ async function render(spec: RecapSpec) {
     await png(<CoverPage spec={spec} />),
     await png(<FiguresPage spec={spec} />),
     await png(<ResultPage spec={spec} />),
+    /* Only when there is something to show. */
+    ...(spec.photos?.length ? [await png(<PhotosPage spec={spec} />)] : []),
   ];
 
   const pdf = await PDFDocument.create();
@@ -609,8 +731,9 @@ async function render(spec: RecapSpec) {
 
 export async function POST(req: Request) {
   try {
-    const spec = (await req.json()) as RecapSpec;
-    if (!spec?.sponsor?.name) return new Response("Bad spec", { status: 400 });
+    const raw = (await req.json()) as RecapSpec;
+    if (!raw?.sponsor?.name) return new Response("Bad spec", { status: 400 });
+    const spec = await withInlinedImages({ ...raw, photos: raw.photos ?? [] });
 
     const url = new URL(req.url);
     /* `?page=n` returns one page as a PNG, for the social assets the pack
@@ -619,7 +742,15 @@ export async function POST(req: Request) {
     if (one) {
       const idx = Number(one);
       const node =
-        idx === 2 ? <FiguresPage spec={spec} /> : idx === 3 ? <ResultPage spec={spec} /> : <CoverPage spec={spec} />;
+        idx === 2 ? (
+          <FiguresPage spec={spec} />
+        ) : idx === 3 ? (
+          <ResultPage spec={spec} />
+        ) : idx === 4 && spec.photos?.length ? (
+          <PhotosPage spec={spec} />
+        ) : (
+          <CoverPage spec={spec} />
+        );
       const bytes = await png(node);
       return new Response(bytes, {
         headers: {
