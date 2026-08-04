@@ -22,6 +22,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check, Copy } from "lucide-react";
 
 import { Logo } from "@/components/logo";
+import { QrCode } from "@/components/qr";
 import { SimGate } from "@/components/sim-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +69,7 @@ function Field({
 function Done({ code, name }: { code: string; name: string }) {
   const still = useReducedMotion();
   const [copied, setCopied] = useState(false);
+
   return (
     <Frame>
       <div className="flex flex-1 flex-col justify-center">
@@ -83,8 +85,8 @@ function Done({ code, name }: { code: string; name: string }) {
             You&apos;re on the sheet, {name.split(" ")[0]}
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
-            Keep this code. It is how you open your own scorecard on the day,
-            and it works on any phone without signing in to anything.
+            Scan this on the day and your scorecard opens. No account, no
+            password, and it works on any phone.
           </p>
         </motion.div>
 
@@ -94,7 +96,22 @@ function Done({ code, name }: { code: string; name: string }) {
           transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
           className="mt-7 rounded-2xl bg-card p-6 text-center shadow-card"
         >
-          <p className="smallcaps text-muted-foreground">Your code</p>
+          {/*
+            The QR is the primary way in and the code is the fallback, not the
+            other way round. On the day this is scanned off a phone screen by
+            somebody holding a driver; the six characters exist for when the
+            camera will not focus or the screen has died.
+          */}
+          <div className="flex justify-center">
+            <QrCode
+              value={`/enter?code=${encodeURIComponent(code)}`}
+              size={190}
+              label={`Scan to open the scorecard for code ${code}`}
+            />
+          </div>
+          <p className="smallcaps mt-5 text-muted-foreground">
+            Or type this code
+          </p>
           <p className="mt-2 font-serif text-[34px] leading-none tracking-[0.14em] text-foreground tnum">
             {code}
           </p>

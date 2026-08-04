@@ -45,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { QrCode } from "@/components/qr";
 import { IS_PILOT } from "@/lib/mode";
 import { invitePath } from "@/lib/membership";
 import {
@@ -121,17 +122,16 @@ function MemberMenu({
   onLink,
 }: {
   m: Player;
-  onCopied: (name: string) => void;
+  onCopied: (v: { name: string; url: string }) => void;
   onLink: (m: Player) => void;
 }) {
   const state = accessOf(m);
   const copyLink = async () => {
     const token = ensureInviteToken(m.id);
     if (!token) return;
-    await navigator.clipboard.writeText(
-      `${window.location.origin}${invitePath(token)}`,
-    );
-    onCopied(m.name);
+    const url = `${window.location.origin}${invitePath(token)}`;
+    await navigator.clipboard.writeText(url);
+    onCopied({ name: m.name, url });
   };
 
   return (
@@ -191,7 +191,9 @@ export default function MembersPage() {
   const [editing, setEditing] = useState<Player | null>(null);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<MemberForm>(EMPTY_FORM);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [copied, setCopied] = useState<{ name: string; url: string } | null>(
+    null,
+  );
   const [toLink, setToLink] = useState<Player | null>(null);
   const [linkEmail, setLinkEmail] = useState("");
   const [invited, setInvited] = useState<number | null>(null);
@@ -510,18 +512,33 @@ export default function MembersPage() {
         </DialogContent>
       </Dialog>
 
+      {/*
+        Copied, and also shown. A member standing at the desk is faster served
+        by pointing a camera at this screen than by waiting for an email, and
+        the club is going to do that whether the product supports it or not.
+      */}
       <Dialog open={!!copied} onOpenChange={() => setCopied(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Invitation link copied</DialogTitle>
+            <DialogTitle>Invitation for {copied?.name}</DialogTitle>
             <DialogDescription className="leading-relaxed">
-              Send it to {copied} and no one else. Anyone who opens it claims
-              that membership, so treat it the way you would treat a key.
+              The link is on your clipboard. They can also scan this now if
+              they are standing in front of you. Either way it claims that
+              membership, so treat it the way you would treat a key.
             </DialogDescription>
           </DialogHeader>
+          {copied && (
+            <div className="flex justify-center py-2">
+              <QrCode
+                value={copied.url}
+                size={200}
+                label={`Scan to claim the membership of ${copied.name}`}
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button variant="clay" onClick={() => setCopied(null)}>
-              Understood
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>

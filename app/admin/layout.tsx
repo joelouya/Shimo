@@ -36,12 +36,18 @@ function Sidebar() {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-primary text-primary-foreground">
-      <div className="px-6 pt-7 pb-6">
+      {/* The wordmark goes home, because every other product a caddymaster
+          uses does and they will click it whether it works or not. */}
+      <Link
+        href="/admin"
+        aria-label="Shimo, back to the dashboard"
+        className="block px-6 pt-7 pb-6 transition-opacity duration-[var(--dur-hover)] hover:opacity-80"
+      >
         <Logo tone="cream" className="text-[22px]" />
         <p className="smallcaps mt-2 text-primary-foreground/60">
           Club administration
         </p>
-      </div>
+      </Link>
       <nav className="flex flex-1 flex-col gap-0.5 px-3">
         {NAV.map((item) => {
           const active =

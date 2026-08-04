@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { QrCode } from "@/components/qr";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -381,6 +382,17 @@ export default function AdminTournamentsPage() {
               the club roster. Send it to the field, not to the public.
             </DialogDescription>
           </DialogHeader>
+          {/* Printed at A4 and propped on the registration desk is how a
+              corporate organiser will actually use this. */}
+          {registrationFor && (
+            <div className="flex justify-center py-2">
+              <QrCode
+                value={`${window.location.origin}/register/${registrationFor.id}`}
+                size={200}
+                label={`Scan to register for ${registrationFor.name}`}
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button variant="clay" onClick={() => setRegistrationFor(null)}>
               Understood
