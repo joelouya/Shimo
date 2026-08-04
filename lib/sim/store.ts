@@ -905,6 +905,25 @@ function syncAuditTail(draft: SimState, count: number) {
 }
 
 /** Make sure both card views exist for a player in a round. */
+/**
+ * Is this a score a person could have made?
+ *
+ * `null` is legitimate and means the hole is blank. Everything else has to be
+ * a whole positive number small enough to be golf. The stress run found NaN
+ * being written straight onto a card by the desk path, which is worse than it
+ * sounds: NaN propagates through every sum it touches, so one fumbled entry
+ * turns a total, a division and a leaderboard position into NaN without
+ * anything looking obviously wrong at the point it happened.
+ *
+ * The ceiling is deliberately generous. A 19 on a par 3 is a bad day rather
+ * than a typo, and refusing a real score because it is embarrassing would be
+ * the product deciding what happened.
+ */
+function validGross(gross: number | null): boolean {
+  if (gross === null) return true;
+  return Number.isInteger(gross) && gross > 0 && gross <= 30;
+}
+
 function ensureCard(draft: SimState, pid: string, key = liveKey(draft)) {
   cardsFor(draft, key)[pid] ??= emptyCard();
   markerCardsFor(draft, key)[pid] ??= emptyCard();
@@ -1111,6 +1130,9 @@ function checkIntegrity(draft: SimState, pid: string) {
 
 /** Desk entry of one cell from a paper card. Both card views stay agreed. */
 export function setBulkScore(pid: string, holeIdx: number, gross: number | null) {
+  if (!validGross(gross) || !Number.isInteger(holeIdx) || holeIdx < 0 || holeIdx > 17) {
+    return;
+  }
   mutate((draft) => {
     const key = liveKey(draft);
     ensureCard(draft, pid, key);
@@ -1217,7 +1239,7 @@ export function unpublishCard(pid: string, opts: { by: string; reason: string })
       playerId: pid,
       actor: opts.by,
       ts: Date.now(),
-      detail: `Card withdrawn by ${opts.by}: ${opts.reason}`,
+      detail: `Card withdrawn by ${playerName(draft, opts.by)}: ${opts.reason}`,
     });
   });
 }
@@ -1867,6 +1889,14 @@ export function markerAttest(
   markerId: string,
   artifact: SignatureArtifact,
 ) {
+  /*
+   * A marker is by definition somebody else. Rule 3.3b asks for a second
+   * person who kept the card, and a card attested by the player who wrote it
+   * carries exactly as much assurance as one nobody attested at all. The
+   * stress run found this open, which meant the whole dual-entry chain could
+   * be satisfied by one person pressing two buttons.
+   */
+  if (!playerId || !markerId || playerId === markerId) return;
   mutate((draft) => {
     const t = activeTournamentOf(draft);
     const cert = ensureCert(draft, playerId, markerId);
@@ -1968,7 +1998,13 @@ export async function playerCertify(
       gps,
       distanceFromClubhouseM: distance,
       handicaps: hcs,
-      detail: `Card returned and locked. Marker ${cert.markerId} attested ${
+      /*
+       * The marker by name. This is the sealing record, the first thing a
+       * Committee reads in a dispute, and it was printing a raw player id:
+       * fine while every marker was a member with a readable id, useless the
+       * moment half a corporate field is guests called g-mse9cro8-mzteeg.
+       */
+      detail: `Card returned and locked. Marker ${playerName(draft, cert.markerId)} attested ${
         cert.markerAttestedAt ? new Date(cert.markerAttestedAt).toISOString() : ""
       }; player certified. HI ${hcs.hi} · CH ${hcs.ch} · PH ${hcs.ph}.`,
     });
@@ -2732,6 +2768,15 @@ export function applyRemoteScore(
   round?: number,
   tournamentId?: string,
 ) {
+  /*
+   * The same guard the desk path has. A row arriving over the wire has been
+   * through another device, a queue and a network, and is the least trusted
+   * input in the product: the stress run found a non-integer score landing on
+   * a card and an out-of-range hole crashing the ticker while it looked up a
+   * par that was not there. Refuse it here rather than letting it into state.
+   */
+  if (!validGross(gross)) return;
+  if (!Number.isInteger(holeIdx) || holeIdx < 0 || holeIdx > 17) return;
   const s = simStore.getState();
   const key = roundKey(
     tournamentId ?? s.liveTournamentId ?? LIVE_TOURNAMENT_ID,

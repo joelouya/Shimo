@@ -10,7 +10,8 @@
     "regression": "node scripts/regression.mjs",
     "dev:pilot": "NEXT_PUBLIC_SHIMO_MODE=pilot next dev --port 3001",
     "tv:sim": "node scripts/tv-simulate.mjs",
-    "day:sim": "node scripts/corporate-day.mjs"
+    "day:sim": "node scripts/corporate-day.mjs",
+    "stress": "node scripts/stress.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.19",

@@ -361,10 +361,18 @@ export function CertificationPanel() {
   const corrections = useSim((s) => s.corrections);
   const auditLog = useSim((s) => s.auditLog);
   const roster = useSim((s) => s.roster);
+  const guests = useSim((s) => s.guests);
 
+  /*
+   * Guests as well as members. An audit record stores an id, which is right,
+   * because an id is stable and a name is not. What has to resolve is the
+   * export, and this was building its lookup from the roster alone: on a
+   * corporate day that meant the CSV a Committee opens during a dispute
+   * printed g-mse9cro8-mzteeg for half the field.
+   */
   const byId = useMemo(
-    () => new Map(roster.map((p) => [p.id, p] as const)),
-    [roster],
+    () => new Map([...roster, ...guests].map((p) => [p.id, p] as const)),
+    [roster, guests],
   );
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
 
