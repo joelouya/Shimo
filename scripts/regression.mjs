@@ -48,6 +48,7 @@ const jiti = createJiti(import.meta.url, {
 const S = await jiti.import("../lib/sim/store.ts");
 const { roundKey } = await jiti.import("../lib/rounds.ts");
 const { scorePayload } = await jiti.import("../lib/integrity.ts");
+const MAP = await jiti.import("../lib/sync/mappers.ts");
 
 /* ---- tiny assertion harness ---- */
 let pass = 0;
@@ -276,7 +277,6 @@ check("card_in syncs on the round key",
 check("every score op carries a round",
   st().outbox.filter((o) => o.kind === "score").every((o) => o.payload.round != null));
 
-/* ------------------------------------------------------------------ */
 section("Round-keyed housekeeping");
 // hydration must file each round's tee sheet under its own key, not the bare
 // tournament id, or a joining device sees no pairings at all
@@ -2822,6 +2822,62 @@ section("Sponsor links");
     return path === `/recap/${t}` && path.split("/").length === 3;
   })());
 }
+
+/* ------------------------------------------------------------------ *
+ * Ordering
+ *
+ * The schema says these tables are last-write-wins by updated_at. Realtime
+ * does not promise delivery order and a reconnect replays the backlog
+ * wholesale, so "last" has to mean last written rather than last to arrive.
+ * The swarm run found what happens otherwise: a stale `upcoming` tournament
+ * row landing after the `live` one stood the board down mid-round, and the
+ * phone then silently recorded nothing for the rest of the day.
+ * ------------------------------------------------------------------ */
+// Last, because proving a newer row still applies means cancelling the
+// tournament, and everything above needs it alive.
+section("A stale row must not overwrite a fresh one");
+{
+  const live = st().liveTournamentId;
+  const t = st().created.find((x) => x.id === live) ?? st().created[0];
+  check("there is a tournament to reorder", Boolean(t));
+
+  const fresh = { ...MAP.tournamentToRow(t), status: "live" };
+  const stale = {
+    ...MAP.tournamentToRow(t),
+    status: "upcoming",
+    updated_at: new Date(Date.parse(fresh.updated_at) - 60_000).toISOString(),
+  };
+
+  S.applyRemoteEntity("tournaments", fresh);
+  const afterFresh = st().liveTournamentId;
+  S.applyRemoteEntity("tournaments", stale);
+  check("an older row arriving late is ignored",
+    st().liveTournamentId === afterFresh,
+    "out-of-order delivery must not stand a live round down");
+
+  /* And the round must still be playable afterwards, which is the part that
+     actually hurt: a null live id makes every subsequent score a no-op. */
+  const pid = st().roster[0]?.id;
+  if (pid) {
+    S.setBulkScore(pid, 0, 4);
+    const k = roundKey(st().liveTournamentId, st().liveRound ?? 1);
+    check("and the phone can still record a score",
+      st().scores?.[k]?.[pid]?.[0] === 4);
+  }
+
+  /* A genuinely newer row still applies, or the guard would be a freeze. */
+  const newer = {
+    ...MAP.tournamentToRow(t),
+    status: "cancelled",
+    updated_at: new Date(Date.parse(fresh.updated_at) + 60_000).toISOString(),
+  };
+  S.applyRemoteEntity("tournaments", newer);
+  check("a genuinely newer row still applies",
+    !st().created.some((x) => x.id === t.id),
+    "dropping stale rows must not turn into dropping every row");
+}
+
+/* ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
 console.log(

@@ -302,6 +302,15 @@ export interface SimState {
   integrityLog: OpsFlag[];
   /** local-first sync queue */
   outbox: SyncOp[];
+  /**
+   * The newest `updated_at` this device has accepted for each synced row,
+   * keyed `table:id`. Realtime does not promise order and a reconnect replays
+   * whatever the query returns, so without this a stale row overwrites a
+   * fresh one. The swarm run found the consequence: an old `upcoming`
+   * tournament row landing after the `live` one stood the board down
+   * mid-round and the phone then silently recorded nothing.
+   */
+  stamps: Record<string, string>;
   lastSyncedAt: number | null;
   /* ---- certification & compliance (v7) ---- */
   /** per roundKey then player: a card is certified one round at a time */
@@ -448,6 +457,7 @@ export function buildInitialState(): SimState {
     cardIn: {},
     integrityLog: [],
     outbox: [],
+    stamps: {},
     lastSyncedAt: null,
     certifications: {},
     auditLog: [],
@@ -577,6 +587,7 @@ function normalize(saved: SimState): SimState {
   out.exposure ??= [];
   out.pace ??= {};
   out.paceThresholdMin ??= 15;
+  out.stamps ??= {};
   out.created ??= [];
   out.dismissed ??= [];
   out.deskWelcomed ??= false;
@@ -873,6 +884,65 @@ function enqueueOp(
   draft.outbox = draft.outbox.slice(-600);
 }
 
+/** Room for several tournaments' worth of rows before the oldest are dropped. */
+const STAMP_LIMIT = 4000;
+const STAMP_KEEP = 3000;
+
+/**
+ * What identifies one synced row, for ordering purposes. Most tables are keyed
+ * by id; the per-player round tables are keyed by the three columns that make
+ * them unique, matching the primary keys in the schema.
+ */
+function rowKey(table: string, row: Record<string, unknown>): string | null {
+  switch (table) {
+    case "clubs":
+      return `clubs:${row.club_id}`;
+    case "card_in":
+    case "certifications":
+      return `${table}:${row.tournament_id}:${row.round ?? 1}:${row.player_id}`;
+    case "audit_log":
+      return null; // insert-only and already idempotent by id
+    default:
+      return row.id ? `${table}:${row.id}` : null;
+  }
+}
+
+/**
+ * Record that this device now holds this version of a row. Local writes count:
+ * a write made here must not be undone by an older row arriving from the wire.
+ */
+function stamp(draft: SimState, table: string, row: Record<string, unknown>) {
+  const k = rowKey(table, row);
+  const at = row.updated_at;
+  if (!k || typeof at !== "string") return;
+  if (!draft.stamps[k] || draft.stamps[k] < at) draft.stamps[k] = at;
+
+  /*
+   * This map is persisted with the rest of state on every mutation, and a
+   * club plays a lot of golf: one entry per certification is tournaments ×
+   * rounds × players, which grows all season and never stops. Bound it by
+   * dropping the oldest, which is also the safest set to lose - a row nobody
+   * has written to in months is not the one about to arrive out of order.
+   * Pruned in batches so this is not sorting on every write.
+   */
+  const keys = Object.keys(draft.stamps);
+  if (keys.length > STAMP_LIMIT) {
+    keys.sort((a, b) => (draft.stamps[a] < draft.stamps[b] ? -1 : 1));
+    for (const old of keys.slice(0, keys.length - STAMP_KEEP)) {
+      delete draft.stamps[old];
+    }
+  }
+}
+
+/** True when this row is older than what this device already accepted. */
+function isStale(draft: SimState, table: string, row: Record<string, unknown>) {
+  const k = rowKey(table, row);
+  const at = row.updated_at;
+  if (!k || typeof at !== "string") return false;
+  const held = draft.stamps[k];
+  return Boolean(held) && at < held;
+}
+
 /** Queue a mapped state row (tournament, pairing, cert, …) for the remote. */
 function enqueueEntity(
   draft: SimState,
@@ -880,6 +950,7 @@ function enqueueEntity(
   row: Record<string, unknown>,
   opts: { conflict?: string; insertOnly?: boolean } = {},
 ) {
+  stamp(draft, table, row);
   enqueueOp(draft, "entity", {
     table,
     row,
@@ -2814,6 +2885,15 @@ export function applyRemoteScore(
  */
 export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
   mutate((draft) => {
+    /*
+     * Drop anything older than what this device already holds. The schema is
+     * explicit that these tables are last-write-wins by updated_at, but the
+     * wire delivers in whatever order it likes and a reconnect replays the
+     * backlog wholesale, so "last" has to mean last written rather than last
+     * to arrive.
+     */
+    if (isStale(draft, table, row)) return;
+    stamp(draft, table, row);
     switch (table) {
       case "tournaments": {
         const t = rowToTournament(row);
