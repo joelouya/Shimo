@@ -1,4 +1,4 @@
-import type { Course, Hole, HoleScores, Player } from "./types";
+import type { Course, Hole, HoleScores, MaxHoleScore, Player } from "./types";
 
 /* ------------------------------------------------------------------ */
 /* Handicap maths                                                      */
@@ -46,6 +46,27 @@ export function stablefordPoints(hole: Hole, gross: number, ph: number) {
   return Math.max(0, hole.par - net + 2);
 }
 
+/**
+ * The gross that counts toward net and points once a maximum-hole-score rule
+ * is applied. The actual gross a player made is never changed - a real strokes
+ * total stays real - but net stroke play and a fixed cap both look at a capped
+ * figure. Net double bogey (par + strokes received + 2) is the WHS default and
+ * is exactly the score at which Stableford already gives nothing, so it leaves
+ * points untouched and only tidies net stroke play.
+ */
+export function countingGross(
+  gross: number,
+  hole: Hole,
+  ph: number,
+  max: MaxHoleScore = "none",
+): number {
+  if (max === "none") return gross;
+  if (max === "net-double-bogey") {
+    return Math.min(gross, hole.par + strokesReceived(ph, hole.si) + 2);
+  }
+  return Math.min(gross, max);
+}
+
 /* ------------------------------------------------------------------ */
 /* Leaderboard                                                         */
 /* ------------------------------------------------------------------ */
@@ -68,13 +89,20 @@ export interface StandingRow {
   division?: string;
 }
 
-export function rowStats(
-  player: Player,
+/**
+ * Per-hole totals for one card off a known playing handicap.
+ *
+ * The maths that used to live inside rowStats, pulled out so a team card - a
+ * scramble ball, a better-ball hole, a foursomes ball - can be scored off a
+ * team playing handicap that was worked out somewhere else, instead of being
+ * re-derived from an individual's index.
+ */
+export function cardStats(
   scores: HoleScores,
   course: Course,
-  allowancePct: number,
+  ph: number,
+  maxHoleScore: MaxHoleScore = "none",
 ) {
-  const { ph } = handicapSet(player.handicap, course, allowancePct);
   let thru = 0;
   let grossTotal = 0;
   let grossToPar = 0;
@@ -85,15 +113,28 @@ export function rowStats(
     const gross = scores[i];
     if (gross == null) continue;
     const hole = course.holes[i];
+    // the real gross made, and the (possibly capped) gross that counts
+    const counted = countingGross(gross, hole, ph, maxHoleScore);
     thru++;
     grossTotal += gross;
     grossToPar += gross - hole.par;
-    netToPar += gross - strokesReceived(ph, hole.si) - hole.par;
-    points += stablefordPoints(hole, gross, ph);
+    netToPar += counted - strokesReceived(ph, hole.si) - hole.par;
+    points += stablefordPoints(hole, counted, ph);
     if (gross <= hole.par - 1) hotStreak++;
     else hotStreak = 0;
   }
-  return { thru, grossTotal, grossToPar, netToPar, points, hotStreak, ph };
+  return { thru, grossTotal, grossToPar, netToPar, points, hotStreak };
+}
+
+export function rowStats(
+  player: Player,
+  scores: HoleScores,
+  course: Course,
+  allowancePct: number,
+  maxHoleScore: MaxHoleScore = "none",
+) {
+  const { ph } = handicapSet(player.handicap, course, allowancePct);
+  return { ...cardStats(scores, course, ph, maxHoleScore), ph };
 }
 
 /** Sort + position the field for a given view mode. */
@@ -103,9 +144,16 @@ export function computeStandings(
   course: Course,
   allowancePct: number,
   mode: ViewMode,
+  maxHoleScore: MaxHoleScore = "none",
 ): StandingRow[] {
   const rows = players.map((player) => {
-    const s = rowStats(player, scores[player.id] ?? Array(18).fill(null), course, allowancePct);
+    const s = rowStats(
+      player,
+      scores[player.id] ?? Array(18).fill(null),
+      course,
+      allowancePct,
+      maxHoleScore,
+    );
     return {
       player,
       thru: s.thru,
@@ -120,6 +168,16 @@ export function computeStandings(
     };
   });
 
+  return positionStandings(rows, mode);
+}
+
+/**
+ * Sort, rank and gap a set of already-computed rows. Shared so a team board or
+ * a derived better-ball board positions the same way an individual one does -
+ * ties share a position, the leader's gap is zero, the one further round the
+ * course breaks a dead heat visually.
+ */
+export function positionStandings(rows: StandingRow[], mode: ViewMode): StandingRow[] {
   const key = (r: StandingRow) =>
     mode === "points" ? -r.points : mode === "net" ? r.netToPar : r.grossToPar;
 

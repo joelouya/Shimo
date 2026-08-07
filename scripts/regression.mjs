@@ -49,6 +49,8 @@ const S = await jiti.import("../lib/sim/store.ts");
 const { roundKey } = await jiti.import("../lib/rounds.ts");
 const { scorePayload } = await jiti.import("../lib/integrity.ts");
 const MAP = await jiti.import("../lib/sync/mappers.ts");
+const SCORE = await jiti.import("../lib/scoring.ts");
+const TEAM = await jiti.import("../lib/team-scoring.ts");
 
 /* ---- tiny assertion harness ---- */
 let pass = 0;
@@ -2878,6 +2880,100 @@ section("A stale row must not overwrite a fresh one");
 }
 
 /* ------------------------------------------------------------------ */
+/* Team, match and max-hole-score scoring                              */
+/* ------------------------------------------------------------------ */
+/*
+ * A synthetic course - 18 par-4s, stroke index 1..18, no ratings - so course
+ * handicap falls back to the raw index and every stroke lands where the maths
+ * says it should. That makes these assertions exact rather than approximate.
+ */
+const FLAT = {
+  id: "flat", clubId: "x", name: "Flat", tees: "White", par: 72,
+  holes: Array.from({ length: 18 }, (_, i) => ({ hole: i + 1, par: 4, si: i + 1, yards: 400 })),
+};
+const par = () => Array(18).fill(4);
+const pl = (id, handicap) => ({ id, clubId: "x", name: id, handicap, gender: "M" });
+const team = (id, name, playerIds) => ({ id, tournamentId: "t", name, playerIds });
+
+section("Team playing handicap (per-position allowance + max course handicap)");
+{
+  // A off 10, B off 30, capped at 24: [10, 24] -> 10*35% + 24*15% = 3.5 + 3.6 = 7.1 -> 7
+  const ph = TEAM.teamPlayingHandicap([pl("A", 10), pl("B", 30)], FLAT, [35, 15], 24);
+  check("blends capped course handicaps by position", ph === 7, `got ${ph}`);
+  const uncapped = TEAM.teamPlayingHandicap([pl("A", 10), pl("B", 30)], FLAT, [35, 15]);
+  check("without a cap the high handicap counts in full",
+    uncapped === Math.round(10 * 0.35 + 30 * 0.15), `got ${uncapped}`);
+}
+
+section("Scramble: one team card off the team handicap");
+{
+  const row = TEAM.scrambleTeamRow(
+    team("t1", "A + B", ["A", "B"]),
+    [pl("A", 10), pl("B", 30)],
+    par(), // team pars every hole
+    { course: FLAT, allowances: [35, 15], maxCH: 24 },
+  );
+  // team PH 7 -> a stroke on the 7 lowest indexes; net-to-par = -(strokes) = -7
+  check("net is par minus the team's strokes", row.netToPar === -7, `got ${row.netToPar}`);
+  check("gross to par is level for straight pars", row.grossToPar === 0, `got ${row.grossToPar}`);
+  // par4 with a stroke = 3 pts, without = 2 pts: 7*3 + 11*2 = 43
+  check("stableford points reflect the team strokes", row.points === 43, `got ${row.points}`);
+  check("the team row carries the team name", row.player.name === "A + B");
+}
+
+section("Better ball: the team takes its better member each hole");
+{
+  const A = par(); // A pars everything, off 0 -> net 0 every hole
+  const B = par().map((v, i) => (i === 0 ? 2 : 6)); // B: eagle on 1, doubles after, off 18
+  const row = TEAM.betterBallTeamRow(
+    team("t2", "A + B", ["A", "B"]),
+    [pl("A", 0), pl("B", 18)],
+    { A, B },
+    { course: FLAT, allowances: [100] },
+  );
+  // hole 1: A net 0, B net 2-1-4 = -3 -> team -3; every other hole best is A's 0
+  check("only the better member's hole counts", row.netToPar === -3, `got ${row.netToPar}`);
+  check("all eighteen holes are through", row.thru === 18, `got ${row.thru}`);
+}
+
+section("Match play: up, down, dormie, closed");
+{
+  const win = 0, halve = 1; // lower net wins the hole; equal halves it
+  // A wins the first three, halves the rest -> 3 up with 2 to play at the 16th
+  const netA = Array.from({ length: 18 }, (_, i) => (i < 16 ? (i < 3 ? win : halve) : null));
+  const netB = Array.from({ length: 18 }, (_, i) => (i < 16 ? halve : null));
+  const closed = TEAM.matchState(netA, netB);
+  check("a match out of reach is closed", closed.closed === true);
+  check("and reads as '3 & 2'", closed.status === "3 & 2", `got ${closed.status}`);
+
+  // A up 2 with 2 to play: not closed, dormie
+  const dA = Array.from({ length: 18 }, (_, i) => (i < 16 ? (i < 2 ? win : halve) : null));
+  const dB = Array.from({ length: 18 }, (_, i) => (i < 16 ? halve : null));
+  const dormie = TEAM.matchState(dA, dB);
+  check("dormie is recognised", dormie.dormie === true && dormie.closed === false,
+    JSON.stringify(dormie));
+  check("dormie shows the lead", dormie.status === "2 up", `got ${dormie.status}`);
+
+  // ten holes played, five each: all square
+  const sA = Array.from({ length: 18 }, (_, i) => (i < 10 ? (i % 2 === 0 ? win : halve + 1) : null));
+  const sB = Array.from({ length: 18 }, (_, i) => (i < 10 ? (i % 2 === 0 ? halve + 1 : win) : null));
+  const sq = TEAM.matchState(sA, sB);
+  check("an even match reads AS", sq.upBy === 0 && sq.status === "AS", JSON.stringify(sq));
+}
+
+section("Max hole score caps net and points, never the real gross");
+{
+  const blow = par().map((v, i) => (i === 0 ? 10 : 4)); // a 10 on the first, off 0
+  const raw = SCORE.cardStats(blow, FLAT, 0, "none");
+  check("uncapped, the blow-up lands in full", raw.netToPar === 6, `got ${raw.netToPar}`);
+  const capped = SCORE.cardStats(blow, FLAT, 0, "net-double-bogey");
+  // par 4, no stroke -> net double bogey caps the counting score at 6, net +2
+  check("net double bogey caps the counting score", capped.netToPar === 2, `got ${capped.netToPar}`);
+  check("but the real gross total is untouched", capped.grossTotal === raw.grossTotal,
+    `${capped.grossTotal} vs ${raw.grossTotal}`);
+  const fixed = SCORE.cardStats(blow, FLAT, 0, 7);
+  check("a fixed cap counts at most that score", fixed.netToPar === 3, `got ${fixed.netToPar}`);
+}
 
 /* ------------------------------------------------------------------ */
 console.log(

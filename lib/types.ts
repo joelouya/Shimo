@@ -360,6 +360,77 @@ export interface Division {
 }
 
 /**
+ * A side in a team or match event.
+ *
+ * A team is a set of players who share a result. It is distinct from a pairing
+ * group: a fourball tee time can hold two better-ball teams, so teams are
+ * modelled on their own rather than inferred from who tees off together. The
+ * name is editable ("Reed + Knight"); `playerIds` is one for a single, two for
+ * a pair, and however many the format asks for otherwise.
+ */
+export interface Team {
+  id: string;
+  tournamentId: string;
+  /** which round this team plays in; absent means every round */
+  round?: number;
+  name: string;
+  playerIds: string[];
+  /** flighted team events keep the same division idea as individuals */
+  division?: string;
+}
+
+/** How a cap on the score that counts is expressed. */
+export type MaxHoleScore = "none" | "net-double-bogey" | number;
+
+/** A custom question asked at registration. */
+export interface RegistrationQuestion {
+  id: string;
+  kind: "text" | "choice";
+  label: string;
+  /** for kind === "choice" */
+  options?: string[];
+  required?: boolean;
+}
+
+/* ------------------------------------------------------------------ *
+ * Ryder Cup
+ *
+ * A team-vs-team event played over several sessions, each in its own match
+ * format, where every match is worth points and the side that reaches the
+ * threshold first wins. Modelled as its own structure rather than a Format,
+ * because it is an event shape (two sides, sessions, a running total), not a
+ * way of scoring one round.
+ * ------------------------------------------------------------------ */
+
+export type RyderSessionFormat = "fourball" | "foursomes" | "singles";
+
+export interface RyderSide {
+  id: string;
+  name: string;
+  captainId?: string;
+  playerIds: string[];
+}
+
+/** One match in a session: a lineup from each side. */
+export interface RyderMatch {
+  id: string;
+  round: number;
+  /** player ids from side A / side B; one each for singles, one per player for
+   *  foursomes (a pair sharing a ball) and fourball (a pair, best ball) */
+  sideA: string[];
+  sideB: string[];
+}
+
+export interface RyderCupConfig {
+  sides: [RyderSide, RyderSide];
+  /** points that clinch, e.g. 14.5 of 28 */
+  pointsToWin: number;
+  winPoints: number; // usually 1
+  halfPoints: number; // usually 0.5
+  matches: RyderMatch[];
+}
+
+/**
  * The cut applied after a round: the field is reduced to the leading `topN`
  * players and everyone tied with the last of them. Ties are always kept, which
  * is why a "top 30" cut routinely returns 33 players.
@@ -387,6 +458,12 @@ export interface Round {
   teeInterval: number; // minutes
   /** cut applied AFTER this round; absent means play on with a full field */
   cut?: CutRule | null;
+  /**
+   * Ryder Cup only: which match format this session is played in. A Ryder Cup
+   * maps each session onto a round, so the session's format lives here rather
+   * than on the tournament, which carries the day's headline format.
+   */
+  sessionFormat?: RyderSessionFormat;
 }
 
 export interface Tournament {
@@ -498,6 +575,35 @@ export interface Tournament {
   tvCoverage?: "full" | "reduced" | "quiet";
   registered?: boolean; // demo user is registered
   result?: { winner: string; score: string; userPosition?: number; userScore?: string };
+
+  /* ---- team & match play ---- */
+  /**
+   * Players per team for a team format (2 for a better-ball pair or a scramble
+   * pair, 4 for a full scramble). Absent means an individual event.
+   */
+  playersPerTeam?: number;
+  /**
+   * Handicap allowance per team position, lowest handicap first, e.g. [35, 15]
+   * for a two-person scramble. Falls back to the single `handicapAllowance`
+   * for individual events, so nothing created before this changes.
+   */
+  handicapAllowances?: number[];
+  /** cap each member's course handicap before allowances are applied */
+  maxCourseHandicap?: number;
+  /** cap the spread between the highest and lowest team course handicaps */
+  maxCourseHandicapDifferential?: number;
+  /** cap on the gross that counts toward net/points; absent means no cap */
+  maxHoleScore?: MaxHoleScore;
+  /** a Ryder Cup carries its two sides and sessions here */
+  ryderCup?: RyderCupConfig;
+
+  /* ---- registration ---- */
+  /** take entries onto a waitlist once `maxPlayers` is reached */
+  waitlist?: boolean;
+  /** a team event that only accepts complete teams at registration */
+  requireFullTeam?: boolean;
+  /** extra questions asked on the public registration form */
+  registrationQuestions?: RegistrationQuestion[];
 }
 
 export interface Group {
