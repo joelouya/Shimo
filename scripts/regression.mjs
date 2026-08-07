@@ -2975,6 +2975,32 @@ section("Max hole score caps net and points, never the real gross");
   check("a fixed cap counts at most that score", fixed.netToPar === 3, `got ${fixed.netToPar}`);
 }
 
+section("Duplicate event copies the setup, not the scoring");
+{
+  const src = {
+    id: "t-dup-src", name: "Quarterly Scramble", clubId: "muthaiga",
+    courseId: "muthaiga-main", date: "2026-03-01", format: "Scramble",
+    entryFee: 0, status: "completed", membersOnly: false,
+    divisions: [{ name: "Overall", range: [0, 36] }], description: "",
+    prizes: [], maxPlayers: 40, regCloses: "2026-02-28", handicapAllowance: 95,
+    firstTee: "07:00", teeInterval: 10, fieldSize: 40, playersPerTeam: 2,
+    handicapAllowances: [35, 15], result: { winner: "A + B", score: "-12" },
+    rounds: [{ id: "r1", number: 1, name: "Round 1", date: "2026-03-01",
+      courseId: "muthaiga-main", tees: "White", firstTee: "07:00", teeInterval: 10, cut: null }],
+  };
+  S.createTournament(src);
+  const newId = S.duplicateTournament("t-dup-src");
+  const copy = st().created.find((x) => x.id === newId);
+  check("a fresh id is minted", Boolean(newId) && newId !== "t-dup-src");
+  check("the copy is upcoming, not completed", copy?.status === "upcoming");
+  check("the name is marked a copy", copy?.name === "Quarterly Scramble (copy)");
+  check("the setup carries over (format, allowances)",
+    copy?.format === "Scramble" && JSON.stringify(copy?.handicapAllowances) === "[35,15]");
+  check("the previous result does not carry over", copy?.result === undefined);
+  check("the copy has no scores of its own",
+    Object.keys(st().scores[roundKey(newId, 1)] ?? {}).length === 0);
+}
+
 /* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +

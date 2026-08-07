@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ClipboardList,
+  Copy,
   Flag,
   Image as ImageIcon,
   Link as LinkIcon,
@@ -42,6 +43,7 @@ import {
   allTournaments,
   deleteTournament,
   dismissTournament,
+  duplicateTournament,
   endTournamentDay,
   startTournamentDay,
   useSim,
@@ -90,6 +92,7 @@ function TournamentRow({
   onDelete,
   onEnd,
   onCopyRegistration,
+  onDuplicate,
 }: {
   t: Tournament;
   isNew?: boolean;
@@ -98,6 +101,7 @@ function TournamentRow({
   onDelete: (t: Tournament) => void;
   onEnd: (t: Tournament) => void;
   onCopyRegistration: (t: Tournament) => void;
+  onDuplicate: (t: Tournament) => void;
 }) {
   return (
     <div
@@ -206,6 +210,10 @@ function TournamentRow({
                 <LinkIcon />
                 Copy registration link
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onDuplicate(t)}>
+                <Copy />
+                Duplicate
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => onDelete(t)}>
                 <Trash2 />
@@ -274,6 +282,13 @@ export default function AdminTournamentsPage() {
     router.push(`/admin/tournaments/new?edit=${t.id}`);
   }
 
+  function onDuplicate(t: Tournament) {
+    // straight into the editor on the fresh copy, which is where a club wants
+    // to be: change the date and the name, publish
+    const id = duplicateTournament(t.id);
+    if (id) router.push(`/admin/tournaments/new?edit=${id}`);
+  }
+
   const deleteIsRemoval = toDelete ? !createdIds.has(toDelete.id) : false;
 
   const [registrationFor, setRegistrationFor] = useState<Tournament | null>(null);
@@ -321,6 +336,7 @@ export default function AdminTournamentsPage() {
                     onCopyRegistration={copyRegistration}
                     onDelete={setToDelete}
                     onEnd={setToEnd}
+                    onDuplicate={onDuplicate}
                   />
                 ))}
               </div>

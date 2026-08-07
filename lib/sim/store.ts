@@ -2570,6 +2570,33 @@ export function createTournament(t: Tournament) {
   });
 }
 
+/**
+ * Copy a tournament into a fresh upcoming event: same course, format, fees,
+ * eligibility and sponsors, none of the scoring. A club runs the same corporate
+ * day every quarter and the same medal every month, so rebuilding it by hand is
+ * exactly the kind of work this removes. Pairings, teams, scores and the result
+ * are all keyed by tournament id, so a new id simply has none of them.
+ */
+export function duplicateTournament(id: string): string | null {
+  const source =
+    simStore.getState().created.find((x) => x.id === id) ??
+    TOURNAMENTS.find((x) => x.id === id);
+  if (!source) return null;
+  const newId = `t-copy-${Date.now().toString(36)}`;
+  const copy: Tournament = {
+    ...structuredClone(source),
+    id: newId,
+    name: `${source.name} (copy)`,
+    status: "upcoming",
+    registered: false,
+    result: undefined,
+    // rounds keep their shape but not their identity's scores; ids stay stable
+    // within the new tournament, which is all the round key needs
+  };
+  createTournament(copy);
+  return newId;
+}
+
 /** Edit a created tournament that hasn't started yet. Re-publishes the row. */
 export function updateTournament(t: Tournament) {
   mutate((draft) => {
