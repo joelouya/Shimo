@@ -67,7 +67,9 @@ import {
   rowToDispute,
   rowToPairing,
   rowToPlayer,
+  rowToTeam,
   rowToTournament,
+  teamToRow,
   tournamentToRow,
 } from "@/lib/sync/mappers";
 import type { HydrationSnapshot } from "@/lib/sync/remote";
@@ -79,6 +81,7 @@ import type {
   HoleScores,
   Player,
   Sponsor,
+  Team,
   Tournament,
 } from "@/lib/types";
 
@@ -292,6 +295,8 @@ export interface SimState {
   paceThresholdMin: number;
   /** saved pairings per roundKey(tournamentId, round) */
   pairings: Record<string, SavedGroup[]>;
+  /** teams for a team/match event, per roundKey(tournamentId, round) */
+  teams: Record<string, Team[]>;
   /** which tournament is being played today (null = none) */
   liveTournamentId: string | null;
   /** which round of it is on the course now (1-based) */
@@ -452,6 +457,7 @@ export function buildInitialState(): SimState {
             playerIds: [...g.playerIds],
           })),
         },
+    teams: {},
     liveTournamentId: IS_PILOT ? null : LIVE_TOURNAMENT_ID,
     liveRound: 1,
     cardIn: {},
@@ -576,6 +582,7 @@ function normalize(saved: SimState): SimState {
   out.certifications ??= base.certifications;
   out.cardIn ??= base.cardIn;
   out.pairings ??= base.pairings;
+  out.teams ??= base.teams;
   out.clubIdentity ??= base.clubIdentity;
   out.disputes ??= [];
   out.corrections ??= [];
@@ -1759,6 +1766,27 @@ export function savePairings(
   });
 }
 
+/** The teams that share a result, filed under the round the way pairings are. */
+export function saveTeams(tournamentId: string, teams: Team[], round = 1) {
+  mutate((draft) => {
+    draft.teams[roundKey(tournamentId, round)] = teams;
+    // a scramble team owns a card under its own id
+    for (const tm of teams) ensureCard(draft, tm.id, roundKey(tournamentId, round));
+    if (draft.liveTournamentId === tournamentId) {
+      for (const tm of teams) {
+        enqueueEntity(draft, "teams", teamToRow(tournamentId, round, tm), {
+          conflict: "tournament_id,round,team_id",
+        });
+      }
+    }
+  });
+}
+
+/** The teams for a round, or an empty list. */
+export function teamsIn(s: SimState, tournamentId: string, round = 1): Team[] {
+  return s.teams[roundKey(tournamentId, round)] ?? [];
+}
+
 /**
  * Pilot: flip a created tournament into today's live event. This is the
  * "publish" moment - the tournament, its pairings, and every player in the
@@ -1780,6 +1808,11 @@ export function startTournamentDay(tournamentId: string, round = 1) {
     for (const g of groups) {
       enqueueEntity(draft, "pairings", pairingToRow(tournamentId, round, g), {
         conflict: "tournament_id,round,group_id",
+      });
+    }
+    for (const tm of draft.teams[key] ?? []) {
+      enqueueEntity(draft, "teams", teamToRow(tournamentId, round, tm), {
+        conflict: "tournament_id,round,team_id",
       });
     }
     const fieldIds = new Set(groups.flatMap((g) => g.playerIds));
@@ -2927,6 +2960,17 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
         for (const pid of g.playerIds) ensureCard(draft, pid, key);
         break;
       }
+      case "teams": {
+        const tm = rowToTeam(row);
+        const key = roundKey(tm.tournamentId, tm.round ?? 1);
+        const list = (draft.teams[key] ??= []);
+        const i = list.findIndex((x) => x.id === tm.id);
+        if (i >= 0) list[i] = tm;
+        else list.push(tm);
+        // a scramble team owns a card under its own id, like a player's
+        ensureCard(draft, tm.id, key);
+        break;
+      }
       case "clubs": {
         const c = rowToClub(row);
         draft.clubIdentity[c.clubId] = { ...draft.clubIdentity[c.clubId], ...c };
@@ -3004,6 +3048,16 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
     for (const [key, groups] of Object.entries(byRoundPairings)) {
       draft.pairings[key] = groups.sort((a, b) => a.number - b.number);
     }
+
+    // teams, filed under the same round key as pairings
+    const byRoundTeams: Record<string, Team[]> = {};
+    for (const row of snap.teams ?? []) {
+      const tm = rowToTeam(row);
+      byRoundTeams[roundKey(t.id, tm.round ?? 1)] ??= [];
+      byRoundTeams[roundKey(t.id, tm.round ?? 1)].push(tm);
+      ensureCard(draft, tm.id, roundKey(t.id, tm.round ?? 1));
+    }
+    for (const [key, list] of Object.entries(byRoundTeams)) draft.teams[key] = list;
 
     for (const r of snap.players) {
       const p = rowToPlayer(r);

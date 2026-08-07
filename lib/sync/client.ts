@@ -65,6 +65,7 @@ export const SYNC_TABLES = [
   "clubs",
   "tournaments",
   "pairings",
+  "teams",
   "players",
   "scores",
   "card_in",

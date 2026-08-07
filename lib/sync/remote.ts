@@ -46,6 +46,7 @@ export interface ScoreRow {
 export interface HydrationSnapshot {
   tournament: Record<string, unknown> | null;
   pairings: Record<string, unknown>[];
+  teams: Record<string, unknown>[];
   players: Record<string, unknown>[];
   scores: ScoreRow[];
   cardIn: Record<string, unknown>[];
@@ -136,6 +137,7 @@ async function hydrate(
   const [
     tournament,
     pairings,
+    teams,
     players,
     scores,
     cardIn,
@@ -146,6 +148,7 @@ async function hydrate(
   ] = await Promise.all([
     sb.from("tournaments").select("*").eq("id", tournamentId).maybeSingle(),
     eq("pairings"),
+    eq("teams"),
     sb.from("players").select("*"),
     eq("scores"),
     eq("card_in"),
@@ -158,6 +161,7 @@ async function hydrate(
   return {
     tournament: tournament.data ?? null,
     pairings: pairings.data ?? [],
+    teams: teams.data ?? [],
     players: players.data ?? [],
     scores: (scores.data ?? []) as ScoreRow[],
     cardIn: cardIn.data ?? [],
@@ -185,7 +189,7 @@ export interface RemoteAdapter {
 }
 
 const EMPTY_SNAPSHOT: HydrationSnapshot = {
-  tournament: null, pairings: [], players: [], scores: [], cardIn: [],
+  tournament: null, pairings: [], teams: [], players: [], scores: [], cardIn: [],
   certifications: [], disputes: [], corrections: [], audit: [],
 };
 

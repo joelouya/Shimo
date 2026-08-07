@@ -11,7 +11,7 @@ import type {
   Dispute,
   SavedGroup,
 } from "@/lib/sim/store";
-import type { ClubIdentity, Player, Tournament } from "@/lib/types";
+import type { ClubIdentity, Player, Team, Tournament } from "@/lib/types";
 
 /* ---- tournaments ---- */
 
@@ -122,6 +122,31 @@ export function rowToPairing(r: Record<string, unknown>): SavedGroup {
     number: r.number as number,
     teeTime: (r.tee_time as string) ?? "",
     playerIds: (r.player_ids as string[]) ?? [],
+  };
+}
+
+/* ---- teams (a side that shares a result, distinct from a tee-time group) ---- */
+
+export function teamToRow(tournamentId: string, round: number, t: Team) {
+  return {
+    tournament_id: tournamentId,
+    round,
+    team_id: t.id,
+    name: t.name,
+    player_ids: t.playerIds,
+    division: t.division ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function rowToTeam(r: Record<string, unknown>): Team {
+  return {
+    id: r.team_id as string,
+    tournamentId: r.tournament_id as string,
+    round: (r.round as number) ?? 1,
+    name: (r.name as string) ?? "",
+    playerIds: (r.player_ids as string[]) ?? [],
+    division: (r.division as string) ?? undefined,
   };
 }
 
