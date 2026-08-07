@@ -244,7 +244,7 @@ async function build() {
 
   const { error: ge } = await sb.from("pairings").upsert(
     groups.map((g) => pairingToRow(TID, ROUND, g)),
-    { onConflict: "tournament_id,group_id" },
+    { onConflict: "tournament_id,round,group_id" },
   );
   if (ge) return fail("pairings", ge);
 
