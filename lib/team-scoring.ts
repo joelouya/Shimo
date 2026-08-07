@@ -76,11 +76,12 @@ export function teamPlayingHandicap(
  * ------------------------------------------------------------------ */
 
 /** A synthetic player standing in for the team, so the shared board code can
- *  render it. Its handicap field carries the team playing handicap already. */
-export function teamAsPlayer(team: Team, teamPH: number): Player {
+ *  render it. Its handicap field carries the team playing handicap already, and
+ *  its club is the members' so a per-row club lookup resolves. */
+export function teamAsPlayer(team: Team, teamPH: number, clubId = ""): Player {
   return {
     id: team.id,
-    clubId: "",
+    clubId,
     name: team.name,
     handicap: teamPH,
     gender: "M",
@@ -109,7 +110,7 @@ export function scrambleTeamRow(
   const teamPH = teamPlayingHandicap(members, o.course, o.allowances, o.maxCH, o.tee);
   const s = cardStats(teamCard, o.course, teamPH, o.maxHoleScore ?? "none");
   return {
-    player: teamAsPlayer(team, teamPH),
+    player: teamAsPlayer(team, teamPH, members[0]?.clubId),
     ...s,
     position: 0,
     tied: false,
@@ -173,7 +174,7 @@ export function betterBallTeamRow(
     points += Math.max(...holes.map((h) => h.points));
   }
   return {
-    player: teamAsPlayer(team, Math.min(...phs)),
+    player: teamAsPlayer(team, Math.min(...phs), members[0]?.clubId),
     thru,
     grossTotal: 0,
     grossToPar,

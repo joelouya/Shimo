@@ -299,7 +299,9 @@ const BoardRow = memo(
               )}
             </span>
             <span className="block truncate text-[11.5px] text-muted-foreground">
-              {clubById(r.player.clubId).short} · HC {r.player.handicap}
+              {[clubById(r.player.clubId)?.short, `HC ${r.player.handicap}`]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           </span>
           <span className="text-center text-[13px] text-muted-foreground tnum">

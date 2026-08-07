@@ -88,7 +88,7 @@ const jiti = createJiti(import.meta.url, {
   alias: { "@": resolve(root) },
   interopDefault: true,
 });
-const { tournamentToRow, playerToRow, pairingToRow, correctionToRow } =
+const { tournamentToRow, playerToRow, pairingToRow, teamToRow, correctionToRow } =
   await jiti.import("../lib/sync/mappers.ts");
 const { generateGross } = await jiti.import("../lib/scoring.ts");
 const { COURSES } = await jiti.import("../lib/data.ts");
@@ -118,6 +118,14 @@ const PROFILES = {
     format: "Stableford", fieldProfile: "stableford", coverage: "reduced",
     handicap: () => 4 + Math.round(rnd() * 24),
   },
+  scramble: {
+    // a two-person scramble: players pair up, play one ball, and the board
+    // shows teams. `team` is players per team; `allowances` is the per-position
+    // handicap split the app blends into a single team handicap.
+    format: "Scramble", fieldProfile: "team", coverage: "reduced",
+    handicap: () => 6 + Math.round(rnd() * 22),
+    team: 2, allowances: [35, 15],
+  },
 };
 
 const FIRST = [
@@ -141,15 +149,19 @@ const nameFor = (i) =>
 
 const TID = `sim-live-${SEED.toString(36)}`;
 const ROUND = 1;
-let field = []; // { id, name, handicap, gender, groupIdx }
-let groups = []; // { id, number, playerIds }
-let cards = new Map(); // playerId -> [gross|null x18]
+let roster = []; // the actual players: { id, name, handicap, gender, groupIdx }
+let teams = []; // scramble teams: { id, name, playerIds }
+// the scoring units the board shows: players for an individual event, teams for
+// a scramble (a team owns one card under its own id, exactly as the app stores it)
+let field = []; // { id, name, handicap, groupIdx }
+let groups = []; // { id, number, playerIds (roster), unitIds (scoring) }
+let cards = new Map(); // unitId -> [gross|null x18]
 let running = false;
 let timer = null;
 let intervalMs = 1600;
 
-const thru = (pid) => (cards.get(pid) ?? []).filter((v) => v != null).length;
-const groupThru = (g) => Math.min(...g.playerIds.map(thru));
+const thru = (id) => (cards.get(id) ?? []).filter((v) => v != null).length;
+const groupThru = (g) => Math.min(...g.unitIds.map(thru));
 
 /* ------------------------------------------------------------------ *
  * Writing to Supabase, the way the app does
@@ -195,8 +207,11 @@ async function build() {
     process.exit(1);
   }
   const size = Math.max(4, Math.round(SIZE / 4) * 4);
+  // first names read better for team labels than surnames, which collide in a
+  // small synthetic field
+  const surname = (id) => roster.find((p) => p.id === id)?.name.split(" ")[0];
 
-  field = Array.from({ length: size }, (_, i) => ({
+  roster = Array.from({ length: size }, (_, i) => ({
     id: `simp-${SEED.toString(36)}-${i}`,
     clubId: "muthaiga",
     name: nameFor(i),
@@ -210,10 +225,35 @@ async function build() {
       id: `simg-${g + 1}`,
       number: g + 1,
       teeTime: "07:00",
-      playerIds: field.slice(g * 4, g * 4 + 4).map((p) => p.id),
+      playerIds: roster.slice(g * 4, g * 4 + 4).map((p) => p.id),
+      unitIds: [],
     });
   }
-  for (const p of field) cards.set(p.id, Array(18).fill(null));
+
+  if (spec.team) {
+    // pair players up within each tee-time group: a fourball holds two teams
+    teams = [];
+    let n = 0;
+    for (const g of groups) {
+      for (let k = 0; k < g.playerIds.length; k += spec.team) {
+        const playerIds = g.playerIds.slice(k, k + spec.team);
+        const id = `simt-${SEED.toString(36)}-${n++}`;
+        teams.push({ id, name: playerIds.map(surname).join(" + "), playerIds });
+        g.unitIds.push(id);
+      }
+    }
+    // the board shows teams; each team scores off its better member
+    field = teams.map((t) => ({
+      id: t.id,
+      name: t.name,
+      handicap: Math.min(...t.playerIds.map((pid) => roster.find((p) => p.id === pid).handicap)),
+      groupIdx: groups.findIndex((g) => g.unitIds.includes(t.id)),
+    }));
+  } else {
+    field = roster;
+    for (const g of groups) g.unitIds = [...g.playerIds];
+  }
+  for (const u of field) cards.set(u.id, Array(18).fill(null));
 
   const tournament = {
     id: TID, name: "Simulated Field (live)", clubId: "muthaiga",
@@ -223,6 +263,7 @@ async function build() {
     prizes: [], maxPlayers: 200, regCloses: new Date().toISOString().slice(0, 10),
     handicapAllowance: 95, firstTee: "07:00", teeInterval: 10, fieldSize: size,
     fieldProfile: spec.fieldProfile, tvCoverage: spec.coverage,
+    ...(spec.team ? { playersPerTeam: spec.team, handicapAllowances: spec.allowances } : {}),
     rounds: [{
       id: "sim-r1", number: ROUND, name: "Round 1",
       date: new Date().toISOString().slice(0, 10), courseId: COURSE.id,
@@ -230,7 +271,8 @@ async function build() {
     }],
   };
 
-  process.stdout.write(`Building ${size} players in ${groups.length} groups ... `);
+  const what = spec.team ? `${teams.length} teams` : `${size} players`;
+  process.stdout.write(`Building ${what} in ${groups.length} groups ... `);
 
   const { error: te } = await sb
     .from("tournaments")
@@ -239,7 +281,7 @@ async function build() {
 
   const { error: pe } = await sb
     .from("players")
-    .upsert(field.map((p) => playerToRow(p)), { onConflict: "id" });
+    .upsert(roster.map((p) => playerToRow(p)), { onConflict: "id" });
   if (pe) return fail("players", pe);
 
   const { error: ge } = await sb.from("pairings").upsert(
@@ -247,6 +289,14 @@ async function build() {
     { onConflict: "tournament_id,round,group_id" },
   );
   if (ge) return fail("pairings", ge);
+
+  if (spec.team) {
+    const { error: tme } = await sb.from("teams").upsert(
+      teams.map((t) => teamToRow(TID, ROUND, { ...t, tournamentId: TID })),
+      { onConflict: "tournament_id,round,team_id" },
+    );
+    if (tme) return fail("teams", tme);
+  }
 
   // flip it live: findLiveTournamentId() looks for exactly this
   const { error: le } = await sb
@@ -287,10 +337,10 @@ async function step() {
   for (const g of advancing) {
     const h = groupThru(g);
     if (h >= 18) continue;
-    for (const pid of g.playerIds) {
-      if (thru(pid) !== h) continue;
-      const player = field.find((p) => p.id === pid);
-      setScore(pid, h, generateGross(COURSE.holes[h], player.handicap, rnd), g.id, batch);
+    for (const uid of g.unitIds) {
+      if (thru(uid) !== h) continue;
+      const unit = field.find((p) => p.id === uid);
+      setScore(uid, h, generateGross(COURSE.holes[h], unit.handicap, rnd), g.id, batch);
     }
   }
   await upsertScores(batch);
@@ -355,10 +405,10 @@ async function forceBurst() {
   const from = groupThru(behind);
   const to = Math.min(18, from + 5);
   const batch = [];
-  for (const pid of behind.playerIds) {
-    const player = field.find((p) => p.id === pid);
-    for (let h = thru(pid); h < to; h++)
-      setScore(pid, h, generateGross(COURSE.holes[h], player.handicap, rnd), behind.id, batch);
+  for (const uid of behind.unitIds) {
+    const unit = field.find((p) => p.id === uid);
+    for (let h = thru(uid); h < to; h++)
+      setScore(uid, h, generateGross(COURSE.holes[h], unit.handicap, rnd), behind.id, batch);
   }
   await upsertScores(batch);
   say(`Desk burst · group ${behind.number} caught up to the ${ordinal(to)}.`);
