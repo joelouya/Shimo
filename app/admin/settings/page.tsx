@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Flag, RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Flag, RotateCcw, ShieldAlert } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { ClubIdentityCard } from "@/components/admin/club-identity";
 import { CsvImportCard } from "@/components/admin/csv-import";
 import { DeskCard } from "@/components/admin/desk-card";
 import { TvSettingsCard } from "@/components/admin/tv-settings";
+import { guestResolveAbuseSummary } from "@/lib/guests-remote";
 import { IS_PILOT } from "@/lib/mode";
 import { resetDemo, reviewIntegrityEntry, useSim } from "@/lib/sim/store";
 
@@ -111,6 +112,66 @@ function IntegrityCard() {
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function GuestAccessCard() {
+  const [summary, setSummary] = useState<
+    Awaited<ReturnType<typeof guestResolveAbuseSummary>> | "loading"
+  >("loading");
+
+  useEffect(() => {
+    let live = true;
+    guestResolveAbuseSummary().then((s) => {
+      if (live) setSummary(s);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // no remote configured, or the call failed: say nothing rather than imply
+  // a signal we cannot actually read
+  if (summary === "loading" || summary === null) return null;
+
+  const quiet = summary.bursts === 0;
+  return (
+    <Card
+      title="Guest access"
+      sub="How often someone has been turned away for guessing at codes"
+    >
+      <div
+        className={`flex items-start gap-3 rounded-xl px-4 py-3.5 ${
+          quiet ? "bg-secondary/50" : "bg-clay-wash"
+        }`}
+      >
+        <ShieldAlert
+          className={`mt-0.5 size-4 shrink-0 ${
+            quiet ? "text-muted-foreground" : "text-clay-deep"
+          }`}
+        />
+        <div className="min-w-0">
+          <p className="text-[13.5px] font-medium text-foreground">
+            {quiet
+              ? "Nothing unusual in the last day"
+              : `${summary.bursts} ${
+                  summary.bursts === 1 ? "burst" : "bursts"
+                } of failed attempts in the last day`}
+          </p>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+            {quiet
+              ? "A burst is a single connection locked out for repeatedly trying codes that do not exist. None so far."
+              : "Each is a connection locked out after too many wrong codes. Codes still work for the guests who hold them; this is only a heads-up that someone was probing."}
+            {!quiet && summary.lastAt
+              ? ` Most recent ${summary.lastAt.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}.`
+              : ""}
+          </p>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -220,6 +281,7 @@ export default function SettingsPage() {
           <TvSettingsCard />
           <DeskCard />
           {IS_PILOT && <IntegrityCard />}
+          {IS_PILOT && <GuestAccessCard />}
           <CsvImportCard />
           {!IS_PILOT && (
           <Card

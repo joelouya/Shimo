@@ -26,6 +26,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normaliseCode } from "@/lib/guests";
+import {
+  enterResolvedGuest,
+  resolveGuestCodeRemote,
+} from "@/lib/guests-remote";
 import { guestForCode, setDeviceIdentity, simStore } from "@/lib/sim/store";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
@@ -41,22 +45,58 @@ function Enter() {
    */
   const fromLink = params.get("code") ?? "";
   const [code, setCode] = useState(fromLink);
-  const [failed, setFailed] = useState(false);
+  const [checking, setChecking] = useState(false);
+  /* One of the four things this screen can have to say, or nothing. */
+  const [problem, setProblem] = useState<
+    | null
+    | { kind: "not-found" }
+    | { kind: "unavailable" }
+    | { kind: "rate-limited"; until: Date | null }
+  >(null);
   /* A ref, not state: this only records that the one automatic attempt has
      been made, and writing state inside the effect that reads it is how you
      get cascading renders. */
   const tried = useRef(false);
 
   const submit = useCallback(
-    (raw: string) => {
-      const found = guestForCode(simStore.getState(), raw);
-      if (!found) {
-        setFailed(true);
+    async (raw: string) => {
+      setProblem(null);
+      /*
+       * The device this code was made on holds the entry already, so try
+       * locally first: it is instant and works with no signal, which is the
+       * common case of a guest who registered on this very phone.
+       */
+      const local = guestForCode(simStore.getState(), raw);
+      if (local) {
+        setDeviceIdentity(local.player.id);
+        router.push("/app/live");
         return;
       }
-      // The code is proof enough for the one thing it opens.
-      setDeviceIdentity(found.player.id);
-      router.push("/app/live");
+      /*
+       * Otherwise this is a fresh phone opening a code from a printed card, so
+       * ask the server - which is throttled, expires the code with its
+       * tournament, and never reveals which codes exist.
+       */
+      setChecking(true);
+      const res = await resolveGuestCodeRemote(raw);
+      if (res.status === "ok") {
+        const ok = await enterResolvedGuest(res.tournamentId, res.guestId);
+        if (ok) {
+          router.push("/app/live");
+          return;
+        }
+        setChecking(false);
+        setProblem({ kind: "unavailable" });
+        return;
+      }
+      setChecking(false);
+      if (res.status === "rate-limited") {
+        setProblem({ kind: "rate-limited", until: res.until });
+      } else if (res.status === "unavailable") {
+        setProblem({ kind: "unavailable" });
+      } else {
+        setProblem({ kind: "not-found" });
+      }
     },
     [router],
   );
@@ -111,16 +151,34 @@ function Enter() {
             placeholder="abc-123"
             onChange={(e) => {
               setCode(e.target.value);
-              setFailed(false);
+              setProblem(null);
             }}
             onKeyDown={(e) => e.key === "Enter" && submit(code)}
-            aria-invalid={failed}
+            aria-invalid={Boolean(problem)}
             className="h-14 text-center font-serif text-[30px] tracking-[0.2em] tnum"
           />
-          {failed && (
+          {problem?.kind === "not-found" && (
             <p className="text-[13px] leading-relaxed text-red-flag">
               That code did not open anything. Check it against your
               registration, or ask the desk.
+            </p>
+          )}
+          {problem?.kind === "rate-limited" && (
+            <p className="text-[13px] leading-relaxed text-red-flag">
+              Too many tries from this connection. Wait a moment
+              {problem.until
+                ? ` until ${problem.until.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}`
+                : ""}
+              , then try again, or ask the desk to open your card.
+            </p>
+          )}
+          {problem?.kind === "unavailable" && (
+            <p className="text-[13px] leading-relaxed text-red-flag">
+              We could not reach the scoring service just now. Check your signal
+              and try again, or ask the desk.
             </p>
           )}
         </motion.div>
@@ -135,10 +193,10 @@ function Enter() {
             variant="clay"
             size="lg"
             className="w-full"
-            disabled={normaliseCode(code).length !== 7}
+            disabled={normaliseCode(code).length !== 7 || checking}
             onClick={() => submit(code)}
           >
-            Open my card
+            {checking ? "Opening" : "Open my card"}
             <ArrowRight className="size-4" />
           </Button>
           <Link

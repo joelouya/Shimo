@@ -42,6 +42,14 @@ Binding consequences:
 - **Guest data is opt-in for sponsors.** A guest's details reach a sponsor only
   where that guest explicitly agreed at registration. The default is no. See
   the Data section.
+- **A guest code is scoped and short-lived.** It opens one scorecard in one
+  tournament and nothing else, it stops resolving once that tournament closes,
+  and the codes are never enumerable: there is no surface, client or server,
+  that will list them or confirm which exist. A fresh phone can resolve a
+  pre-issued code through a throttled server call (per-IP lockout that escalates
+  after repeated misses, plus a per-device cap), so guessing costs time. IP is
+  best-effort and spoofable at the edge; it is one obstacle among several, not
+  proof of identity, and nothing in the product claims otherwise.
 
 ## Open
 
