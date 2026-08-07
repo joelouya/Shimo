@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Printer,
   Trash2,
   Trophy,
   Users,
@@ -48,6 +49,7 @@ import {
   startTournamentDay,
   useSim,
 } from "@/lib/sim/store";
+import { printScorecards } from "@/lib/scorecard/print";
 import type { Tournament } from "@/lib/types";
 import { formatKES } from "@/lib/utils";
 
@@ -93,6 +95,7 @@ function TournamentRow({
   onEnd,
   onCopyRegistration,
   onDuplicate,
+  onPrintScorecards,
 }: {
   t: Tournament;
   isNew?: boolean;
@@ -102,6 +105,7 @@ function TournamentRow({
   onEnd: (t: Tournament) => void;
   onCopyRegistration: (t: Tournament) => void;
   onDuplicate: (t: Tournament) => void;
+  onPrintScorecards: (t: Tournament) => void;
 }) {
   return (
     <div
@@ -210,6 +214,10 @@ function TournamentRow({
                 <LinkIcon />
                 Copy registration link
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onPrintScorecards(t)}>
+                <Printer />
+                Print scorecards
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => onDuplicate(t)}>
                 <Copy />
                 Duplicate
@@ -289,6 +297,13 @@ export default function AdminTournamentsPage() {
     if (id) router.push(`/admin/tournaments/new?edit=${id}`);
   }
 
+  async function onPrintScorecards(t: Tournament) {
+    const result = await printScorecards(t.id);
+    // cards only mean anything once the field is drawn, so a club with no tee
+    // sheet is sent to make one
+    if (result === "no-pairings") router.push(`/admin/tournaments/${t.id}/pairings`);
+  }
+
   const deleteIsRemoval = toDelete ? !createdIds.has(toDelete.id) : false;
 
   const [registrationFor, setRegistrationFor] = useState<Tournament | null>(null);
@@ -337,6 +352,7 @@ export default function AdminTournamentsPage() {
                     onDelete={setToDelete}
                     onEnd={setToEnd}
                     onDuplicate={onDuplicate}
+                    onPrintScorecards={onPrintScorecards}
                   />
                 ))}
               </div>
