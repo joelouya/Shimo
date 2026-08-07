@@ -26,6 +26,7 @@ import { useActiveTournament, useCumulative, useMeId, useStandings,
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
+  playerInField,
   setHideLeaderboard,
   useSim,
 } from "@/lib/sim/store";
@@ -49,8 +50,15 @@ function fmtGap(r: StandingRow, mode: ViewMode) {
 function EventTicker() {
   const events = useSim((s) => s.events);
   const latest = events[0];
-  if (!latest) return null;
-  const p = playerById(latest.playerId);
+  /*
+   * Resolve the name from the live field, not the static demo roster. In pilot
+   * every player is real - a member or a guest - and none of them is in the
+   * seed data, so playerById would return undefined and reading .name off it
+   * took the whole leaderboard down. A guest scoring on hole 4 is exactly the
+   * case that used to crash here.
+   */
+  const p = useSim((s) => (latest ? playerInField(s, latest.playerId) : undefined));
+  if (!latest || !p) return null;
   const d = latest.gross - latest.par;
   const word =
     d <= -2 ? "Eagle" : d === -1 ? "Birdie" : d === 0 ? "Par" : d === 1 ? "Bogey" : `Double+`;

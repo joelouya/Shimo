@@ -13,7 +13,7 @@
     "day:sim": "node scripts/corporate-day.mjs",
     "stress": "node scripts/stress.mjs",
     "swarm": "node scripts/swarm.mjs",
-    "sim:check": "node scripts/simulate-check.mjs"
+    "sim:live": "node scripts/sim-live.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.19",

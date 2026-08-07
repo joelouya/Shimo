@@ -12,7 +12,7 @@ attempt at the round.
 | `npm run stress` | Pilot mode, one device, adversarial input and human error | seconds |
 | `npm run tv:sim` | The read-only TV board | seconds |
 | `npm run swarm` | A full field on 31 independent devices, scoring simultaneously over a lossy wire | ~7 minutes |
-| `npm run sim:check` | The live field simulator's own driver: the five forced events, and a full field to eighteen | seconds |
+| `npm run sim:live` | A full field played into the real Supabase, steered from a terminal, watched in the real app | interactive |
 
 ## The swarm
 
@@ -85,28 +85,60 @@ than it sounds like.
 
 ## The live field simulator
 
-`/admin/simulate` (pilot mode only) is not a test - it is a rehearsal
-instrument, meant to be watched. It builds a full field on demand, drives real
-scores through the caddymaster path, and lets an operator reach in and cause
-the exact moment the product was designed for - an eagle, a lead changing
-hands, a correction, a card that outruns its handicap, a desk catching a group
-up - then watch the TV producer, Live Ops and the leaderboard each decide what
-to do about it. The profile (championship, medal, stableford) sets the
-handicaps and format, which is what tells every surface whether gross, net or
-points is the story.
+`npm run sim:live` is not a test - it is a rehearsal instrument, meant to be
+watched. It builds a full field and plays it **into the real Supabase**, the
+way a phone does: the same tables, the same row shapes, the same anon key. Then
+you open the real app - leaderboard, TV, Live Ops - and watch it react to input
+it has no idea is simulated. That is the whole point, and it is the correction
+of an earlier mistake.
 
-`npm run sim:check` is the test behind it: it drives the simulator's own
-imperative API and asserts each forced event really lands - an eagle is a three
-on a par five, a correction becomes an amber, an anomaly reaches the integrity
-log the committee reads, a desk burst moves a whole group, a full field plays
-to eighteen with a well-formed board and no impossible figure. It runs in pilot
-mode so the integrity heuristic is live.
+The first version of this was an in-app control room (`/admin/simulate`) that
+drove one browser tab's memory. It looked like it worked, and it did not: the
+public TV screen reads from Supabase, the player leaderboard reads from the
+store, and an in-tab puppet only lines them up by accident. The lesson is the
+same one the swarm taught - **a rehearsal has to run through the architecture it
+is rehearsing.** So the simulator became an external process that writes where
+real devices write, and the in-app version was removed.
 
-It found two of its own bugs while being written, both worth keeping in mind:
-teardown left the previous round's cards behind, so a rebuilt field inherited
-stale scores (fixed with a scoped `clearSimulatorData`); and the running state
-lives in module memory, not the store, so a page reload stranded a live field
-on the build screen (fixed by reattaching from the store, paused). Watching a
-120-player medal at scale also surfaced that the existing integrity heuristic
-fires for a sizeable slice of a large field - a property of that detector, not
-the simulator, but the kind of thing only a full field makes visible.
+Steer it from the terminal while it runs:
+
+```
+go / pause      start or stop the field advancing
+rate <ms>       how fast holes come in
+eagle           a three on the next par five
+lead            give second place a run that changes the lead
+correction      a revision, into the corrections table (Live Ops picks it up)
+burst           the desk keying a whole group at once
+status          leader and progress
+end             cancel the tournament and purge every simulated row
+```
+
+The profile (`--profile championship|medal|stableford`) sets the handicaps and
+format, which is what tells every surface whether gross, net or points is the
+story.
+
+Everything it writes is prefixed - `sim-` tournaments, `simp-` players - and
+`purge_simulator_data()` (schema-m17) removes exactly those rows and nothing
+else. `end` calls it on the way out; `npm run sim:live -- --purge` calls it and
+writes nothing. The permissive pilot RLS grants insert and update to anon but
+never delete, so the purge is a scoped `security definer` function rather than
+a service-role key, which this project never uses.
+
+### What it found
+
+The player leaderboard crashed on any real field. Its live ticker resolved
+names through the static demo roster (`playerById`), so a member or guest - or
+a simulated player - who was not a hard-coded seed produced `undefined`, and
+reading `.name` off it took the whole board down. In pilot the ticker is always
+shown, so this would have crashed a real tournament's leaderboard the moment a
+score arrived. Fixed to resolve names from the live field. It is exactly the
+class of bug the simulator exists to surface: only a real field, read through
+the real surface, shows it.
+
+### What it does not simulate
+
+The integrity heuristic. That runs only on scores typed at the desk on one
+device, never on scores arriving over the wire, so an anomaly played from here
+shows on the board but not in the committee log. That is a true property of the
+app - integrity detection today is per-device on the entry path - surfaced by
+testing honestly rather than papered over.
