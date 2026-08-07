@@ -21,6 +21,11 @@ import {
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
+import {
+  betterBallTeamRow,
+  scrambleTeamRow,
+  teamStandings,
+} from "@/lib/team-scoring";
 import type { Course, HoleScores, Player, Round, Tournament } from "@/lib/types";
 import {
   LIVE_COURSE,
@@ -184,6 +189,48 @@ export function useStandings(mode: ViewMode, division?: string): StandingRow[] {
       mode,
     );
   }, [scores, mode, division, active]);
+}
+
+/** True when the day is scored as teams rather than individuals. */
+export function isTeamFormat(t: Tournament | undefined): boolean {
+  return t?.format === "Scramble" || t?.format === "Better Ball";
+}
+
+/**
+ * The team board for a Scramble or Better Ball, in the same shape as the
+ * individual board so the leaderboard can render either. A scramble scores the
+ * team's single card off the blended team handicap; a better ball takes each
+ * team's better member on every hole.
+ */
+export function useTeamStandings(mode: ViewMode, division?: string): StandingRow[] {
+  const scores = useRoundScores();
+  const active = useActiveTournament();
+  const teamsByKey = useSim((s) => s.teams);
+  const roster = useSim((s) => s.roster);
+
+  return useMemo(() => {
+    if (!active) return [];
+    const t = active.tournament;
+    const teams = teamsByKey[roundKeyOf(t.id, active.round ?? 1)] ?? [];
+    const allowances = t.handicapAllowances ?? [t.handicapAllowance];
+    const inputs = {
+      course: active.course,
+      allowances,
+      maxCH: t.maxCourseHandicap,
+      maxHoleScore: t.maxHoleScore,
+    };
+    const rows = teams
+      .filter((tm) => !division || division === "Overall" || tm.division === division)
+      .map((tm) => {
+        const members = tm.playerIds
+          .map((id) => roster.find((p) => p.id === id))
+          .filter((p): p is Player => Boolean(p));
+        return t.format === "Scramble"
+          ? scrambleTeamRow(tm, members, scores[tm.id] ?? Array(18).fill(null), inputs)
+          : betterBallTeamRow(tm, members, scores, inputs);
+      });
+    return teamStandings(rows, mode);
+  }, [scores, mode, division, active, teamsByKey, roster]);
 }
 
 export interface CumulativeBoard {

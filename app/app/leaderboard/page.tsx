@@ -19,9 +19,14 @@ import {
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
-import { useActiveTournament, useCumulative, useMeId, useStandings,
-  useRoundScores
-
+import {
+  isTeamFormat,
+  useActiveTournament,
+  useCumulative,
+  useMeId,
+  useRoundScores,
+  useStandings,
+  useTeamStandings,
 } from "@/lib/sim/hooks";
 import {
   LIVE_COURSE,
@@ -444,7 +449,12 @@ function CumulativeRows({
 }
 
 function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string }) {
-  const rows = useStandings(mode, division);
+  const active = useActiveTournament();
+  // a Scramble or Better Ball is scored as teams; both hooks run every render
+  // (rules of hooks) and the format decides which board is shown
+  const teamRows = useTeamStandings(mode, division);
+  const individualRows = useStandings(mode, division);
+  const rows = isTeamFormat(active?.tournament) ? teamRows : individualRows;
   const me = useMeId();
   const [expanded, setExpanded] = useState<string | null>(null);
   const toggle = useCallback(
