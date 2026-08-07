@@ -11,7 +11,8 @@ attempt at the round.
 | `npm run day:sim` | One full corporate day end to end, 120 guests, sponsors, contests, pace, recap pack | seconds |
 | `npm run stress` | Pilot mode, one device, adversarial input and human error | seconds |
 | `npm run tv:sim` | The read-only TV board | seconds |
-| `npm run swarm` | A full field on 31 independent devices, scoring simultaneously over a lossy wire | ~10 minutes |
+| `npm run swarm` | A full field on 31 independent devices, scoring simultaneously over a lossy wire | ~7 minutes |
+| `npm run sim:check` | The live field simulator's own driver: the five forced events, and a full field to eighteen | seconds |
 
 ## The swarm
 
@@ -81,3 +82,31 @@ direct sunlight with 3% battery. Those need a deployment and real handsets on a
 real course. **Nobody has yet run a real tournament on this.** The swarm tests
 Shimo's own reconciliation logic under concurrency, which is a smaller claim
 than it sounds like.
+
+## The live field simulator
+
+`/admin/simulate` (pilot mode only) is not a test - it is a rehearsal
+instrument, meant to be watched. It builds a full field on demand, drives real
+scores through the caddymaster path, and lets an operator reach in and cause
+the exact moment the product was designed for - an eagle, a lead changing
+hands, a correction, a card that outruns its handicap, a desk catching a group
+up - then watch the TV producer, Live Ops and the leaderboard each decide what
+to do about it. The profile (championship, medal, stableford) sets the
+handicaps and format, which is what tells every surface whether gross, net or
+points is the story.
+
+`npm run sim:check` is the test behind it: it drives the simulator's own
+imperative API and asserts each forced event really lands - an eagle is a three
+on a par five, a correction becomes an amber, an anomaly reaches the integrity
+log the committee reads, a desk burst moves a whole group, a full field plays
+to eighteen with a well-formed board and no impossible figure. It runs in pilot
+mode so the integrity heuristic is live.
+
+It found two of its own bugs while being written, both worth keeping in mind:
+teardown left the previous round's cards behind, so a rebuilt field inherited
+stale scores (fixed with a scoped `clearSimulatorData`); and the running state
+lives in module memory, not the store, so a page reload stranded a live field
+on the build screen (fixed by reattaching from the store, paused). Watching a
+120-player medal at scale also surfaced that the existing integrity heuristic
+fires for a sizeable slice of a large field - a property of that detector, not
+the simulator, but the kind of thing only a full field makes visible.

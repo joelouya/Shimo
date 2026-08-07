@@ -2583,6 +2583,46 @@ export function adoptTournament(id: string) {
   });
 }
 
+/**
+ * Wipe the transient state of a simulated round, so the field simulator can
+ * rebuild from a clean slate.
+ *
+ * Every real path in the product deliberately never deletes - a card, a flag
+ * and an audit line are records, and records are kept. This is the one
+ * exception, and it is safe because it is scoped twice over: it only touches a
+ * given round key, and among the global collections it only drops rows whose
+ * player carries the simulator's own id prefix. It cannot reach a real
+ * tournament's data even if called with the wrong id.
+ */
+export function clearSimulatorData(
+  tournamentId: string,
+  round: number,
+  playerPrefix: string,
+) {
+  const key = roundKey(tournamentId, round);
+  const mine = (pid?: string) => Boolean(pid && pid.startsWith(playerPrefix));
+  mutate((draft) => {
+    delete draft.scores[key];
+    delete draft.markerScores[key];
+    delete draft.certifications[key];
+    delete draft.cardIn[key];
+    delete draft.pairings[key];
+    for (const k of Object.keys(draft.pace)) {
+      if (k.startsWith(`${key}:`)) delete draft.pace[k];
+    }
+    draft.events = draft.events.filter((e) => !mine(e.playerId));
+    draft.flags = draft.flags.filter((f) => !mine(f.playerId));
+    draft.integrityLog = draft.integrityLog.filter((f) => !mine(f.playerId));
+    draft.corrections = draft.corrections.filter((c) => !mine(c.playerId));
+    draft.disputes = draft.disputes.filter((d) => !mine(d.playerId));
+    draft.auditLog = draft.auditLog.filter(
+      (a) => !mine(a.playerId) && !mine(a.actor),
+    );
+    draft.exposure = draft.exposure.filter((x) => x.tournamentId !== tournamentId);
+    draft.roster = draft.roster.filter((p) => !mine(p.id));
+  });
+}
+
 export function deleteTournament(id: string) {
   mutate((draft) => {
     const t = draft.created.find((x) => x.id === id);

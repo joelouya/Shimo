@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  FlaskConical,
   LayoutGrid,
   Radio,
   Settings,
@@ -25,6 +26,11 @@ const NAV = [
   { href: "/admin/members", label: "Members", icon: Users },
   { href: "/admin/live", label: "Live Ops", icon: Radio },
   { href: "/admin/tv", label: "TV producer", icon: Tv },
+  // a rehearsal instrument, not a club-facing surface, so it only appears on
+  // the pilot server where it actually runs
+  ...(IS_PILOT
+    ? [{ href: "/admin/simulate", label: "Simulator", icon: FlaskConical }]
+    : []),
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

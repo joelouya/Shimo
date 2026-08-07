@@ -12,7 +12,8 @@
     "tv:sim": "node scripts/tv-simulate.mjs",
     "day:sim": "node scripts/corporate-day.mjs",
     "stress": "node scripts/stress.mjs",
-    "swarm": "node scripts/swarm.mjs"
+    "swarm": "node scripts/swarm.mjs",
+    "sim:check": "node scripts/simulate-check.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.19",
