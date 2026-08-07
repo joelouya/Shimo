@@ -55,6 +55,15 @@ export function tournamentToRow(t: Tournament) {
     field_size: t.fieldSize,
     rounds: t.rounds ?? null,
     correction_window_min: t.correctionWindowMin ?? 15,
+    players_per_team: t.playersPerTeam ?? null,
+    handicap_allowances: t.handicapAllowances ?? null,
+    max_course_handicap: t.maxCourseHandicap ?? null,
+    max_course_handicap_differential: t.maxCourseHandicapDifferential ?? null,
+    max_hole_score: t.maxHoleScore ?? null,
+    ryder_cup: t.ryderCup ?? null,
+    waitlist: t.waitlist ?? null,
+    require_full_team: t.requireFullTeam ?? null,
+    registration_questions: t.registrationQuestions ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -99,6 +108,17 @@ export function rowToTournament(r: Record<string, unknown>): Tournament {
     fieldSize: (r.field_size as number) ?? 0,
     rounds: (r.rounds as Tournament["rounds"]) ?? undefined,
     correctionWindowMin: (r.correction_window_min as number) ?? 15,
+    playersPerTeam: (r.players_per_team as number) ?? undefined,
+    handicapAllowances: (r.handicap_allowances as number[]) ?? undefined,
+    maxCourseHandicap: (r.max_course_handicap as number) ?? undefined,
+    maxCourseHandicapDifferential:
+      (r.max_course_handicap_differential as number) ?? undefined,
+    maxHoleScore: (r.max_hole_score as Tournament["maxHoleScore"]) ?? undefined,
+    ryderCup: (r.ryder_cup as Tournament["ryderCup"]) ?? undefined,
+    waitlist: (r.waitlist as boolean) ?? undefined,
+    requireFullTeam: (r.require_full_team as boolean) ?? undefined,
+    registrationQuestions:
+      (r.registration_questions as Tournament["registrationQuestions"]) ?? undefined,
   };
 }
 
