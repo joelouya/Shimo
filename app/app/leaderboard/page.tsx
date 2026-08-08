@@ -25,6 +25,7 @@ import {
   useCumulative,
   useMeId,
   useRoundScores,
+  useRyderCupBoard,
   useStandings,
   useTeamStandings,
 } from "@/lib/sim/hooks";
@@ -491,6 +492,94 @@ function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string 
 
 /* ------------------------------------------------------------------ */
 
+function RyderCupBoardView() {
+  const board = useRyderCupBoard();
+  const roster = useSim((s) => s.roster);
+  if (!board) return null;
+
+  const surnames = (ids: string[]) =>
+    ids
+      .map((id) => (roster.find((p) => p.id === id)?.name ?? id).split(" ").pop())
+      .join(" & ");
+  const [aScore, bScore] = board.score.split(" – ");
+  const bySession = new Map<number, typeof board.matches>();
+  for (const m of board.matches) {
+    const list = bySession.get(m.match.round) ?? [];
+    list.push(m);
+    bySession.set(m.match.round, list);
+  }
+  const FORMAT_LABEL: Record<string, string> = {
+    fourball: "Fourball", foursomes: "Foursomes", singles: "Singles",
+  };
+
+  return (
+    <div className="mt-4">
+      {/* the number the room watches */}
+      <div className="rounded-2xl bg-primary px-5 py-5 text-cream shadow-card">
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex-1 truncate font-serif text-[19px]">{board.sideA.name}</span>
+          <span className="font-serif text-[30px] tnum">
+            {aScore} <span className="text-cream/50">–</span> {bScore}
+          </span>
+          <span className="flex-1 truncate text-right font-serif text-[19px]">
+            {board.sideB.name}
+          </span>
+        </div>
+        <p className="mt-1.5 text-center text-[12px] text-cream/70">
+          {board.clinchedBy
+            ? `${board.clinchedBy === board.sideA.id ? board.sideA.name : board.sideB.name} win · ${board.pointsToWin} to clinch`
+            : `First to ${board.pointsToWin} points wins`}
+        </p>
+      </div>
+
+      {[...bySession.keys()].sort((a, b) => a - b).map((round) => (
+        <div key={round} className="mt-5">
+          <p className="smallcaps text-muted-foreground">
+            Session {round} · {FORMAT_LABEL[bySession.get(round)![0].format] ?? ""}
+          </p>
+          <div className="mt-2 overflow-hidden rounded-2xl bg-card shadow-card">
+            {bySession.get(round)!.map((m) => {
+              const aLeads = m.leaderSideId === board.sideA.id;
+              const bLeads = m.leaderSideId === board.sideB.id;
+              return (
+                <div
+                  key={m.match.id}
+                  className="grid grid-cols-[1fr_5rem_1fr] items-center gap-2 border-b border-border/50 px-3 py-2.5 last:border-b-0"
+                >
+                  <span
+                    className={cn(
+                      "truncate text-[13.5px]",
+                      aLeads ? "font-semibold text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {surnames(m.match.sideA)}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-center text-[12.5px] font-medium tnum",
+                      m.decided ? "text-clay-deep" : "text-ink-soft",
+                    )}
+                  >
+                    {m.status || "–"}
+                  </span>
+                  <span
+                    className={cn(
+                      "truncate text-right text-[13.5px]",
+                      bLeads ? "font-semibold text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {surnames(m.match.sideB)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function LeaderboardPage() {
   const hidden = useSim((s) => s.hideLeaderboard);
   const attested = useSim((s) => s.attested);
@@ -575,6 +664,8 @@ export default function LeaderboardPage() {
             </Button>
           </div>
         </div>
+      ) : active.tournament.ryderCup ? (
+        <RyderCupBoardView />
       ) : (
         <>
           {!IS_PILOT && <FeaturedGroups />}

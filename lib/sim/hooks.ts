@@ -26,6 +26,7 @@ import {
   scrambleTeamRow,
   teamStandings,
 } from "@/lib/team-scoring";
+import { ryderCupBoard, type RyderBoard } from "@/lib/ryder";
 import type { Course, HoleScores, Player, Round, Tournament } from "@/lib/types";
 import {
   LIVE_COURSE,
@@ -231,6 +232,29 @@ export function useTeamStandings(mode: ViewMode, division?: string): StandingRow
       });
     return teamStandings(rows, mode);
   }, [scores, mode, division, active, teamsByKey, roster]);
+}
+
+/** The Ryder Cup scoreboard for the active event, or null if it is not one. */
+export function useRyderCupBoard(): RyderBoard | null {
+  const active = useActiveTournament();
+  const allScores = useSim((s) => s.scores);
+  const roster = useSim((s) => s.roster);
+  return useMemo(() => {
+    const t = active?.tournament;
+    if (!t?.ryderCup) return null;
+    const sessions = roundsOf(t).map((r) => ({
+      number: r.number,
+      sessionFormat: r.sessionFormat ?? "singles",
+      course: COURSES.find((c) => c.id === r.courseId) ?? active!.course,
+    }));
+    return ryderCupBoard(
+      t.ryderCup,
+      sessions,
+      (round) => allScores[roundKeyOf(t.id, round)] ?? {},
+      (id) => roster.find((p) => p.id === id)?.handicap ?? 0,
+      t.maxHoleScore,
+    );
+  }, [active, allScores, roster]);
 }
 
 export interface CumulativeBoard {
