@@ -323,12 +323,20 @@ export default function AdminTournamentsPage() {
             The season, in one place
           </h1>
         </div>
-        <Button variant="clay" size="lg" asChild>
-          <Link href="/admin/tournaments/new">
-            <Plus className="size-4" />
-            Create tournament
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/admin/tournaments/ryder">
+              <Trophy className="size-4" />
+              Ryder Cup
+            </Link>
+          </Button>
+          <Button variant="clay" size="lg" asChild>
+            <Link href="/admin/tournaments/new">
+              <Plus className="size-4" />
+              Create tournament
+            </Link>
+          </Button>
+        </div>
       </header>
 
       {[
