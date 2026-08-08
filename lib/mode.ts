@@ -16,4 +16,9 @@ export const IS_PILOT = SHIMO_MODE === "pilot";
 export const IS_DEMO = !IS_PILOT;
 
 /** Formats with fully-wired scoring today. */
-export const WIRED_FORMATS = ["Stableford", "Stroke Play"] as const;
+export const WIRED_FORMATS = [
+  "Stableford",
+  "Stroke Play",
+  "Scramble",
+  "Better Ball",
+] as const;

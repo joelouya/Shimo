@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { GROUPS, clubById } from "@/lib/data";
 import {
   allTournaments,
+  saveTeams,
   cutAfterRound,
   fieldOfRound,
   groupsFromOrder,
@@ -81,6 +82,117 @@ function PlayerChip({
         >
           <X className="size-3" />
         </button>
+      )}
+    </div>
+  );
+}
+
+interface DraftTeam {
+  id: string;
+  name: string;
+  playerIds: string[];
+}
+
+/**
+ * Turn a tee sheet into teams for a Scramble or Better Ball. A group can hold
+ * more than one team, so the pairs are cut from the groups in order - the first
+ * two players a four-ball, then the next two - and named from their surnames.
+ * The club renames as it likes; the teams autosave the way the pairings do.
+ */
+function TeamsPanel({
+  tournamentId,
+  round,
+  groups,
+  byId,
+  playersPerTeam,
+}: {
+  tournamentId: string;
+  round: number;
+  groups: DraftGroup[];
+  byId: Map<string, Player>;
+  playersPerTeam: number;
+}) {
+  const saved = useSim((s) => s.teams[roundKey(tournamentId, round)]);
+  const [teams, setTeams] = useState<DraftTeam[]>([]);
+  const [loaded, setLoaded] = useState(-1);
+  if (loaded !== round) {
+    setLoaded(round);
+    setTeams((saved ?? []).map((t) => ({ id: t.id, name: t.name, playerIds: [...t.playerIds] })));
+  }
+
+  useEffect(() => {
+    saveTeams(
+      tournamentId,
+      teams.map((t) => ({ ...t, tournamentId, round })),
+      round,
+    );
+  }, [teams, tournamentId, round]);
+
+  const surname = (id: string) => byId.get(id)?.name.split(" ").pop() ?? id;
+
+  const autoForm = () => {
+    const next: DraftTeam[] = [];
+    let n = 0;
+    for (const g of groups) {
+      for (let k = 0; k < g.playerIds.length; k += playersPerTeam) {
+        const playerIds = g.playerIds.slice(k, k + playersPerTeam);
+        if (!playerIds.length) continue;
+        next.push({
+          id: `tm-${round}-${n++}`,
+          name: playerIds.map(surname).join(" + "),
+          playerIds,
+        });
+      }
+    }
+    setTeams(next);
+  };
+
+  const assignedToTeams = new Set(teams.flatMap((t) => t.playerIds)).size;
+  const inField = new Set(groups.flatMap((g) => g.playerIds)).size;
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="smallcaps text-clay">Teams</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            {teams.length
+              ? `${teams.length} teams · ${assignedToTeams} of ${inField} players`
+              : "No teams yet. Form them from the tee sheet, then rename."}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={autoForm} disabled={!inField}>
+          <Users className="size-4" />
+          {teams.length ? "Re-form from tee sheet" : "Form teams"}
+        </Button>
+      </div>
+
+      {teams.length > 0 && (
+        <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {teams.map((t, i) => (
+            <div key={t.id} className="rounded-2xl bg-card p-3.5 shadow-card">
+              <Input
+                value={t.name}
+                onChange={(e) =>
+                  setTeams((cur) =>
+                    cur.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)),
+                  )
+                }
+                className="h-9 font-serif text-[15px]"
+              />
+              <div className="mt-2 flex flex-col gap-1">
+                {t.playerIds.map((pid) => (
+                  <span key={pid} className="text-[13px] text-ink-soft">
+                    {byId.get(pid)?.name ?? pid}
+                    {byId.get(pid) ? (
+                      <span className="text-muted-foreground"> · HC {byId.get(pid)!.handicap}</span>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -400,6 +512,16 @@ export default function PairingsPage({
               </div>
             ))}
           </div>
+
+          {t && (t.format === "Scramble" || t.format === "Better Ball") && (
+            <TeamsPanel
+              tournamentId={id}
+              round={round}
+              groups={groups}
+              byId={byId}
+              playersPerTeam={t.playersPerTeam ?? 2}
+            />
+          )}
         </div>
       </div>
     </div>

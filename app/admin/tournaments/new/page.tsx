@@ -100,6 +100,9 @@ const FORMATS: Format[] = IS_PILOT
   ? ALL_FORMATS.filter((f) => (WIRED_FORMATS as readonly string[]).includes(f))
   : ALL_FORMATS;
 
+/** A day scored as teams rather than individuals. */
+const isTeamFormat = (f: Format) => f === "Scramble" || f === "Better Ball";
+
 interface Draft {
   name: string;
   date: string;
@@ -131,6 +134,13 @@ interface Draft {
   /** true once the admin edits the cutoff, so it stops following round 1 */
   regClosesTouched?: boolean;
   allowance: number;
+  /** team formats: players per team, and the allowance for each position */
+  playersPerTeam: number;
+  teamAllowances: number[];
+  /** cap each member's course handicap before allowances; null = no cap */
+  maxCourseHandicap: number | null;
+  /** cap on the gross that counts toward net/points */
+  maxHoleScore: "none" | "net-double-bogey";
   /** how TV mode should talk about this field; null means follow the guess */
   fieldProfile: FieldProfile | null;
   /** how much the clubhouse screen says; null means follow the field */
@@ -171,6 +181,10 @@ const INITIAL: Draft = {
   regCloses: "2026-08-20",
   regClosesAt: defaultRegClosesAt("2026-08-22"),
   allowance: 95,
+  playersPerTeam: 2,
+  teamAllowances: [35, 15],
+  maxCourseHandicap: null,
+  maxHoleScore: "none",
   fieldProfile: null,
   tvCoverage: null,
   countback: "Back 9, then back 6, then back 3",
@@ -214,6 +228,10 @@ function draftFromTournament(t: Tournament): Draft {
     regCloses: t.regCloses,
     regClosesAt: t.regClosesAt ?? defaultRegClosesAt(roundsOf(t)[0].date),
     allowance: t.handicapAllowance,
+    playersPerTeam: t.playersPerTeam ?? 2,
+    teamAllowances: t.handicapAllowances ?? [35, 15],
+    maxCourseHandicap: t.maxCourseHandicap ?? null,
+    maxHoleScore: t.maxHoleScore === "net-double-bogey" ? "net-double-bogey" : "none",
     fieldProfile: t.fieldProfile ?? null,
     tvCoverage: t.tvCoverage ?? null,
     countback: INITIAL.countback,
@@ -678,6 +696,14 @@ function CreateTournamentInner() {
       regCloses: draft.regClosesAt.slice(0, 10),
       regClosesAt: draft.regClosesAt,
       handicapAllowance: draft.allowance,
+      ...(isTeamFormat(draft.format)
+        ? {
+            playersPerTeam: draft.playersPerTeam,
+            handicapAllowances: draft.teamAllowances.slice(0, draft.playersPerTeam),
+            maxCourseHandicap: draft.maxCourseHandicap ?? undefined,
+          }
+        : {}),
+      maxHoleScore: draft.maxHoleScore === "none" ? undefined : draft.maxHoleScore,
       fieldProfile: draft.fieldProfile ?? guess.profile,
       tvCoverage: draft.tvCoverage ?? defaultCoverage(draft.fieldProfile ?? guess.profile),
       firstTee: editing?.firstTee ?? "07:30",
@@ -1360,23 +1386,124 @@ function CreateTournamentInner() {
 
             {step === 5 && (
               <div className="flex flex-col gap-5">
+                {!isTeamFormat(draft.format) ? (
+                  <Field
+                    label="Handicap allowance"
+                    hint="WHS recommends 95% for individual stroke play and Stableford."
+                  >
+                    <Select
+                      value={String(draft.allowance)}
+                      onValueChange={(v) => set("allowance", Number(v))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[100, 95, 90, 85].map((a) => (
+                          <SelectItem key={a} value={String(a)}>
+                            {a}%
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                ) : (
+                  <>
+                    <Field
+                      label="Players per team"
+                      hint="Two for a pairs scramble or a better ball; more for a bigger team."
+                    >
+                      <Select
+                        value={String(draft.playersPerTeam)}
+                        onValueChange={(v) => {
+                          const n = Number(v);
+                          // keep an allowance per position: pad with the last, trim the rest
+                          const cur = draft.teamAllowances;
+                          const next = Array.from(
+                            { length: n },
+                            (_, i) => cur[i] ?? cur[cur.length - 1] ?? 0,
+                          );
+                          set("playersPerTeam", n);
+                          set("teamAllowances", next);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[2, 3, 4].map((n) => (
+                            <SelectItem key={n} value={String(n)}>
+                              {n} players
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field
+                      label="Handicap allowance per position"
+                      hint="Lowest handicap first. A two-person scramble is usually 35% and 15%."
+                    >
+                      <div className="flex flex-wrap gap-3">
+                        {draft.teamAllowances.slice(0, draft.playersPerTeam).map((a, i) => (
+                          <div key={i} className="flex flex-col gap-1">
+                            <span className="text-[11px] text-muted-foreground">
+                              {["Lowest", "2nd", "3rd", "4th"][i]}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                className="w-20"
+                                value={String(a)}
+                                onChange={(e) =>
+                                  set(
+                                    "teamAllowances",
+                                    draft.teamAllowances.map((v, idx) =>
+                                      idx === i ? Number(e.target.value || 0) : v,
+                                    ),
+                                  )
+                                }
+                              />
+                              <span className="text-[13px] text-muted-foreground">%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </Field>
+                    <Field
+                      label="Maximum course handicap"
+                      hint="Caps each member's course handicap before allowances. Leave blank for none."
+                    >
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        className="w-28"
+                        placeholder="None"
+                        value={draft.maxCourseHandicap == null ? "" : String(draft.maxCourseHandicap)}
+                        onChange={(e) =>
+                          set(
+                            "maxCourseHandicap",
+                            e.target.value.trim() === "" ? null : Number(e.target.value),
+                          )
+                        }
+                      />
+                    </Field>
+                  </>
+                )}
                 <Field
-                  label="Handicap allowance"
-                  hint="WHS recommends 95% for individual stroke play and Stableford."
+                  label="Maximum hole score"
+                  hint="Caps the score that counts toward net and points; the real gross is still recorded."
                 >
                   <Select
-                    value={String(draft.allowance)}
-                    onValueChange={(v) => set("allowance", Number(v))}
+                    value={draft.maxHoleScore}
+                    onValueChange={(v) => set("maxHoleScore", v as Draft["maxHoleScore"])}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {[100, 95, 90, 85].map((a) => (
-                        <SelectItem key={a} value={String(a)}>
-                          {a}%
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="none">No cap</SelectItem>
+                      <SelectItem value="net-double-bogey">Net double bogey</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
