@@ -51,6 +51,7 @@ const { scorePayload } = await jiti.import("../lib/integrity.ts");
 const MAP = await jiti.import("../lib/sync/mappers.ts");
 const SCORE = await jiti.import("../lib/scoring.ts");
 const TEAM = await jiti.import("../lib/team-scoring.ts");
+const RYDER = await jiti.import("../lib/ryder.ts");
 
 /* ---- tiny assertion harness ---- */
 let pass = 0;
@@ -2877,6 +2878,58 @@ section("A stale row must not overwrite a fresh one");
   check("a genuinely newer row still applies",
     !st().created.some((x) => x.id === t.id),
     "dropping stale rows must not turn into dropping every row");
+}
+
+/* ------------------------------------------------------------------ */
+/* Ryder Cup: sessions, points, clinch                                 */
+/* ------------------------------------------------------------------ */
+{
+  const flat = {
+    id: "flat", clubId: "x", name: "Flat", tees: "White", par: 72,
+    holes: Array.from({ length: 18 }, (_, i) => ({ hole: i + 1, par: 4, si: i + 1, yards: 400 })),
+  };
+  const par18 = () => Array(18).fill(4);
+  const bogey18 = () => Array(18).fill(5);
+
+  const config = {
+    sides: [
+      { id: "usa", name: "USA", playerIds: ["a1", "a2"] },
+      { id: "eur", name: "EUR", playerIds: ["b1", "b2"] },
+    ],
+    pointsToWin: 2.5,
+    winPoints: 1,
+    halfPoints: 0.5,
+    matches: [
+      { id: "m1", round: 1, sideA: ["a1", "a2"], sideB: ["b1", "b2"] }, // fourball
+      { id: "m2", round: 2, sideA: ["a1", "a2"], sideB: ["b1", "b2"] }, // foursomes
+      { id: "m3", round: 3, sideA: ["a1"], sideB: ["b1"] }, // singles
+      { id: "m4", round: 3, sideA: ["a2"], sideB: ["b2"] }, // singles
+    ],
+  };
+  const sessions = [
+    { number: 1, sessionFormat: "fourball", course: flat },
+    { number: 2, sessionFormat: "foursomes", course: flat },
+    { number: 3, sessionFormat: "singles", course: flat },
+  ];
+  const byRound = {
+    1: { a1: par18(), a2: par18(), b1: bogey18(), b2: bogey18() }, // USA better every hole
+    2: { "m2:A": par18(), "m2:B": par18() }, // foursomes: level, halved
+    3: { a1: par18(), b1: bogey18(), a2: bogey18(), b2: par18() }, // m3 USA, m4 EUR
+  };
+  const board = RYDER.ryderCupBoard(
+    config, sessions, (r) => byRound[r] ?? {}, () => 0,
+  );
+
+  section("Ryder Cup: sessions, points, clinch");
+  const m = Object.fromEntries(board.matches.map((x) => [x.match.id, x]));
+  check("fourball match goes to the better pair", m.m1.points.a === 1 && m.m1.decided);
+  check("a level foursomes is halved", m.m2.points.a === 0.5 && m.m2.points.b === 0.5);
+  check("singles split as scored", m.m3.points.a === 1 && m.m4.points.b === 1);
+  check("side totals sum the matches", board.totals.a === 2.5 && board.totals.b === 1.5,
+    JSON.stringify(board.totals));
+  check("the headline uses halves", board.score === "2½ – 1½", board.score);
+  check("the side that reaches the target clinches", board.clinchedBy === "usa",
+    String(board.clinchedBy));
 }
 
 /* ------------------------------------------------------------------ */
