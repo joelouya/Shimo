@@ -525,7 +525,7 @@ function RyderCupBoardView() {
             {board.sideB.name}
           </span>
         </div>
-        <p className="mt-1.5 text-center text-[12px] text-cream/70">
+        <p className="mt-1.5 text-center text-[11px] text-cream/70">
           {board.clinchedBy
             ? `${board.clinchedBy === board.sideA.id ? board.sideA.name : board.sideB.name} win · ${board.pointsToWin} to clinch`
             : `First to ${board.pointsToWin} points wins`}
