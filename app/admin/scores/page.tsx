@@ -23,7 +23,10 @@ import {
 import { LiveBadge } from "@/components/live-dot";
 import { PublishButton } from "@/components/admin/publish-card";
 import { courseById } from "@/lib/data";
-import { rowStats, handicapSet } from "@/lib/scoring";
+import { cardStats, rowStats, handicapSet } from "@/lib/scoring";
+import { teamPlayingHandicap } from "@/lib/team-scoring";
+import { roundKey } from "@/lib/rounds";
+import type { Team } from "@/lib/types";
 import { useActiveTournament, useSyncStatus,
   useRoundScores,
   useRoundMarkerScores,
@@ -264,11 +267,90 @@ function ScanCardDialog({
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * A scramble team's row: one card, scored off the blended team handicap, with a
+ * cell per hole that writes under the team's id. There is no per-player
+ * attestation ceremony here - a team returns one card - so the last column
+ * shows progress rather than the individual publish button.
+ */
+function TeamRow({
+  team,
+  byId,
+  scores,
+  cardIn,
+  course,
+  allowances,
+  maxCH,
+  maxHoleScore,
+  isStableford,
+  onEnter,
+}: {
+  team: Team;
+  byId: Map<string, Player>;
+  scores: Record<string, (number | null)[]>;
+  cardIn: Record<string, boolean>;
+  tournamentId: string;
+  round: number;
+  course: Course;
+  allowances: number[];
+  maxCH?: number;
+  maxHoleScore?: "none" | "net-double-bogey" | number;
+  isStableford: boolean;
+  onEnter: (pid: string) => void;
+}) {
+  const members = team.playerIds
+    .map((id) => byId.get(id))
+    .filter((p): p is Player => Boolean(p));
+  const teamPH = teamPlayingHandicap(members, course, allowances, maxCH ?? undefined);
+  const card = scores[team.id] ?? [];
+  const st = cardStats(card, course, teamPH, maxHoleScore ?? "none");
+  return (
+    <tr className="border-t border-border/60">
+      <td className="sticky left-0 z-10 min-w-[168px] bg-background px-3 py-1.5">
+        <p className="truncate text-[14px] font-medium text-foreground">{team.name}</p>
+        <p className="text-[11px] text-muted-foreground tnum">
+          {members.map((m) => m.name.split(" ")[0]).join(" + ")} · PH {teamPH}
+        </p>
+      </td>
+      {course.holes.map((h, i) => (
+        <td key={h.hole} className="px-0.5 py-1.5">
+          <Cell
+            pid={team.id}
+            holeIdx={i}
+            value={card[i] ?? null}
+            par={h.par}
+            onEnter={onEnter}
+          />
+        </td>
+      ))}
+      <td className="sticky right-16 z-10 min-w-[132px] border-l border-border/60 bg-background px-3 py-1.5 text-right">
+        <p className="leading-tight">
+          <span className="font-serif text-[17px] text-foreground tnum">
+            {st.thru ? st.grossTotal : "·"}
+          </span>
+          <span className="ml-1.5 text-[12px] text-muted-foreground tnum">
+            {st.thru ? `${toPar(st.netToPar)} net` : ""}
+          </span>
+          {isStableford && st.thru > 0 && (
+            <span className="ml-1.5 text-[14px] font-medium text-clay-deep tnum">
+              {st.points} pts
+            </span>
+          )}
+        </p>
+      </td>
+      <td className="sticky right-0 z-10 w-16 bg-background px-3 text-center text-[11px] text-muted-foreground tnum">
+        {st.thru >= 18 ? "Full" : st.thru ? st.thru : "·"}
+      </td>
+    </tr>
+  );
+}
+
 export default function BulkScoresPage() {
   const active = useActiveTournament();
   const scores = useRoundScores();
   const cardIn = useRoundCardIn();
   const liveRound = useSim((s) => s.liveRound);
+  const teamsByKey = useSim((s) => s.teams);
   const { online, failed } = useSyncStatus();
   const [scanOpen, setScanOpen] = useState(false);
 
@@ -328,6 +410,12 @@ export default function BulkScoresPage() {
   const isStableford = tournament.format === "Stableford";
   const fieldSize = flatPlayerIds.length;
   const cardsIn = flatPlayerIds.filter((pid) => cardIn[pid]).length;
+
+  // a scramble is entered as one card per team; a better ball keeps per-player
+  // cards (the team is derived from the better member on each hole)
+  const isScramble = tournament.format === "Scramble";
+  const teams = teamsByKey[roundKey(tournament.id, liveRound)] ?? [];
+  const teamAllowances = tournament.handicapAllowances ?? [tournament.handicapAllowance];
 
   const scoresKeyFor = (pid: string) => (scores[pid] ?? []).join(",");
 
@@ -413,23 +501,41 @@ export default function BulkScoresPage() {
             </tr>
           </thead>
           <tbody>
-            {groups.map((g) => (
-              <GroupRows
-                key={g.id}
-                group={g}
-                byId={byId}
-                scores={scores}
-                cardIn={cardIn}
-                tournamentId={tournament.id}
-                round={liveRound}
-                course={course}
-                allowance={tournament.handicapAllowance}
-                isStableford={isStableford}
-                onEnter={focusNextPlayer}
-                scoresKeyFor={scoresKeyFor}
-                colSpan={21}
-              />
-            ))}
+            {isScramble && teams.length
+              ? teams.map((tm) => (
+                  <TeamRow
+                    key={tm.id}
+                    team={tm}
+                    byId={byId}
+                    scores={scores}
+                    cardIn={cardIn}
+                    tournamentId={tournament.id}
+                    round={liveRound}
+                    course={course}
+                    allowances={teamAllowances}
+                    maxCH={tournament.maxCourseHandicap}
+                    maxHoleScore={tournament.maxHoleScore}
+                    isStableford={isStableford}
+                    onEnter={focusNextPlayer}
+                  />
+                ))
+              : groups.map((g) => (
+                  <GroupRows
+                    key={g.id}
+                    group={g}
+                    byId={byId}
+                    scores={scores}
+                    cardIn={cardIn}
+                    tournamentId={tournament.id}
+                    round={liveRound}
+                    course={course}
+                    allowance={tournament.handicapAllowance}
+                    isStableford={isStableford}
+                    onEnter={focusNextPlayer}
+                    scoresKeyFor={scoresKeyFor}
+                    colSpan={21}
+                  />
+                ))}
           </tbody>
         </table>
         {groups.length === 0 && (
