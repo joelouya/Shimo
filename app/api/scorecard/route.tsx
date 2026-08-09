@@ -39,6 +39,8 @@ const fonts = [
 
 const LABEL_W = 320;
 const CELL_W = 62;
+const INFO_H = 44; // hole / yards / SI / par rows
+const WRITE_MIN = 92; // a writing row's floor; it grows to fill the card
 
 /* ------------------------------------------------------------------ */
 
@@ -47,14 +49,12 @@ function Cell({
   w = CELL_W,
   shaded,
   header,
-  tall,
   align = "center",
 }: {
   children?: React.ReactNode;
   w?: number;
   shaded?: boolean;
   header?: boolean;
-  tall?: boolean;
   align?: "center" | "flex-start";
 }) {
   return (
@@ -62,16 +62,17 @@ function Cell({
       style={{
         display: "flex",
         width: w,
-        height: tall ? 60 : 40,
+        // no fixed height: the cell stretches to its row, so writing rows can
+        // grow to fill the card the way a real scorecard's do
         alignItems: "center",
         justifyContent: align,
-        paddingLeft: align === "flex-start" ? 12 : 0,
+        paddingLeft: align === "flex-start" ? 14 : 0,
         borderRight: `1px solid ${BORDER}`,
         borderBottom: `1px solid ${BORDER}`,
         background: shaded ? SHADE : "transparent",
         fontFamily: "Inter",
         fontWeight: header ? 600 : 400,
-        fontSize: header ? 18 : 20,
+        fontSize: header ? 19 : 22,
         color: header ? INK_SOFT : NAVY,
       }}
     >
@@ -89,7 +90,7 @@ function Row({
   inn,
   tot,
   header,
-  tall,
+  write,
 }: {
   label: React.ReactNode;
   front: (React.ReactNode | undefined)[];
@@ -98,22 +99,30 @@ function Row({
   inn?: React.ReactNode;
   tot?: React.ReactNode;
   header?: boolean;
-  tall?: boolean;
+  /** a player's writing row: grows to fill the card and floors at WRITE_MIN */
+  write?: boolean;
 }) {
   return (
-    <div style={{ display: "flex" }}>
-      <Cell w={LABEL_W} shaded={header} header={header} tall={tall} align="flex-start">
+    <div
+      style={{
+        display: "flex",
+        ...(write
+          ? { flexGrow: 1, flexBasis: 0, minHeight: WRITE_MIN }
+          : { height: INFO_H }),
+      }}
+    >
+      <Cell w={LABEL_W} shaded={header} header={header} align="flex-start">
         {label}
       </Cell>
       {front.map((c, i) => (
-        <Cell key={`f${i}`} shaded={header} header={header} tall={tall}>{c}</Cell>
+        <Cell key={`f${i}`} shaded={header} header={header}>{c}</Cell>
       ))}
-      <Cell shaded header tall={tall}>{out}</Cell>
+      <Cell shaded header>{out}</Cell>
       {back.map((c, i) => (
-        <Cell key={`b${i}`} shaded={header} header={header} tall={tall}>{c}</Cell>
+        <Cell key={`b${i}`} shaded={header} header={header}>{c}</Cell>
       ))}
-      <Cell shaded header tall={tall}>{inn}</Cell>
-      <Cell shaded header tall={tall}>{tot}</Cell>
+      <Cell shaded header>{inn}</Cell>
+      <Cell shaded header>{tot}</Cell>
     </div>
   );
 }
@@ -135,29 +144,34 @@ function Card({ spec, cardIndex }: { spec: ScorecardSpec; cardIndex: number }) {
         width: W,
         height: H,
         background: CREAM,
-        padding: 56,
+        padding: 48,
         fontFamily: "Inter",
       }}
     >
       {/* header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", fontFamily: "Inter", fontWeight: 600, fontSize: 20, letterSpacing: 2, textTransform: "uppercase", color: STONE }}>
+          <div style={{ display: "flex", fontFamily: "Inter", fontWeight: 600, fontSize: 19, letterSpacing: 2, textTransform: "uppercase", color: STONE }}>
             {spec.event.club}
           </div>
-          <div style={{ display: "flex", fontFamily: "Fraunces", fontWeight: 600, fontSize: 46, color: NAVY, marginTop: 6 }}>
+          <div style={{ display: "flex", fontFamily: "Fraunces", fontWeight: 600, fontSize: 40, color: NAVY, marginTop: 5 }}>
             {spec.event.title}
           </div>
-          <div style={{ display: "flex", fontSize: 22, color: INK_SOFT, marginTop: 6 }}>
+          <div style={{ display: "flex", fontSize: 21, color: INK_SOFT, marginTop: 5 }}>
             {spec.event.course} · {spec.event.tees} tees · {spec.event.date}
           </div>
         </div>
         {card.qr ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={card.qr} width={150} height={150} alt="" />
-            <div style={{ display: "flex", fontSize: 16, color: STONE, marginTop: 4 }}>
-              Scan to score live
+            <img src={card.qr} width={132} height={132} alt="" />
+            {card.code ? (
+              <div style={{ display: "flex", fontFamily: "Inter", fontWeight: 600, fontSize: 22, letterSpacing: 3, color: NAVY, marginTop: 4 }}>
+                {card.code}
+              </div>
+            ) : null}
+            <div style={{ display: "flex", fontSize: 15, color: STONE, marginTop: 2 }}>
+              Scan to score
             </div>
           </div>
         ) : null}
@@ -167,7 +181,7 @@ function Card({ spec, cardIndex }: { spec: ScorecardSpec; cardIndex: number }) {
       <div
         style={{
           display: "flex",
-          marginTop: 24,
+          marginTop: 20,
           padding: "10px 16px",
           background: NAVY,
           color: CREAM,
@@ -179,8 +193,8 @@ function Card({ spec, cardIndex }: { spec: ScorecardSpec; cardIndex: number }) {
         {card.label}
       </div>
 
-      {/* the grid */}
-      <div style={{ display: "flex", flexDirection: "column", marginTop: 14, borderTop: `1px solid ${BORDER}`, borderLeft: `1px solid ${BORDER}` }}>
+      {/* the grid - flex:1 so the writing rows grow to fill the card */}
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, marginTop: 14, borderTop: `1px solid ${BORDER}`, borderLeft: `1px solid ${BORDER}` }}>
         <Row header label="Hole"
           front={nums(front, (h) => h.n)} back={nums(back, (h) => h.n)}
           out="OUT" inn="IN" tot="TOT" />
@@ -196,10 +210,10 @@ function Card({ spec, cardIndex }: { spec: ScorecardSpec; cardIndex: number }) {
         {card.entrants.map((e, i) => (
           <Row
             key={i}
-            tall
+            write
             label={
               <div style={{ display: "flex", flexDirection: "column" }}>
-                <div style={{ display: "flex", fontSize: 20, fontWeight: 600, color: NAVY }}>{e.name}</div>
+                <div style={{ display: "flex", fontSize: 22, fontWeight: 600, color: NAVY }}>{e.name}</div>
                 {e.hcp != null ? (
                   <div style={{ display: "flex", fontSize: 15, color: STONE }}>CH {e.hcp}</div>
                 ) : null}
@@ -215,11 +229,11 @@ function Card({ spec, cardIndex }: { spec: ScorecardSpec; cardIndex: number }) {
       </div>
 
       {/* signatures */}
-      <div style={{ display: "flex", gap: 40, marginTop: "auto" }}>
+      <div style={{ display: "flex", gap: 40, marginTop: 18 }}>
         {["Scorer", "Marker", "Date"].map((s) => (
           <div key={s} style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            <div style={{ display: "flex", height: 44, borderBottom: `1px solid ${STONE}` }} />
-            <div style={{ display: "flex", fontSize: 16, color: STONE, marginTop: 6 }}>{s}</div>
+            <div style={{ display: "flex", height: 40, borderBottom: `1px solid ${STONE}` }} />
+            <div style={{ display: "flex", fontSize: 15, color: STONE, marginTop: 6 }}>{s}</div>
           </div>
         ))}
       </div>

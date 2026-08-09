@@ -30,12 +30,31 @@ export async function printScorecards(tournamentId: string): Promise<PrintResult
   const teams = teamsIn(s, t.id, round.number);
   if (!groups.length && !teams.length) return "no-pairings";
 
-  const link = `${window.location.origin}/register/${t.id}`;
+  const origin = window.location.origin;
+
+  // a group card carries its own group's QR, matching the tee sheet
+  const qrByGroup: Record<string, string> = {};
+  await Promise.all(
+    groups.map(async (g) => {
+      if (!g.code) return;
+      try {
+        qrByGroup[g.id] = await QRCode.toDataURL(
+          `${origin}/play?c=${encodeURIComponent(g.code)}`,
+          { margin: 1, width: 300 },
+        );
+      } catch {
+        /* a card without a QR is still a card */
+      }
+    }),
+  );
+
+  // team cards have no group of their own: fall back to the registration link
+  const link = `${origin}/register/${t.id}`;
   let qr: string | undefined;
   try {
     qr = await QRCode.toDataURL(link, { margin: 1, width: 300 });
   } catch {
-    qr = undefined; // a card without a QR is still a card
+    qr = undefined;
   }
 
   const spec = scorecardSpec({
@@ -54,6 +73,7 @@ export async function printScorecards(tournamentId: string): Promise<PrintResult
     clubName: clubById(t.clubId).name,
     qr,
     link: link.replace(/^https?:\/\//, ""),
+    qrByGroup,
   });
 
   try {

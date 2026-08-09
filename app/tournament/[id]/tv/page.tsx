@@ -14,6 +14,7 @@
  */
 
 import { use, useEffect, useMemo, useReducer, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { TvBoard, TvEmpty, TvFrame } from "@/components/tv/board";
 import { TvAnnouncement, playChime } from "@/components/tv/announcement";
@@ -151,29 +152,50 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
 
   return (
     <TvFrame snapshot={snapshot} accent={accent} stale={stale}>
-      {playing?.type === "announcement" ? (
-        /*
-         * Keyed by the item, so each announcement mounts fresh and replays its
-         * entrance. Without the key, two in a row would have the second inherit
-         * the first's finished animation and simply appear.
-         */
-        <TvAnnouncement
-          key={playing.item.id}
-          item={playing.item}
-          accent={accent}
-        />
-      ) : playing?.type === "feature" ? (
-        <TvFeature key={playing.item.id} item={playing.item} accent={accent} />
-      ) : rows.length === 0 ? (
-        <TvEmpty snapshot={snapshot} />
-      ) : (
-        <TvBoard
-          snapshot={snapshot}
-          rows={rows}
-          mode={modeOf(snapshot)}
-          accent={accent}
-        />
-      )}
+      {/*
+       * The board is always the base layer. An interlude or announcement
+       * crossfades in over it and, crucially, fades back out to reveal it again
+       * rather than being cut - the abrupt exit was the whole reason the screen
+       * felt jagged. The club's header stays put above it throughout, so a
+       * highlight reads as the same screen having a look around, not a graphic
+       * pasted over the whole thing.
+       */}
+      <div className="relative h-full">
+        {rows.length === 0 ? (
+          <TvEmpty snapshot={snapshot} />
+        ) : (
+          <TvBoard
+            snapshot={snapshot}
+            rows={rows}
+            mode={modeOf(snapshot)}
+            accent={accent}
+          />
+        )}
+
+        <AnimatePresence mode="wait">
+          {playing ? (
+            <motion.div
+              /*
+               * Keyed by the item so each mounts fresh and replays its entrance.
+               * The container carries the smooth in and out; the inner template
+               * keeps its own staggered rise for the content.
+               */
+              key={playing.item.id}
+              className="absolute inset-0 bg-broadcast-ink/95"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {playing.type === "announcement" ? (
+                <TvAnnouncement item={playing.item} accent={accent} />
+              ) : (
+                <TvFeature item={playing.item} accent={accent} />
+              )}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
     </TvFrame>
   );
 }

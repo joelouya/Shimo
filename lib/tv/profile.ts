@@ -88,21 +88,26 @@ export const PROFILE_LABEL: Record<FieldProfile, string> = {
  * feel about their afternoon.
  */
 export function defaultCoverage(profile: FieldProfile): Coverage {
+  // A championship can carry the moments engine; everything else gets the calm
+  // standard screen by default, and a team day is left with just its board.
   if (profile === "championship") return "full";
   if (profile === "team") return "quiet";
-  return "reduced";
+  return "standard";
 }
 
 export const COVERAGE_LABEL: Record<Coverage, string> = {
   full: "Full",
   reduced: "Reduced",
+  standard: "Standard",
   quiet: "Quiet",
 };
 
 export const COVERAGE_HELP: Record<Coverage, string> = {
-  full: "Every moment worth showing. For a championship.",
+  full: "Every moment worth showing, called out as it happens. For a championship.",
   reduced:
-    "The big ones only: aces, eagles, the lead changing, course records. Interludes still run.",
+    "The big ones only: aces, eagles, the lead changing, course records. Interludes run between.",
+  standard:
+    "The board, and calm interludes between - hole of the day, the day's scoring, who is out on the course. No interruptions.",
   quiet: "The board and nothing else. For corporate days, juniors, and member-guests.",
 };
 

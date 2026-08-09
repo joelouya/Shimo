@@ -3,11 +3,15 @@
 /**
  * Announcements.
  *
- * The brief was that typography does the drama: a lead change is dramatic
- * because "New leader" appears very large and very quietly, not because
- * anything explodes. So there is one shell here and the templates differ in
- * what they emphasise, not in how they behave. Every one of them rises from
- * below over the same curve, holds, and goes.
+ * The event is the headline, not the name. What draws a clubhouse's eye is
+ * "EAGLE" - the thing that happened - set very large; the player is who it
+ * happened to, and reads below it. Leading with the name made every moment look
+ * the same from across a room, because a name at that size says nothing until
+ * you are close enough to read it, by which point the moment has passed.
+ *
+ * So the shell leads with the event, large, and the templates differ only in
+ * what they emphasise beneath it. Every one rises from below over the same
+ * curve, holds, and goes.
  *
  * These read an `Announcement` and nothing else. The producer has already
  * decided this is true, that it is worth saying, and how long it gets; by the
@@ -45,59 +49,61 @@ export function TvAnnouncement({
 }) {
   const ace = item.kind === "ace";
   const record = item.kind === "course-record";
-  // The rare things get more room. Everything else shares one size, because a
-  // board where every moment is the biggest moment has no biggest moment.
-  const nameSize = ace || record ? "8.4cqw" : "6.6cqw";
+  // The event leads, and the rare ones lead larger. Everything else shares one
+  // size, because a board where every moment is the biggest has no biggest.
+  const eventSize = ace || record ? "8cqw" : "6.2cqw";
 
   return (
     <div className="tv-veil absolute inset-0 flex flex-col justify-center px-[8cqw]">
       {ace ? <Flecks accent={accent} /> : null}
 
       {item.kind === "lead-change" && item.outgoing ? (
-        <div className="tv-yield mb-[1cqw] font-serif text-[3cqw] leading-none text-cream/50 line-through decoration-cream/30 decoration-[0.12cqw]">
+        <div className="tv-yield mb-[1cqw] text-[1.9cqw] leading-none text-cream/45 line-through decoration-cream/25 decoration-[0.1cqw]">
           {item.outgoing}
         </div>
       ) : null}
 
+      {/* the event, large - what happened is the headline */}
       <Rise i={0}>
-        <p
-          className="text-[1.5cqw] font-semibold uppercase tracking-[0.44em]"
-          style={{ color: accent }}
+        <h2
+          className="font-serif uppercase leading-[0.95]"
+          style={{ fontSize: eventSize, letterSpacing: "0.01em", color: accent }}
         >
           {item.headline}
-        </p>
-      </Rise>
-
-      <Rise i={1} className="mt-[1.4cqw]">
-        <h2
-          className="font-serif leading-[0.98] text-[#f7f3ec]"
-          style={{ fontSize: nameSize, letterSpacing: "-0.02em" }}
-        >
-          {item.subject}
         </h2>
       </Rise>
 
+      {/* the player, beneath it - who it happened to */}
+      <Rise i={1} className="mt-[1.4cqw]">
+        <p
+          className="font-serif leading-[1.0] text-[#f7f3ec]"
+          style={{ fontSize: "3.6cqw", letterSpacing: "-0.015em" }}
+        >
+          {item.subject}
+        </p>
+      </Rise>
+
       <div
-        className="tv-rule mt-[2cqw] h-[0.22cqw] w-[9cqw]"
+        className="tv-rule mt-[1.8cqw] h-[0.22cqw] w-[9cqw]"
         style={{ ["--i" as string]: 2, backgroundColor: accent }}
       />
 
-      {item.line ? (
-        <Rise i={3} className="mt-[2cqw]">
-          <p className="text-[2cqw] text-cream/60">{item.line}</p>
-        </Rise>
-      ) : null}
-
       {item.figure ? (
-        <Rise i={3} className="mt-[1.6cqw]">
+        <Rise i={3} className="mt-[1.8cqw]">
           <p className="font-serif text-[4cqw] leading-none text-[#f7f3ec] tabular-nums">
             {item.figure}
           </p>
         </Rise>
       ) : null}
 
+      {item.line ? (
+        <Rise i={3} className="mt-[1.6cqw]">
+          <p className="text-[1.9cqw] text-cream/60">{item.line}</p>
+        </Rise>
+      ) : null}
+
       {item.detail ? (
-        <Rise i={4} className="mt-[1.2cqw]">
+        <Rise i={4} className="mt-[1.1cqw]">
           <p className="text-[1.5cqw] tracking-[0.16em] text-cream/40">
             {item.detail}
           </p>

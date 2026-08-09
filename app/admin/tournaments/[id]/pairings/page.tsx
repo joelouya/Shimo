@@ -28,6 +28,7 @@ import {
   useSim,
 } from "@/lib/sim/store";
 import { roundKey, roundsOf } from "@/lib/rounds";
+import { printTeeSheet } from "@/lib/teesheet/print";
 import type { Player } from "@/lib/types";
 import { cn, formatDateLong } from "@/lib/utils";
 
@@ -239,6 +240,7 @@ export default function PairingsPage({
     if (roundInfo) setFirstTee(roundInfo.firstTee);
   }
   const [exported, setExported] = useState(false);
+  const [teeSheetBusy, setTeeSheetBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
   const byId = useMemo(
@@ -318,9 +320,17 @@ export default function PairingsPage({
     });
   };
 
-  const exportPdf = () => {
-    setExported(true);
-    setTimeout(() => setExported(false), 2600);
+  const exportPdf = async () => {
+    if (teeSheetBusy) return;
+    setTeeSheetBusy(true);
+    const result = await printTeeSheet(id, round);
+    setTeeSheetBusy(false);
+    if (result === "opened") {
+      setExported(true);
+      setTimeout(() => setExported(false), 2600);
+    }
+    // "no-pairings" can't happen here: the button only fires with groups filled,
+    // and a genuine render failure surfaces in the opened tab rather than a toast.
   };
 
   return (
@@ -359,9 +369,9 @@ export default function PairingsPage({
               className="h-9 w-[110px]"
             />
           </div>
-          <Button variant="outline" onClick={exportPdf}>
+          <Button variant="clay" onClick={exportPdf} disabled={teeSheetBusy}>
             <FileDown className="size-4" />
-            Export tee sheet PDF
+            {teeSheetBusy ? "Preparing…" : "Print tee sheet"}
           </Button>
         </div>
       </header>
@@ -407,7 +417,7 @@ export default function PairingsPage({
             className="fixed right-8 top-6 z-50 flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-[13px] text-primary-foreground shadow-lift"
           >
             <Check className="size-4 text-clay-wash" />
-            Tee sheet exported and sent to the starter&apos;s desk
+            Tee sheet opened — print it or send it to the starter&apos;s desk
           </motion.div>
         )}
       </AnimatePresence>
@@ -486,9 +496,22 @@ export default function PairingsPage({
                 )}
               >
                 <div className="mb-2.5 flex items-center justify-between">
-                  <p className="text-[12px] font-semibold text-foreground">
-                    Group {i + 1}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[12px] font-semibold text-foreground">
+                      Group {i + 1}
+                    </p>
+                    {(() => {
+                      const code = saved?.find((x) => x.id === g.id)?.code;
+                      return code ? (
+                        <span
+                          className="rounded bg-clay-wash px-1.5 py-0.5 text-[10.5px] font-semibold tracking-[0.12em] text-clay-deep"
+                          title="Printed on the tee sheet. Lands a player on this group."
+                        >
+                          {code}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
                   <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-medium text-ink-soft tnum">
                     {addMinutes(firstTee, i * (t.teeInterval || 10))}
                   </span>

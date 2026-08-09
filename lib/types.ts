@@ -174,6 +174,18 @@ export interface GuestEntry {
   /** unguessable, and only ever good for this one tournament */
   code: string;
   registeredAt: string;
+  /**
+   * The field was full and the club takes a waitlist, so this entry is on it.
+   * They still have a code, so the desk can wave them in the moment a place
+   * opens without asking them to register again.
+   */
+  waitlisted?: boolean;
+  /**
+   * Answers to the club's custom questions, keyed by question id. Club-facing
+   * operational data - shirt size, dietary needs, a raffle number - and never
+   * shared with a sponsor, the same rule the free-text notes already follow.
+   */
+  answers?: Record<string, string>;
 }
 
 export interface MemberInvite {
@@ -572,7 +584,7 @@ export interface Tournament {
    * the board alone. Defaults from the field profile when unset, and the
    * producer panel can change it during the round.
    */
-  tvCoverage?: "full" | "reduced" | "quiet";
+  tvCoverage?: "full" | "reduced" | "standard" | "quiet";
   registered?: boolean; // demo user is registered
   result?: { winner: string; score: string; userPosition?: number; userScore?: string };
 

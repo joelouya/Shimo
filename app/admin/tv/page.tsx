@@ -197,10 +197,12 @@ export default function ProducerPanel() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* three settings, always all three visible: during a round the
-                admin wants to see where it is set, not discover it by tapping */}
+            {/* The two the day usually wants come first - the calm board, or
+                the board with interludes - then the two that announce moments,
+                for a field that wants the drama. All visible, so during a round
+                the admin sees where it is set rather than discovering it. */}
             <div className="flex rounded-xl border border-border bg-secondary/40 p-1">
-              {(["full", "reduced", "quiet"] as const).map((level) => (
+              {(["quiet", "standard", "reduced", "full"] as const).map((level) => (
                 <button
                   key={level}
                   type="button"

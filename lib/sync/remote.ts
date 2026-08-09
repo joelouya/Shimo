@@ -108,9 +108,12 @@ async function pushOps(sb: SupabaseClient, ops: SyncOp[], tournamentId: string) 
   }
   for (const [table, { rows, conflict, insertOnly }] of byTable) {
     if (insertOnly) {
-      // append-only (audit): ignore duplicates so a retry can't double-insert
+      // insert-only (audit log, guest entries): ignore duplicates so a retry
+      // can't double-insert and no UPDATE is attempted against a write-only
+      // table. Keyed by the table's own conflict target - `id` for audit, the
+      // composite (tournament_id,guest_id) for guest_entries.
       const { error } = await sb.from(table).upsert(rows, {
-        onConflict: "id",
+        onConflict: conflict ?? "id",
         ignoreDuplicates: true,
       });
       if (error) throw error;

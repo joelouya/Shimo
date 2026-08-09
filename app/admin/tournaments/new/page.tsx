@@ -47,6 +47,7 @@ import type {
   FeeTier,
   Format,
   Membership,
+  RegistrationQuestion,
   Round,
   Sponsor,
   SponsorTier,
@@ -128,6 +129,10 @@ interface Draft {
   beneficiaryCause: string;
   beneficiaryTarget: string;
   maxPlayers: number;
+  /** take entries onto a waitlist once maxPlayers is reached */
+  waitlist: boolean;
+  /** the club's own registration questions */
+  questions: RegistrationQuestion[];
   regOpens: string;
   regCloses: string;
   regClosesAt: string;
@@ -177,6 +182,8 @@ const INITIAL: Draft = {
   beneficiaryCause: "",
   beneficiaryTarget: "",
   maxPlayers: 120,
+  waitlist: false,
+  questions: [],
   regOpens: "2026-07-20",
   regCloses: "2026-08-20",
   regClosesAt: defaultRegClosesAt("2026-08-22"),
@@ -224,6 +231,8 @@ function draftFromTournament(t: Tournament): Draft {
     beneficiaryCause: t.beneficiary?.cause ?? "",
     beneficiaryTarget: t.beneficiary?.targetKES ? String(t.beneficiary.targetKES) : "",
     maxPlayers: t.maxPlayers,
+    waitlist: t.waitlist ?? false,
+    questions: t.registrationQuestions ?? [],
     regOpens: INITIAL.regOpens,
     regCloses: t.regCloses,
     regClosesAt: t.regClosesAt ?? defaultRegClosesAt(roundsOf(t)[0].date),
@@ -262,6 +271,106 @@ function Field({
       <Label>{label}</Label>
       {children}
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * The club's own registration questions - shirt size, dietary needs, a raffle
+ * number. Kept deliberately small: a text field or a short list of choices,
+ * optionally required. Anything more elaborate is a form builder, which is not
+ * what a caddymaster needs at 6am.
+ */
+function QuestionsBuilder({
+  questions,
+  onChange,
+}: {
+  questions: RegistrationQuestion[];
+  onChange: (qs: RegistrationQuestion[]) => void;
+}) {
+  const update = (id: string, patch: Partial<RegistrationQuestion>) =>
+    onChange(questions.map((q) => (q.id === id ? { ...q, ...patch } : q)));
+  const remove = (id: string) => onChange(questions.filter((q) => q.id !== id));
+  const add = () =>
+    onChange([
+      ...questions,
+      { id: `q-${Date.now().toString(36)}`, kind: "text", label: "", required: false },
+    ]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <Label>Custom questions</Label>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Optional. Asked on the registration form and kept for the club only —
+          never shared with a sponsor.
+        </p>
+      </div>
+
+      {questions.map((q) => (
+        <div key={q.id} className="rounded-2xl border border-border bg-card/60 p-3.5">
+          <div className="flex items-center gap-2">
+            <Input
+              value={q.label}
+              placeholder="e.g. Shirt size"
+              onChange={(e) => update(q.id, { label: e.target.value })}
+              className="h-9"
+            />
+            <button
+              type="button"
+              onClick={() => remove(q.id)}
+              className="shrink-0 text-muted-foreground hover:text-red-flag"
+              aria-label="Remove question"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {(["text", "choice"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => update(q.id, { kind: k })}
+                className={cn(
+                  "min-h-8 rounded-full border px-3 text-[12px] font-medium transition-colors",
+                  q.kind === k
+                    ? "border-clay bg-clay text-cream"
+                    : "border-border bg-card text-ink-soft hover:border-clay/50",
+                )}
+              >
+                {k === "text" ? "Text answer" : "Choices"}
+              </button>
+            ))}
+            <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-[12px] text-ink-soft">
+              <Switch
+                checked={Boolean(q.required)}
+                onCheckedChange={(v) => update(q.id, { required: v })}
+              />
+              Required
+            </label>
+          </div>
+          {q.kind === "choice" && (
+            <Input
+              value={q.options?.join(", ") ?? ""}
+              placeholder="Comma-separated, e.g. Small, Medium, Large"
+              onChange={(e) =>
+                update(q.id, {
+                  options: e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+              className="mt-2.5 h-9"
+            />
+          )}
+        </div>
+      ))}
+
+      <Button variant="outline" className="w-fit" onClick={add}>
+        <Plus className="size-4" />
+        Add a question
+      </Button>
     </div>
   );
 }
@@ -693,6 +802,8 @@ function CreateTournamentInner() {
           : [{ place: "Winner", prize: "Pro shop credit + club honours" }];
       })(),
       maxPlayers: draft.maxPlayers,
+      waitlist: draft.waitlist || undefined,
+      registrationQuestions: draft.questions.length ? draft.questions : undefined,
       regCloses: draft.regClosesAt.slice(0, 10),
       regClosesAt: draft.regClosesAt,
       handicapAllowance: draft.allowance,
@@ -1347,6 +1458,28 @@ function CreateTournamentInner() {
                     onChange={(e) => set("maxPlayers", Number(e.target.value))}
                   />
                 </Field>
+
+                <div className="flex items-start gap-3 rounded-2xl border border-border bg-card/60 p-4">
+                  <Switch
+                    id="waitlist"
+                    checked={draft.waitlist}
+                    onCheckedChange={(v) => set("waitlist", v)}
+                  />
+                  <Label
+                    htmlFor="waitlist"
+                    className="cursor-pointer text-[13px] leading-relaxed font-normal text-ink-soft"
+                  >
+                    Keep a waitlist once the field is full. Late registrants get a
+                    code and join the list rather than being turned away, and the
+                    desk waves them in when a place opens.
+                  </Label>
+                </div>
+
+                <QuestionsBuilder
+                  questions={draft.questions}
+                  onChange={(qs) => set("questions", qs)}
+                />
+
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Registration opens">
                     <Input
@@ -1556,7 +1689,7 @@ function CreateTournamentInner() {
                       <SelectItem value="auto">
                         {`Suggested · ${COVERAGE_LABEL[defaultCoverage(draft.fieldProfile ?? guess.profile)]}`}
                       </SelectItem>
-                      {(["full", "reduced", "quiet"] as Coverage[]).map((c) => (
+                      {(["standard", "quiet", "reduced", "full"] as Coverage[]).map((c) => (
                         <SelectItem key={c} value={c}>
                           {COVERAGE_LABEL[c]}
                         </SelectItem>

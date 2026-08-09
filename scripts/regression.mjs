@@ -1628,11 +1628,25 @@ section("Coverage tiers");
     return out;
   };
 
-  check("defaults follow the field: championship full, medal reduced, team quiet",
+  check("defaults follow the field: championship full, medal standard, team quiet",
     PF.defaultCoverage("championship") === "full" &&
-    PF.defaultCoverage("club") === "reduced" &&
-    PF.defaultCoverage("stableford") === "reduced" &&
+    PF.defaultCoverage("club") === "standard" &&
+    PF.defaultCoverage("stableford") === "standard" &&
     PF.defaultCoverage("team") === "quiet");
+
+  check("standard consumes an eagle rather than announcing it", (() => {
+    // an eagle that fires under reduced/full is consumed under standard, so the
+    // screen stays on the board and its calm interludes rather than breaking in
+    const s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("standard", eagleRows("p1", 0)) }, 130_000);
+    return s.queue.length === 0 && !s.queue.some((a) => a.kind === "eagle");
+  })());
+  check("standard never breaks in to an announcement", (() => {
+    let s = PR.reduce(PR.initialState(), { type: "snapshot",
+      snapshot: covSnap("standard", eagleRows("p1", 0)) }, 130_000);
+    s = PR.reduce(s, { type: "tick" }, 131_000);
+    return s.mode !== "announcement";
+  })());
 
   check("full carries a streak", (() => {
     const s = PR.reduce(PR.initialState(), { type: "snapshot",
@@ -3052,6 +3066,107 @@ section("Duplicate event copies the setup, not the scoring");
   check("the previous result does not carry over", copy?.result === undefined);
   check("the copy has no scores of its own",
     Object.keys(st().scores[roundKey(newId, 1)] ?? {}).length === 0);
+}
+
+/* ------------------------------------------------------------------ *
+ * Group codes - the tee-sheet code that names a group and opens nothing.
+ * ------------------------------------------------------------------ */
+section("Group codes");
+{
+  const GC = await jiti.import("../lib/group-code.ts");
+
+  check("a group code is four upper-case characters, no look-alikes", (() => {
+    const c = GC.newGroupCode();
+    return /^[A-Z2-9]{4}$/.test(c) && !/[IO01]/.test(c);
+  })());
+  check("group codes do not collide across a full tee sheet", (() => {
+    const seen = new Set();
+    for (let i = 0; i < 3000; i++) seen.add(GC.newGroupCode());
+    // a 923k space over 3000 draws: a clash would be a bug in the generator
+    return seen.size > 2990;
+  })());
+  check("a code typed loosely normalises to the printed form",
+    GC.normaliseGroupCode(" 7k p4 ") === "7KP4");
+  check("freshGroupCode avoids codes already in use", (() => {
+    const taken = new Set();
+    for (let i = 0; i < 500; i++) taken.add(GC.freshGroupCode(taken));
+    return taken.size === 500;
+  })());
+
+  /* minting and stability on the pairings screen's autosave */
+  S.savePairings("t-gc-test", [
+    { id: "gc-a", number: 1, teeTime: "07:00", playerIds: ["p1", "p2"] },
+    { id: "gc-b", number: 2, teeTime: "07:10", playerIds: ["p3", "p4"] },
+  ], 1);
+  const g1 = st().pairings[roundKey("t-gc-test", 1)];
+  check("every saved group is given a code",
+    g1.length === 2 && g1.every((g) => /^[A-Z2-9]{4}$/.test(g.code)));
+  check("codes are unique within a round",
+    new Set(g1.map((g) => g.code)).size === g1.length);
+
+  const firstCode = g1[0].code;
+  // the pairings screen re-saves without carrying the code; it must stay put
+  S.savePairings("t-gc-test", [
+    { id: "gc-a", number: 1, teeTime: "07:00", playerIds: ["p1", "p2", "p5"] },
+    { id: "gc-b", number: 2, teeTime: "07:10", playerIds: ["p3", "p4"] },
+  ], 1);
+  check("a re-save keeps each group's code stable",
+    st().pairings[roundKey("t-gc-test", 1)][0].code === firstCode);
+
+  check("groupForCode resolves a code to its tournament, round and group", (() => {
+    const hit = S.groupForCode(st(), firstCode.toLowerCase());
+    return hit?.tournamentId === "t-gc-test" && hit.round === 1 && hit.group.id === "gc-a";
+  })());
+  check("groupForCode opens nothing for an unknown code",
+    S.groupForCode(st(), "ZZ99") === null);
+}
+
+/* ------------------------------------------------------------------ *
+ * Richer registration - a full field takes a waitlist, and the club's
+ * custom questions are answered and kept.
+ * ------------------------------------------------------------------ */
+section("Richer registration");
+{
+  const put = (t) =>
+    S.simStore.setState(
+      { ...st(), created: [...st().created.filter((x) => x.id !== t.id), t] },
+      true,
+    );
+
+  // a two-place field that takes a waitlist
+  put({ id: "t-wl-test", maxPlayers: 2, waitlist: true, rounds: [] });
+  check("an empty capped field has room",
+    S.registrationCapacity(st(), st().created.find((t) => t.id === "t-wl-test")).spotsLeft === 2);
+
+  const wa = S.registerGuest("t-wl-test", { name: "WA", email: "wa@wl.co", sponsorListConsent: false });
+  const wb = S.registerGuest("t-wl-test", { name: "WB", email: "wb@wl.co", sponsorListConsent: false });
+  check("entries under the cap are confirmed", !wa.waitlisted && !wb.waitlisted);
+  check("the field reads full at the cap",
+    S.registrationCapacity(st(), st().created.find((t) => t.id === "t-wl-test")).full);
+
+  const wc = S.registerGuest("t-wl-test", { name: "WC", email: "wc@wl.co", sponsorListConsent: false });
+  check("a full field with a waitlist puts the next entry on it", wc.waitlisted === true);
+  check("a waitlisted entry still carries a code", /^[a-z2-9]{3}-[a-z2-9]{3}$/.test(wc.code));
+  check("waitlisted entries do not count toward the field", (() => {
+    const cap = S.registrationCapacity(st(), st().created.find((t) => t.id === "t-wl-test"));
+    return cap.full && cap.spotsLeft === 0 && cap.waitlistOpen;
+  })());
+
+  // custom questions
+  const qa = S.registerGuest("t-corp-test", {
+    name: "Question Guest", email: "q@acme.co.ke", sponsorListConsent: false,
+    answers: { shirt: "L", cart: "Yes" },
+  });
+  check("custom answers are stored on the entry",
+    qa.answers?.shirt === "L" && qa.answers?.cart === "Yes");
+  check("re-submitting updates the answers, not the code", (() => {
+    const again = S.registerGuest("t-corp-test", {
+      name: "Question Guest", email: "q@acme.co.ke", sponsorListConsent: false,
+      answers: { shirt: "XL" },
+    });
+    const entry = st().guestEntries.find((e) => e.code === again.code);
+    return again.code === qa.code && entry.answers.shirt === "XL";
+  })());
 }
 
 /* ------------------------------------------------------------------ */

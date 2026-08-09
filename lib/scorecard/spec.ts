@@ -36,6 +36,8 @@ export interface ScorecardCard {
   /** a QR the group can scan to score live, as a data: URI, and the link under it */
   qr?: string;
   link?: string;
+  /** the printed group code, for the phone whose camera will not focus */
+  code?: string;
 }
 
 export interface ScorecardSpec {
@@ -71,11 +73,17 @@ export function scorecardSpec(args: {
   /** the player's handicap index, so the card can print a course handicap */
   handicapOf: (playerId: string) => number | undefined;
   clubName: string;
-  /** a QR data URI + link to put on every card (the way back into the app) */
+  /** a QR data URI + link to put on team cards (the way back into the app) */
   qr?: string;
   link?: string;
+  /**
+   * Per-group QR data URIs, keyed by group id. A group card carries its own
+   * group's QR and code - the same one on the tee sheet - so scanning it lands
+   * the player on their group. Team cards fall back to the event-level qr/link.
+   */
+  qrByGroup?: Record<string, string>;
 }): ScorecardSpec {
-  const { tournament, course, round, groups, teams, nameOf, handicapOf, clubName, qr, link } =
+  const { tournament, course, round, groups, teams, nameOf, handicapOf, clubName, qr, link, qrByGroup } =
     args;
   const holes: ScorecardHole[] = course.holes.map((h) => ({
     n: h.hole,
@@ -104,8 +112,10 @@ export function scorecardSpec(args: {
     : groups.map((g) => ({
         label: `Group ${g.number}${g.teeTime ? ` · ${g.teeTime}` : ""}`,
         entrants: g.playerIds.map(entrant),
-        qr,
-        link,
+        // the group's own QR + code, matching the tee sheet
+        qr: (g.code && qrByGroup?.[g.id]) || qr,
+        link: g.code ? `/play?c=${g.code}` : link,
+        code: g.code,
       }));
 
   return {

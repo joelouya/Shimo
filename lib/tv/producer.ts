@@ -110,7 +110,8 @@ const REDUCED: ReadonlySet<AnnouncementKind> = new Set<AnnouncementKind>([
 
 /** Whether this kind may go out at the club's chosen level. */
 export function allowedAt(kind: AnnouncementKind, coverage: Coverage) {
-  if (coverage === "quiet") return false;
+  // quiet and standard never break in: standard has interludes, not announcements
+  if (coverage === "quiet" || coverage === "standard") return false;
   if (coverage === "full") return true;
   return REDUCED.has(kind);
 }
@@ -754,19 +755,22 @@ function onSnapshot(
   const fresh = found.filter((m) => !known.has(m.factKey));
 
   /*
-   * In quiet mode, facts are consumed rather than collected.
+   * In quiet and standard mode, facts are consumed rather than collected.
+   * Neither breaks in to announce a moment - quiet shows only the board, and
+   * standard fills the gaps with interludes - so what is found is marked as
+   * shown and never queued.
    *
-   * Clearing the queue when the switch is thrown is not enough on its own:
-   * detection runs against the whole card every time, so the same eagle is
-   * found again on the very next snapshot and the queue refills behind the
-   * admin's back. They would then turn announcements back on an hour later and
-   * be handed the hour, which is precisely what they used the switch to avoid.
+   * Clearing the queue would not be enough on its own: detection runs against
+   * the whole card every time, so the same eagle is found again on the very
+   * next snapshot and the queue would refill. Marking it as though it had been
+   * shown means a club that later switches to reduced or full is covered from
+   * that point on rather than handed the hour it deliberately passed over.
    *
-   * So while quiet, everything found is marked as though it had been shown.
-   * The room is not interrupted now and is not interrupted retrospectively
-   * later; only what happens after the switch goes back is announced.
+   * Standard still runs its interludes: only the announcement queue is emptied
+   * here, and onTick, which suppresses interludes only for quiet, keeps putting
+   * up the calm feature cards in the gaps.
    */
-  if (cfg.coverage === "quiet") {
+  if (cfg.coverage === "quiet" || cfg.coverage === "standard") {
     return {
       ...state,
       announced: [...state.announced, ...fresh.map((m) => m.factKey)],

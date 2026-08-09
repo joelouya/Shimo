@@ -45,13 +45,23 @@ export type FieldProfile = "championship" | "club" | "stableford" | "team";
 /**
  * How much the screen says.
  *
- * Three settings rather than on and off, because "some" is what most club
- * golf actually wants. A championship field can carry a busy screen; a
- * Saturday medal wants the big moments and the board; a corporate day wants
- * to be left alone. Feature interludes still run in reduced - they are not
- * interruptions, they are what the screen does instead of interrupting.
+ * Two settings a club reaches for, and two kept for the field that wants more.
+ *
+ *   quiet     the board and nothing else.
+ *   standard  the board, plus calm interludes between - hole of the day, the
+ *             day's scoring, who is out on the course. No interruptions: it
+ *             never breaks in to announce a moment, it just has a look around
+ *             in the gaps. This is what most club and corporate golf wants, and
+ *             it is the default.
+ *   reduced   standard, and it also breaks in for the big moments.
+ *   full      every moment worth showing. For a championship.
+ *
+ * The announcement engine (reduced and full) is intact but no longer the
+ * default: a screen that calls out a name every few minutes was more than a
+ * clubhouse wanted, so the calm interludes carry the day and the drama is
+ * something a championship opts into.
  */
-export type Coverage = "full" | "reduced" | "quiet";
+export type Coverage = "full" | "reduced" | "standard" | "quiet";
 
 /** A club's stored record for one course off one set of tees. */
 export interface CourseRecord {

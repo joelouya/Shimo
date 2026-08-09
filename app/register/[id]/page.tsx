@@ -30,8 +30,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { clubById } from "@/lib/data";
 import { validateRegistration, type GuestRegistration } from "@/lib/guests";
-import { allTournaments, registerGuest, useSim } from "@/lib/sim/store";
-import { formatDate } from "@/lib/utils";
+import {
+  allTournaments,
+  registerGuest,
+  registrationCapacity,
+  simStore,
+  useSim,
+} from "@/lib/sim/store";
+import type { RegistrationQuestion } from "@/lib/types";
+import { cn, formatDate } from "@/lib/utils";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
@@ -66,7 +73,65 @@ function Field({
   );
 }
 
-function Done({ code, name }: { code: string; name: string }) {
+/** One of the club's custom questions: a text field, or a row of choice pills. */
+function QuestionField({
+  q,
+  value,
+  onChange,
+  invalid,
+}: {
+  q: RegistrationQuestion;
+  value: string;
+  onChange: (v: string) => void;
+  invalid?: boolean;
+}) {
+  return (
+    <Field label={`${q.label}${q.required ? "" : " (optional)"}`}>
+      {q.kind === "choice" && q.options?.length ? (
+        <div className="flex flex-wrap gap-2">
+          {q.options.map((opt) => {
+            const active = value === opt;
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => onChange(active ? "" : opt)}
+                className={cn(
+                  "min-h-9 rounded-full border px-3.5 text-[13px] font-medium transition-colors",
+                  active
+                    ? "border-clay bg-clay text-cream"
+                    : "border-border bg-card text-ink-soft hover:border-clay/50",
+                )}
+              >
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <Input
+          value={value}
+          placeholder={q.required ? "" : "Optional"}
+          onChange={(e) => onChange(e.target.value)}
+          aria-invalid={invalid}
+        />
+      )}
+      {invalid && (
+        <p className="text-[13px] text-red-flag">Please answer this.</p>
+      )}
+    </Field>
+  );
+}
+
+function Done({
+  code,
+  name,
+  waitlisted,
+}: {
+  code: string;
+  name: string;
+  waitlisted?: boolean;
+}) {
   const still = useReducedMotion();
   const [copied, setCopied] = useState(false);
 
@@ -82,11 +147,14 @@ function Done({ code, name }: { code: string; name: string }) {
             <Check className="size-6" />
           </div>
           <h1 className="mt-5 font-serif text-[30px] leading-tight text-foreground">
-            You&apos;re on the sheet, {name.split(" ")[0]}
+            {waitlisted
+              ? `You're on the waitlist, ${name.split(" ")[0]}`
+              : `You're on the sheet, ${name.split(" ")[0]}`}
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
-            Scan this on the day and your scorecard opens. No account, no
-            password, and it works on any phone.
+            {waitlisted
+              ? "The field is full for now. Keep this code — the moment a place opens the desk can wave you straight in with it, no re-registering."
+              : "Scan this on the day and your scorecard opens. No account, no password, and it works on any phone."}
           </p>
         </motion.div>
 
@@ -160,16 +228,36 @@ function Register({ id }: { id: string }) {
     sponsorListConsent: false,
   });
   const [handicap, setHandicap] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState(false);
-  const [done, setDone] = useState<{ code: string; name: string } | null>(null);
+  const [done, setDone] = useState<{
+    code: string;
+    name: string;
+    waitlisted?: boolean;
+  } | null>(null);
+
+  const questions = t?.registrationQuestions ?? [];
+  // recompute capacity as entries land so a field that fills mid-session closes
+  const confirmedCount = useSim((s) =>
+    t ? s.guestEntries.filter((e) => e.tournamentId === t.id && !e.waitlisted).length : 0,
+  );
+  const capacity = useMemo(
+    () => (t ? registrationCapacity(simStore.getState(), t) : null),
+    // confirmedCount is the reactive input; simStore read stays fresh with it
+    [t, confirmedCount],
+  );
 
   const parsedHandicap =
     handicap.trim() === "" ? undefined : Number(handicap.trim());
   const problems = validateRegistration({ ...form, handicap: parsedHandicap });
+  const missingAnswer = (q: RegistrationQuestion) =>
+    q.required && !(answers[q.id] ?? "").trim();
+  const answerProblems = questions.filter(missingAnswer);
   const problemFor = (f: keyof GuestRegistration) =>
     touched ? problems.find((p) => p.field === f)?.message : undefined;
 
-  if (done) return <Done code={done.code} name={done.name} />;
+  if (done)
+    return <Done code={done.code} name={done.name} waitlisted={done.waitlisted} />;
 
   if (!t) {
     return (
@@ -187,6 +275,26 @@ function Register({ id }: { id: string }) {
   }
 
   const club = clubById(t.clubId);
+
+  // a full field with no waitlist is closed: say so plainly rather than taking
+  // a registration the club has no place for
+  if (capacity?.full && !t.waitlist) {
+    return (
+      <Frame>
+        <div className="flex flex-1 flex-col justify-center">
+          <p className="smallcaps text-muted-foreground">{t.name}</p>
+          <h1 className="mt-3 font-serif text-[30px] leading-tight text-foreground">
+            The field is full
+          </h1>
+          <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
+            Every place for {formatDate(t.date)} at {club.name} has been taken.
+            Ask the organiser whether a place might open, and they can add you
+            directly.
+          </p>
+        </div>
+      </Frame>
+    );
+  }
 
   return (
     <Frame>
@@ -213,15 +321,29 @@ function Register({ id }: { id: string }) {
         onSubmit={(e) => {
           e.preventDefault();
           setTouched(true);
-          if (problems.length) return;
+          if (problems.length || answerProblems.length) return;
           const entry = registerGuest(
             t.id,
-            { ...form, handicap: parsedHandicap },
+            { ...form, handicap: parsedHandicap, answers },
             t.clubId,
           );
-          setDone({ code: entry.code, name: form.name });
+          setDone({
+            code: entry.code,
+            name: form.name,
+            waitlisted: entry.waitlisted,
+          });
         }}
       >
+        {capacity?.waitlistOpen && (
+          <div className="rounded-2xl border border-clay/30 bg-clay-wash/60 p-4">
+            <p className="text-[13px] leading-relaxed text-clay-deep">
+              The field is full, so this registration joins the{" "}
+              <span className="font-medium">waitlist</span>. You still get a code,
+              and the desk can wave you in the moment a place opens.
+            </p>
+          </div>
+        )}
+
         <Field label="Your name">
           <Input
             value={form.name}
@@ -291,6 +413,17 @@ function Register({ id }: { id: string }) {
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
         </Field>
+
+        {/* the club's own questions, if it set any */}
+        {questions.map((q) => (
+          <QuestionField
+            key={q.id}
+            q={q}
+            value={answers[q.id] ?? ""}
+            onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
+            invalid={touched && missingAnswer(q)}
+          />
+        ))}
 
         {/*
           Asked separately and in plain words, because bundling this into a

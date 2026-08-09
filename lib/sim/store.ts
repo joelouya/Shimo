@@ -48,6 +48,7 @@ import {
 import { IS_PILOT } from "@/lib/mode";
 import { newInviteToken } from "@/lib/membership";
 import { entryForCode, newGuestCode } from "@/lib/guests";
+import { freshGroupCode, normaliseGroupCode } from "@/lib/group-code";
 import { stampsFor, type GroupPace } from "@/lib/pace";
 import type { ExposureEvent, Surface } from "@/lib/exposure";
 import { CLIENT_ID } from "@/lib/sync/client";
@@ -57,6 +58,7 @@ import {
   certToRow,
   correctionToRow,
   disputeToRow,
+  guestEntryToRow,
   pairingToRow,
   clubToRow,
   playerToRow,
@@ -229,6 +231,12 @@ export interface SavedGroup {
   number: number;
   teeTime: string;
   playerIds: string[];
+  /**
+   * The short code printed on the tee sheet. Identifies this group so a player
+   * can land on it from a QR or by typing; it grants nothing on its own. Minted
+   * on first save and stable thereafter, so the printed sheet keeps matching.
+   */
+  code?: string;
 }
 
 /**
@@ -1579,6 +1587,28 @@ export interface GuestRegistrationInput {
   notes?: string;
   sponsorListConsent: boolean;
   gender?: "M" | "F";
+  /** answers to the club's custom questions, keyed by question id */
+  answers?: Record<string, string>;
+}
+
+/**
+ * How many places are left, and whether a full field is taking a waitlist.
+ *
+ * Counts confirmed entries against maxPlayers; waitlisted entries never count
+ * toward the field. An event with no cap has room by definition.
+ */
+export function registrationCapacity(
+  s: SimState,
+  t: Tournament,
+): { full: boolean; spotsLeft: number | null; waitlistOpen: boolean } {
+  const max = t.maxPlayers ?? 0;
+  if (!max) return { full: false, spotsLeft: null, waitlistOpen: false };
+  const confirmed = s.guestEntries.filter(
+    (e) => e.tournamentId === t.id && !e.waitlisted,
+  ).length;
+  const spotsLeft = Math.max(0, max - confirmed);
+  const full = spotsLeft === 0;
+  return { full, spotsLeft, waitlistOpen: full && Boolean(t.waitlist) };
 }
 
 /**
@@ -1647,18 +1677,42 @@ export function registerGuest(
       (e) => e.tournamentId === tournamentId && e.guestId === guest.id,
     );
     if (already) {
+      // let a returning form update the answers, but never silently reshuffle
+      // someone off the field they already hold a place on
+      if (input.answers) already.answers = input.answers;
       entry = already;
       return;
     }
+
+    // a full field takes a waitlist when the club has turned one on; otherwise
+    // this insert is the caller's to prevent, and the entry is confirmed
+    const t =
+      draft.created.find((x) => x.id === tournamentId) ??
+      TOURNAMENTS.find((x) => x.id === tournamentId);
+    const waitlisted = Boolean(
+      t && registrationCapacity(draft, t).full && t.waitlist,
+    );
 
     entry = {
       tournamentId,
       guestId: guest.id,
       code: newGuestCode(),
       registeredAt: new Date().toISOString(),
+      ...(waitlisted ? { waitlisted: true } : {}),
+      ...(input.answers ? { answers: input.answers } : {}),
     };
     draft.guestEntries.push(entry);
     enqueueEntity(draft, "players", playerToRow(guest), { conflict: "id" });
+    /* Push the entry itself, so a code registered on this phone resolves on a
+       fresh one. guest_entries is non-enumerable and immutable: insert-only,
+       on-conflict-do-nothing keyed by (tournament_id, guest_id), matching the
+       table's write-only RLS. A returning form that only edits answers (the
+       `already` branch above) therefore stays local by design - the server row
+       was written once and is never rewritten. */
+    enqueueEntity(draft, "guest_entries", guestEntryToRow(entry), {
+      conflict: "tournament_id,guest_id",
+      insertOnly: true,
+    });
   });
   return entry;
 }
@@ -1686,6 +1740,33 @@ export function guestForCode(
   const player = s.guests.find((g) => g.id === entry.guestId);
   if (!player) return null;
   return { player, tournamentId: entry.tournamentId };
+}
+
+/**
+ * Resolve a group code against pairings this device already holds.
+ *
+ * The common case: a member scans a group QR on a phone that has the event, or
+ * the caddymaster's tablet that ran the pairings. Returns which tournament,
+ * round and group it names - never a scorecard - so the caller can send the
+ * player on to pick themselves out. Cross-device lands on the remote resolver.
+ */
+export function groupForCode(
+  s: SimState,
+  code: string,
+): { tournamentId: string; round: number; group: SavedGroup } | null {
+  const want = normaliseGroupCode(code);
+  if (!want) return null;
+  for (const [key, groups] of Object.entries(s.pairings)) {
+    const group = groups.find((g) => g.code && normaliseGroupCode(g.code) === want);
+    if (group) {
+      // roundKey is `${tournamentId}#${round}`, or the id alone for round 1.
+      const hash = key.lastIndexOf("#");
+      const tournamentId = hash === -1 ? key : key.slice(0, hash);
+      const round = hash === -1 ? 1 : Number(key.slice(hash + 1)) || 1;
+      return { tournamentId, round, group };
+    }
+  }
+  return null;
 }
 
 /* ---- exposure ---------------------------------------------------- */
@@ -1754,10 +1835,31 @@ export function savePairings(
   round = 1,
 ) {
   mutate((draft) => {
-    draft.pairings[roundKey(tournamentId, round)] = groups;
+    const key = roundKey(tournamentId, round);
+    /*
+     * Give every group a code and keep it stable. The pairings screen rebuilds
+     * its group objects on each autosave without carrying the code, so the code
+     * is sourced here: reuse the one already filed under this group id, and mint
+     * a fresh one - unique within the round - only for a group that has none.
+     * That way a tee sheet printed at nine still matches the app at noon.
+     */
+    const prior = draft.pairings[key] ?? [];
+    const codeById = new Map(prior.map((g) => [g.id, g.code]).filter(([, c]) => c) as [string, string][]);
+    const taken = new Set(codeById.values());
+    const coded = groups.map((g) => {
+      const existing = g.code ?? codeById.get(g.id);
+      if (existing) {
+        taken.add(existing);
+        return g.code === existing ? g : { ...g, code: existing };
+      }
+      const code = freshGroupCode(taken);
+      taken.add(code);
+      return { ...g, code };
+    });
+    draft.pairings[key] = coded;
     // only publish pairings for a tournament that already exists in the cloud
     if (draft.liveTournamentId === tournamentId) {
-      for (const g of groups) {
+      for (const g of coded) {
         enqueueEntity(draft, "pairings", pairingToRow(tournamentId, round, g), {
           conflict: "tournament_id,round,group_id",
         });

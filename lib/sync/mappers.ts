@@ -11,7 +11,13 @@ import type {
   Dispute,
   SavedGroup,
 } from "@/lib/sim/store";
-import type { ClubIdentity, Player, Team, Tournament } from "@/lib/types";
+import type {
+  ClubIdentity,
+  GuestEntry,
+  Player,
+  Team,
+  Tournament,
+} from "@/lib/types";
 
 /* ---- tournaments ---- */
 
@@ -132,6 +138,7 @@ export function pairingToRow(tournamentId: string, round: number, g: SavedGroup)
     number: g.number,
     tee_time: g.teeTime,
     player_ids: g.playerIds,
+    code: g.code ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -142,6 +149,7 @@ export function rowToPairing(r: Record<string, unknown>): SavedGroup {
     number: r.number as number,
     teeTime: (r.tee_time as string) ?? "",
     playerIds: (r.player_ids as string[]) ?? [],
+    code: (r.code as string) ?? undefined,
   };
 }
 
@@ -226,6 +234,29 @@ export function rowToPlayer(r: Record<string, unknown>): Player {
           since: (r.updated_at as string) ?? new Date().toISOString(),
         }
       : undefined,
+  };
+}
+
+/* ---- guest entries ---- *
+ *
+ * One guest's place in one tournament, carrying the code that opens their own
+ * card. Write-only from the client's point of view: guest_entries is
+ * non-enumerable and there is no read mapper, because resolution is the
+ * server's job (resolve_guest_code returns only the tournament and guest ids,
+ * never these rows). Emits exactly the table's columns and no `id`/`updated_at`
+ * - the row is keyed by (tournament_id, guest_id) and is immutable once made.
+ */
+export function guestEntryToRow(e: GuestEntry) {
+  return {
+    tournament_id: e.tournamentId,
+    guest_id: e.guestId,
+    code: e.code,
+    registered_at: e.registeredAt,
+    waitlisted: e.waitlisted ?? false,
+    /* Club-facing operational data (shirt size, dietary needs, a raffle
+       number). It lands in the club's own store and never reaches a sponsor
+       or any anon read, the same rule the guest's free-text notes follow. */
+    answers: e.answers ?? null,
   };
 }
 
