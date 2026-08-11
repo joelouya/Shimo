@@ -55,7 +55,7 @@ function GroupRow({ row }: { row: TeeSheetRow }) {
       {/* tee time + group number */}
       <div style={{ display: "flex", flexDirection: "column", width: 168 }}>
         <div style={{ display: "flex", fontFamily: "Fraunces", fontWeight: 600, fontSize: 34, color: NAVY }}>
-          {row.teeTime || "—"}
+          {row.teeTime || "-"}
         </div>
         <div style={{ display: "flex", fontSize: 17, color: STONE, marginTop: 3 }}>
           Group {row.number}

@@ -100,7 +100,7 @@ export function ReturnedCard() {
         <div className="text-right">
           <p className="smallcaps text-muted-foreground">Handicap</p>
           <p className="mt-1 font-serif text-[17px] leading-none text-foreground tnum">
-            12
+            2
           </p>
         </div>
       </div>

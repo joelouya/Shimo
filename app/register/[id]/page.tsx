@@ -153,7 +153,7 @@ function Done({
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
             {waitlisted
-              ? "The field is full for now. Keep this code — the moment a place opens the desk can wave you straight in with it, no re-registering."
+              ? "The field is full for now. Keep this code, and the moment a place opens the desk can wave you straight in with it, no re-registering."
               : "Scan this on the day and your scorecard opens. No account, no password, and it works on any phone."}
           </p>
         </motion.div>

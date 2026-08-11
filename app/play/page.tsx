@@ -260,7 +260,7 @@ function PickSelf({
         </h1>
         <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
           Choose your name to open your scorecard. You still sign in, or use your
-          own registration code — this only points you at the right card.
+          own registration code. This only points you at the right card.
         </p>
       </Fade>
 
@@ -496,7 +496,7 @@ function GuestVerify({
         </h1>
         <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
           Enter the personal registration code you were sent. It&apos;s six
-          characters, and it opens your card only — the group code can&apos;t.
+          characters, and it opens your card only. The group code can&apos;t.
         </p>
       </Fade>
 
