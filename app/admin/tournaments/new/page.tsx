@@ -729,6 +729,14 @@ function CreateTournamentInner() {
   const club = clubById(course.clubId);
   const steps = useMemo(() => stepsFor(draft.eventKind), [draft.eventKind]);
 
+  /*
+   * The event summary rail joins once the day has taken shape, from Format
+   * details onward, so the early steps stay focused on one decision at a time
+   * and the later ones show what is being built. The review step steps aside
+   * for it, because it is already the full summary.
+   */
+  const showSummary = step >= 5 && step !== LAST_STEP;
+
   const canContinue = useMemo(() => {
     if (step === 1)
       return (
@@ -845,7 +853,7 @@ function CreateTournamentInner() {
         Tournaments
       </Link>
       <header className="mt-3">
-        <p className="smallcaps text-clay">
+        <p className="smallcaps text-muted-foreground">
           {editing ? "Edit tournament" : "New tournament"}
         </p>
         <h1 className="mt-1 font-serif text-[30px] leading-tight text-foreground">
@@ -853,7 +861,14 @@ function CreateTournamentInner() {
         </h1>
       </header>
 
-      <div className="mt-8 grid grid-cols-[220px_1fr] gap-10">
+      <div
+        className={cn(
+          "mt-8 grid gap-10",
+          showSummary
+            ? "grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_300px]"
+            : "grid-cols-[220px_1fr]",
+        )}
+      >
         {/* step rail */}
         <ol className="flex flex-col gap-1">
           {/*
@@ -1105,7 +1120,7 @@ function CreateTournamentInner() {
                     className="rounded-xl border border-border bg-card/60 p-4"
                   >
                     <div className="flex items-center justify-between">
-                      <p className="smallcaps text-clay">Round {r.number}</p>
+                      <p className="smallcaps text-muted-foreground">Round {r.number}</p>
                       {draft.rounds.length > 1 && (
                         <button
                           onClick={() => removeRound(i)}
@@ -2140,6 +2155,60 @@ function CreateTournamentInner() {
             )}
           </div>
         </motion.div>
+
+        {/*
+         * The event taking shape. Not a second review, which the last step
+         * already is, but a running note of what has been decided, so the desk
+         * can see the day forming as it fills the later steps in. Prizes and
+         * sponsors appear only once there are some, so the rail grows with the
+         * event rather than showing a column of blanks.
+         */}
+        {showSummary && (
+          <aside className="hidden xl:block">
+            <div className="sticky top-6 rounded-2xl border border-border bg-card/50 p-5">
+              <p className="smallcaps text-muted-foreground">The event so far</p>
+              <p className="mt-2 font-serif text-[19px] leading-tight text-foreground">
+                {draft.name.trim() || "Untitled tournament"}
+              </p>
+              <dl className="mt-4 flex flex-col gap-2.5">
+                {(
+                  [
+                    ["Date", formatDateLong(draft.date)],
+                    ["Course", `${course.name} · ${draft.tees} tees`],
+                    ["Format", `${draft.format} · ${draft.allowance}%`],
+                    ["Field", `${formatKES(draft.fee)} · max ${draft.maxPlayers}`],
+                    ...(draft.prizes.filter((p) => p.place.trim() && p.prize.trim())
+                      .length
+                      ? ([
+                          [
+                            "Prizes",
+                            `${
+                              draft.prizes.filter(
+                                (p) => p.place.trim() && p.prize.trim(),
+                              ).length
+                            } listed`,
+                          ],
+                        ] as [string, string][])
+                      : []),
+                    ...(draft.sponsors.filter((s) => s.name.trim()).length
+                      ? ([
+                          [
+                            "Sponsors",
+                            `${draft.sponsors.filter((s) => s.name.trim()).length}`,
+                          ],
+                        ] as [string, string][])
+                      : []),
+                  ] as [string, string][]
+                ).map(([k, v]) => (
+                  <div key={k} className="flex flex-col gap-0.5">
+                    <dt className="smallcaps text-muted-foreground">{k}</dt>
+                    <dd className="text-[13px] text-foreground">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );

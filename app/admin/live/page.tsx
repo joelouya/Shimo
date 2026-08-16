@@ -25,11 +25,13 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CertificationPanel } from "@/components/admin/certification-panel";
+import { PlayerAvatar } from "@/components/player/identity";
 import { LiveBadge } from "@/components/live-dot";
 import { DEMO_USER_ID, playerById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import {
   useActiveTournament,
+  useRoundCerts,
   useRoundScores,
   useSlowClock,
   useStandings,
@@ -46,7 +48,7 @@ import {
 import { roundsOf } from "@/lib/rounds";
 import type { Player } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
-import { formatElapsed, paceReadings, type PaceReading } from "@/lib/pace";
+import { formatElapsed, groupState, paceReadings, type PaceReading } from "@/lib/pace";
 import { roundKey } from "@/lib/rounds";
 
 function timeAgo(ts: number) {
@@ -92,11 +94,12 @@ function FlagCard({ flag, onReview }: { flag: OpsFlag; onReview: () => void }) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0, marginBottom: 0 }}
       className={cn(
-        "flex items-center gap-3 rounded-xl border px-4 py-3",
+        // CSS entrance (not framer initial/animate): a flag can appear while
+        // the sim is busy, and a main-thread entrance started then can freeze.
+        // The layout and exit above only run on review, so they stay on framer.
+        "animate-enter-rise flex items-center gap-3 rounded-xl border px-4 py-3",
         amber
           ? "border-amber-flag/30 bg-amber-wash"
           : "border-border bg-card/70",
@@ -131,13 +134,18 @@ function GroupCard({
   g,
   byId,
   pace,
+  selected,
+  onSelect,
 }: {
   g: SavedGroup;
   byId: Map<string, Player>;
   pace?: PaceReading;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const scores = useRoundScores();
   const events = useSim((s) => s.events);
+  const certs = useRoundCerts();
   const allFlags = useSim((s) => s.flags);
   const flags = allFlags.filter(
     (f) => f.groupId === g.id && f.status === "open" && (!IS_PILOT || f.kind !== "red"),
@@ -151,18 +159,38 @@ function GroupCard({
     : 0;
   const finished = thru >= 18;
   const lastEvent = events.find((e) => g.playerIds.includes(e.playerId));
-  const flagKind = flags.some((f) => f.kind === "red")
-    ? "red"
-    : flags.length
-      ? "amber"
-      : null;
+
+  // The group's lifecycle, folded from scores, certification and flags.
+  const groupCerts = g.playerIds.map((pid) => certs[pid]);
+  const state = groupState({
+    thru,
+    allCertified:
+      g.playerIds.length > 0 &&
+      groupCerts.every((c) => c?.stage === "certified"),
+    anyDisputed: groupCerts.some(
+      (c) => c?.stage === "disputed" || c?.stage === "committee-review",
+    ),
+    hasAmberFlag: flags.some((f) => f.kind === "amber"),
+    hasRedFlag: flags.some((f) => f.kind === "red"),
+  });
+  const certified = state.phase === "certified";
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
       className={cn(
-        "rounded-2xl bg-card p-4 shadow-card transition-shadow",
-        flagKind === "amber" && "ring-1 ring-amber-flag/40",
-        flagKind === "red" && "ring-1 ring-amber-flag/40",
+        "w-full rounded-2xl p-4 text-left transition-shadow",
+        // certified recedes into the page: no lift, sand ground, quieter ink
+        certified
+          ? "bg-secondary/40 shadow-none"
+          : "bg-card shadow-card hover:shadow-lift",
+        // attention as an edge, per the Three Flags Rule
+        state.attention === "review" && "ring-1 ring-amber-flag/60",
+        state.attention === "dispute" && "ring-2 ring-red-flag/70 bg-red-wash/25",
+        // selection is the operator's focus and outranks the attention ring
+        selected && "ring-2 ring-ink shadow-lift",
       )}
     >
       <div className="flex items-start justify-between">
@@ -198,20 +226,27 @@ function GroupCard({
             </p>
           )}
         </div>
-        <div className="text-right">
-          <p
-            className={cn(
-              "font-serif text-[22px] leading-none tnum",
-              finished ? "text-muted-foreground" : "text-foreground",
-            )}
-          >
-            {finished ? "F" : `H${thru + 1}`}
-          </p>
-          {flagKind && (
+        <div className="flex flex-col items-end">
+          {certified ? (
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <Check className="size-3.5" />
+              <span className="font-serif text-[15px] leading-none">Sealed</span>
+            </span>
+          ) : (
+            <p
+              className={cn(
+                "font-serif text-[22px] leading-none tnum",
+                finished ? "text-muted-foreground" : "text-foreground",
+              )}
+            >
+              {finished ? "F" : `H${thru + 1}`}
+            </p>
+          )}
+          {state.attention !== "none" && (
             <Flag
               className={cn(
-                "ml-auto mt-1 size-3",
-                "text-amber-flag",
+                "mt-1 size-3",
+                state.attention === "dispute" ? "text-red-flag" : "text-amber-flag",
               )}
               fill="currentColor"
             />
@@ -231,7 +266,12 @@ function GroupCard({
         })}
       </div>
       <div className="mt-2.5 border-t border-border/60 pt-2">
-        {lastEvent ? (
+        {/*
+          A plain in-progress group narrates its last moment. A group asking for
+          a human, or one whose cards are in, states where it is instead: the
+          status is the thing the desk needs to read, not the birdie.
+        */}
+        {state.attention === "none" && !certified && !finished && lastEvent ? (
           <motion.p
             key={lastEvent.id}
             initial={{ opacity: 0 }}
@@ -250,16 +290,31 @@ function GroupCard({
             {lastEvent.hole}th · {timeAgo(lastEvent.ts)}
           </motion.p>
         ) : (
-          <p className="text-[10.5px] text-muted-foreground">
-            {finished
-              ? "Card in, awaiting certification"
-              : thru > 0
-                ? "Out on the course"
-                : "Yet to score"}
+          <p
+            className={cn(
+              "text-[10.5px]",
+              state.attention === "dispute"
+                ? "font-medium text-red-flag"
+                : state.attention === "review"
+                  ? "font-medium text-amber-flag"
+                  : "text-muted-foreground",
+            )}
+          >
+            {state.attention === "dispute"
+              ? "Disputed, for the committee"
+              : state.attention === "review"
+                ? "Marker discrepancy, being resolved"
+                : certified
+                  ? "Certified and sealed"
+                  : finished
+                    ? "Card in, awaiting certification"
+                    : thru > 0
+                      ? "Out on the course"
+                      : "Yet to score"}
           </p>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -287,6 +342,7 @@ function LeaderboardPanel({ isStableford }: { isStableford: boolean }) {
             {r.tied ? "T" : ""}
             {r.position}
           </span>
+          <PlayerAvatar player={r.player} size="sm" />
           <span className="flex-1 truncate text-[12.5px]">{r.player.name}</span>
           <span className="text-[10.5px] text-primary-foreground/60 tnum">
             {r.thru >= 18 ? "F" : r.thru || "·"}
@@ -359,6 +415,9 @@ export default function LiveOpsPage() {
   const [reviewing, setReviewing] = useState<OpsFlag | null>(null);
   const [ending, setEnding] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  // The one group the desk is watching. A focus anchor, nothing more: click to
+  // hold it, click again to let go.
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   // deep link: /admin/live#certification opens the Committee tab. Read on the
   // first render - this page only ever renders on the client, behind SimGate.
   const [tab, setTab] = useState(() =>
@@ -423,7 +482,7 @@ export default function LiveOpsPage() {
   if (!active) {
     return (
       <div>
-        <p className="smallcaps text-clay">Live Ops</p>
+        <p className="smallcaps text-muted-foreground">Live Ops</p>
         <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
           Nothing on the course today
         </h1>
@@ -524,7 +583,16 @@ export default function LiveOpsPage() {
       <div className="mt-6 grid grid-cols-[1fr_300px] gap-6">
         <div className="grid grid-cols-3 gap-3">
           {active.groups.map((g) => (
-            <GroupCard key={g.id} g={g} byId={byId} pace={paceBy.get(g.id)} />
+            <GroupCard
+              key={g.id}
+              g={g}
+              byId={byId}
+              pace={paceBy.get(g.id)}
+              selected={selectedGroup === g.id}
+              onSelect={() =>
+                setSelectedGroup((prev) => (prev === g.id ? null : g.id))
+              }
+            />
           ))}
           {active.groups.length === 0 && (
             <p className="col-span-3 rounded-2xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">

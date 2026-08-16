@@ -1,7 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { ArrowRight, ArrowUpRight, ClipboardList, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,12 @@ import { LiveBadge } from "@/components/live-dot";
 import { clubById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import { useActiveTournament, useStandings,
-  useRoundScores
+  useRoundScores,
+  useSlowClock
 } from "@/lib/sim/hooks";
-import { allTournaments, useSim } from "@/lib/sim/store";
+import { allTournaments, groupHolesPlayed, useSim } from "@/lib/sim/store";
+import { paceReadings } from "@/lib/pace";
+import { roundKey } from "@/lib/rounds";
 import { formatDate, formatKES, toPar } from "@/lib/utils";
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -47,6 +50,29 @@ function LivePanel() {
     ),
   ).length;
 
+  /*
+   * One trustworthy operational line, derived from pace the desk already
+   * captures: the group furthest out of position, if any. A quiet fact for the
+   * caddymaster, never an alarm and never shown to players.
+   */
+  const now = useSlowClock();
+  const paceState = useSim((s) => s.pace);
+  const paceThreshold = useSim((s) => s.paceThresholdMin);
+  const pairings = useSim((s) => s.pairings);
+  const allScores = useSim((s) => s.scores);
+  const behindGroup = useMemo(() => {
+    if (!active) return null;
+    const key = roundKey(active.tournament.id, active.round ?? 1);
+    const paceRows = Object.values(paceState).filter((p) => p.key === key);
+    const holes = groupHolesPlayed({ pairings, scores: allScores } as never, key);
+    const worst = paceReadings(paceRows, holes, now, paceThreshold)
+      .filter((r) => r.outOfPosition)
+      .sort((a, b) => (b.behind ?? 0) - (a.behind ?? 0))[0];
+    if (!worst) return null;
+    const g = active.groups.find((gr) => gr.id === worst.groupId);
+    return g ? { number: g.number, behind: worst.behind ?? 0 } : null;
+  }, [active, paceState, paceThreshold, pairings, allScores, now]);
+
   if (!active) {
     return (
       <div className="flex items-center justify-between rounded-2xl border border-dashed border-border bg-card/50 px-6 py-5">
@@ -67,12 +93,7 @@ function LivePanel() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-lift"
-    >
+    <div className="animate-enter-rise overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-lift">
       <div className="flex items-center justify-between p-6 pb-0">
         <div className="flex items-center gap-3">
           <LiveBadge />
@@ -124,6 +145,12 @@ function LivePanel() {
           </div>
         </div>
       </div>
+      {behindGroup && (
+        <div className="flex items-center gap-2 border-t border-cream/10 px-6 py-2.5 text-[12.5px] text-primary-foreground/70">
+          <span className="size-1.5 shrink-0 rounded-full bg-clay-lift" />
+          Group {behindGroup.number} is {behindGroup.behind} min behind pace
+        </div>
+      )}
       <div className="flex border-t border-cream/10">
         <Link
           href="/admin/live"
@@ -139,7 +166,7 @@ function LivePanel() {
           Certification & disputes
         </Link>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -195,7 +222,7 @@ export default function AdminDashboard() {
     <div>
       <header className="flex items-end justify-between">
         <div>
-          <p className="smallcaps text-clay">
+          <p className="smallcaps text-muted-foreground">
             {new Date().toLocaleDateString("en-KE", {
               weekday: "long",
               day: "numeric",

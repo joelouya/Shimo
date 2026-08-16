@@ -93,6 +93,12 @@ export interface Player {
   memberNo?: string;
   /** ISO yyyy-mm-dd. Only needed for age-restricted events (juniors, seniors). */
   dob?: string;
+  /**
+   * A member's photo, as a URL or data URI. Optional: absent falls back to the
+   * player's initials on a colour derived from their name, so identity reads
+   * consistently across the app whether or not a club has uploaded pictures.
+   */
+  photo?: string;
 
   /* ---- membership access, pilot only ------------------------------ *
    *

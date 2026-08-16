@@ -234,7 +234,10 @@ export const DEFAULT_CONFIG: ProducerConfig = {
   featureEveryMs: 90_000,
   aceApprovalHandicap: 20,
   aceChime: false,
-  coverage: "reduced",
+  // The panel offers two modes today: quiet and standard. The moments engine
+  // (reduced / full) is retained but flag-gated, so the resting default is the
+  // calm standard board rather than one that breaks in.
+  coverage: "standard",
   profile: "club",
   messages: [],
 };

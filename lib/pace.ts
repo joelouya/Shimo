@@ -146,3 +146,62 @@ export function stampsFor(
     finish: before < 18 && after >= 18,
   };
 }
+
+/**
+ * A group's lifecycle, derived rather than stored.
+ *
+ * The desk's one question during a round is "what needs me?", and the answer
+ * is scattered across scores (how far a group is round), certification (whether
+ * its cards are in and sealed), and flags (whether anything went wrong). This
+ * folds those into two axes so a group can be read at a glance from across the
+ * room: a phase it is passing through, and whether it is asking for a human.
+ *
+ * Kept as primitives in and a plain object out, so it owns no store types and
+ * can be checked on its own. Inputs are reduced by the caller, which already
+ * holds the scores, certs and flags.
+ */
+export type GroupPhase =
+  | "not-started"
+  | "on-course"
+  | "card-in"
+  | "certified";
+
+/** amber means a human is needed; red means something is wrong or disputed. */
+export type GroupAttention = "none" | "review" | "dispute";
+
+export interface GroupState {
+  phase: GroupPhase;
+  attention: GroupAttention;
+}
+
+export function groupState(opts: {
+  /** min holes played across the group */
+  thru: number;
+  /** every card in the group is certified and sealed */
+  allCertified: boolean;
+  /** a card in the group is disputed or with the committee */
+  anyDisputed: boolean;
+  hasAmberFlag: boolean;
+  hasRedFlag: boolean;
+}): GroupState {
+  const finished = opts.thru >= 18;
+  const phase: GroupPhase = opts.allCertified
+    ? "certified"
+    : finished
+      ? "card-in"
+      : opts.thru > 0
+        ? "on-course"
+        : "not-started";
+
+  // Attention is independent of phase: a group still on the course can carry a
+  // marker discrepancy, and a card that is in can be disputed. Red outranks
+  // amber, per the Three Flags Rule.
+  const attention: GroupAttention =
+    opts.hasRedFlag || opts.anyDisputed
+      ? "dispute"
+      : opts.hasAmberFlag
+        ? "review"
+        : "none";
+
+  return { phase, attention };
+}

@@ -34,6 +34,7 @@ import {
 import { settledHoles, type SettledHole } from "./trust";
 import { isOver, nextFeature } from "./features";
 import { defaultCoverage } from "./profile";
+import { FEATURES } from "@/lib/flags";
 import type {
   Announcement,
   AnnouncementKind,
@@ -639,10 +640,21 @@ function onSnapshot(
   const decided = (snapshot.decisions ?? []).some(
     (d) => d.kind === "coverage" || d.kind === "quiet",
   );
-  const coverage: Coverage = decided
+  const requested: Coverage = decided
     ? withDecisions.config.coverage
     : (snapshot.tournament.tvCoverage ??
       (snapshot.tournament.tvQuiet ? "quiet" : defaultCoverage(profile)));
+  /*
+   * The panel exposes two modes today, quiet and standard. The moments engine
+   * (reduced / full) stays wired but flag-gated, so any stored, seeded, or
+   * legacy reduced/full setting resolves to the calm standard board while the
+   * flag is off. This keeps the panel's label, its help text, and the screen's
+   * actual behaviour in agreement.
+   */
+  const coverage: Coverage =
+    !FEATURES.tvMomentsEngine && (requested === "reduced" || requested === "full")
+      ? "standard"
+      : requested;
   const state = {
     ...withDecisions,
     config: { ...withDecisions.config, profile, messages, coverage },

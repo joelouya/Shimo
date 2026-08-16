@@ -177,7 +177,7 @@ export default function RyderBuilderPage() {
           <Trophy className="size-5" />
         </span>
         <div>
-          <p className="smallcaps text-clay">New event</p>
+          <p className="smallcaps text-muted-foreground">New event</p>
           <h1 className="font-serif text-[30px] leading-tight text-foreground">Ryder Cup</h1>
         </div>
       </div>

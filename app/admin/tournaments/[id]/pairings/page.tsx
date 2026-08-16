@@ -15,6 +15,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TournamentNav } from "@/components/admin/tournament-nav";
 import { GROUPS, clubById } from "@/lib/data";
 import {
   allTournaments,
@@ -155,7 +156,7 @@ function TeamsPanel({
     <div className="mt-8">
       <div className="flex items-end justify-between">
         <div>
-          <p className="smallcaps text-clay">Teams</p>
+          <p className="smallcaps text-muted-foreground">Teams</p>
           <p className="mt-1 text-[13px] text-muted-foreground">
             {teams.length
               ? `${teams.length} teams · ${assignedToTeams} of ${inField} players`
@@ -344,7 +345,7 @@ export default function PairingsPage({
       </Link>
       <header className="mt-3 flex items-end justify-between">
         <div>
-          <p className="smallcaps text-clay">Pairings & tee times</p>
+          <p className="smallcaps text-muted-foreground">Pairings & tee times</p>
           <h1 className="mt-1 font-serif text-[30px] leading-tight text-foreground">
             {t.name}
           </h1>
@@ -375,6 +376,8 @@ export default function PairingsPage({
           </Button>
         </div>
       </header>
+
+      <TournamentNav id={t.id} />
 
       {/* one tee sheet per round */}
       {rounds.length > 1 && (

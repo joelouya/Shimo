@@ -467,14 +467,31 @@ export function CertificationPanel() {
             <div>
               <StageChip stage={stage} />
             </div>
-            <p className="text-right text-[12px] text-muted-foreground tnum">
-              {cert?.playerCertifiedAt
-                ? new Date(cert.playerCertifiedAt).toLocaleTimeString("en-KE", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "·"}
-            </p>
+            <div className="text-right">
+              <p className="text-[12px] text-muted-foreground tnum">
+                {cert?.playerCertifiedAt
+                  ? new Date(cert.playerCertifiedAt).toLocaleTimeString("en-KE", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "·"}
+              </p>
+              {/*
+                The seal made visible. A certified card carries a SHA-256 lock;
+                showing its head, in the same monospaced form the returned-card
+                hero uses, is the desk's proof the card is sealed and closed,
+                not a claim that it is. Quiet stone, so the clay stays on the
+                status itself.
+              */}
+              {stage === "certified" && cert?.lockedHash && (
+                <p
+                  className="mt-0.5 font-mono text-[10px] leading-none text-stone/80 tnum"
+                  title={`Sealed · ${cert.lockedHash}`}
+                >
+                  {cert.lockedHash.slice(0, 10)}
+                </p>
+              )}
+            </div>
           </div>
         ))}
       </div>

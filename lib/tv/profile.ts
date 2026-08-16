@@ -88,9 +88,10 @@ export const PROFILE_LABEL: Record<FieldProfile, string> = {
  * feel about their afternoon.
  */
 export function defaultCoverage(profile: FieldProfile): Coverage {
-  // A championship can carry the moments engine; everything else gets the calm
-  // standard screen by default, and a team day is left with just its board.
-  if (profile === "championship") return "full";
+  // The panel exposes two modes today: quiet (board only) and standard (board
+  // with calm interludes). A team day is left with just its board; everything
+  // else gets standard. The "reduced" and "full" moments engine stays wired in
+  // the producer for a later rollout, but nothing auto-selects it now.
   if (profile === "team") return "quiet";
   return "standard";
 }

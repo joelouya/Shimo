@@ -14,6 +14,7 @@ import Link from "next/link";
 import { ArrowLeft, Download, ImageIcon, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TournamentNav } from "@/components/admin/tournament-nav";
 import { useClubIdentity } from "@/components/club-brand";
 import { COURSES, courseById } from "@/lib/data";
 import { fixtureSpec, posterFileName, resultsSpec } from "@/lib/poster/spec";
@@ -210,7 +211,7 @@ export default function PosterPage({
       </Link>
 
       <header className="mt-6">
-        <p className="smallcaps text-clay">Poster</p>
+        <p className="smallcaps text-muted-foreground">Poster</p>
         <h1 className="mt-2 font-serif text-3xl text-foreground">{t.name}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           1080 × 1350, sized for Instagram and WhatsApp. Everything on it comes
@@ -218,6 +219,8 @@ export default function PosterPage({
           generate again.
         </p>
       </header>
+
+      <TournamentNav id={t.id} />
 
       <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="order-2 lg:order-1">

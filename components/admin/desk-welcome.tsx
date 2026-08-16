@@ -66,9 +66,7 @@ export function DeskWelcome() {
   const rosterCount = useSim((s) => s.roster.length);
   const still = useReducedMotion();
 
-  // Held locally so the panel can animate out before the flag unmounts it.
-  const [open, setOpen] = useState(true);
-  const show = !welcomed && open;
+  const show = !welcomed;
 
   const [step, setStep] = useState<Step>("welcome");
   const [dir, setDir] = useState(1);
@@ -80,29 +78,23 @@ export function DeskWelcome() {
     setDir(ORDER.indexOf(next) >= idx ? 1 : -1);
     setStep(next);
   };
-  const finish = () => {
-    setOpen(false);
-    setDeskWelcomed(true);
-  };
+  // The overlay closes by unmounting the moment the flag flips, and the CSS
+  // entrance does not need an exit, so setting the flag is the whole of it.
+  const finish = () => setDeskWelcomed(true);
 
+  if (!show) return null;
+
+  /*
+   * The overlay entrance is CSS, not framer. This panel mounts at the same
+   * moment the field simulation runs its boot burst, and a main-thread
+   * entrance animation started in that window can be starved and freeze
+   * part-way. The compositor animation completes on wall-clock time. Step
+   * transitions below stay on framer: they fire after mount, once the burst
+   * has passed.
+   */
   return (
-    <AnimatePresence>
-      {show && (
-        <motion.div
-          key="desk-welcome"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.3 } }}
-          transition={{ duration: 0.35 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-6 backdrop-blur-[2px]"
-        >
-          <motion.div
-            initial={still ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={still ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
-            transition={{ duration: 0.5, ease: EASE }}
-            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-background shadow-pane"
-          >
+    <div className="animate-enter-fade fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-6 backdrop-blur-[2px]">
+      <div className="animate-enter-rise flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-background shadow-pane">
             {/* header: the crest is the anchor that never moves, and a thin
                 line fills as the flow advances instead of a step counter */}
             <div className="flex items-center gap-4 border-b border-border/60 px-8 py-5">
@@ -162,10 +154,8 @@ export function DeskWelcome() {
                 </motion.div>
               </AnimatePresence>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </div>
+    </div>
   );
 }
 
