@@ -35,7 +35,7 @@ import {
 import { DEMO_USER_ID } from "@/lib/data";
 import { addRosterMember, updateRosterMember, useSim } from "@/lib/sim/store";
 import type { Player } from "@/lib/types";
-import { initials } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/player/identity";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -245,7 +245,7 @@ export default function MembersPage() {
     <div>
       <header className="flex items-end justify-between">
         <div>
-          <p className="smallcaps text-clay">Members</p>
+          <p className="smallcaps text-muted-foreground">Members</p>
           <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
             The Muthaiga roster
           </h1>
@@ -296,9 +296,7 @@ export default function MembersPage() {
             className="grid grid-cols-[2fr_5rem_1.6fr_6rem_6rem_3rem] items-center gap-3 border-b border-border/50 px-5 py-3 last:border-b-0 transition-colors hover:bg-accent/40"
           >
             <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary font-serif text-[13px] text-ink-soft">
-                {initials(m.name)}
-              </div>
+              <PlayerAvatar player={m} size="lg" />
               <div className="min-w-0">
                 <p className="truncate text-[13.5px] font-medium text-foreground">
                   {m.name}

@@ -159,7 +159,7 @@ export default function ProducerPanel() {
 
       <header className="mt-6 flex items-start justify-between">
         <div>
-          <p className="smallcaps text-clay">TV producer</p>
+          <p className="smallcaps text-muted-foreground">TV producer</p>
           <h1 className="mt-2 font-serif text-3xl text-foreground">{live.name}</h1>
         </div>
         <Button variant="outline" asChild>
@@ -170,8 +170,11 @@ export default function ProducerPanel() {
         </Button>
       </header>
 
+      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+        {/* the operator console */}
+        <div className="min-w-0">
       {/* what is happening now */}
-      <section className="mt-7 rounded-2xl border border-border bg-card p-5">
+      <section className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span
@@ -197,27 +200,31 @@ export default function ProducerPanel() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* The two the day usually wants come first - the calm board, or
-                the board with interludes - then the two that announce moments,
-                for a field that wants the drama. All visible, so during a round
-                the admin sees where it is set rather than discovering it. */}
+            {/* Two modes: the calm board, or the board with interludes. The
+                moments engine (reduced/full) stays wired in the producer but is
+                not offered here yet. A stored reduced/full reads as Standard so
+                the control never shows nothing selected. */}
             <div className="flex rounded-xl border border-border bg-secondary/40 p-1">
-              {(["quiet", "standard", "reduced", "full"] as const).map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void send("coverage", { payload: { level } })}
-                  title={COVERAGE_HELP[level]}
-                  className={`rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
-                    coverage === level
-                      ? "bg-card font-medium text-foreground shadow-card"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {COVERAGE_LABEL[level]}
-                </button>
-              ))}
+              {(["quiet", "standard"] as const).map((level) => {
+                const active =
+                  level === "quiet" ? quiet : !quiet;
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void send("coverage", { payload: { level } })}
+                    title={COVERAGE_HELP[level]}
+                    className={`rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
+                      active
+                        ? "bg-card font-medium text-foreground shadow-card"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {COVERAGE_LABEL[level]}
+                  </button>
+                );
+              })}
             </div>
             {producer.playing && !quiet && (
               <Button variant="ghost" onClick={() => void send("skip")}>
@@ -324,6 +331,54 @@ export default function ProducerPanel() {
       </div>
 
       <Tools onSend={send} busy={busy} />
+        </div>
+
+        {/*
+         * The screen itself, at desk scale. Not a thumbnail: the real TV route
+         * in an iframe, so the preview is the clubhouse output rather than a
+         * drawing of it. The board is sized entirely in container-query units,
+         * so it composes to whatever the iframe viewport is, this desk panel
+         * included, with no special preview code behind it.
+         */}
+        <aside className="lg:sticky lg:top-6">
+          <p className="smallcaps text-muted-foreground">
+            This is what the clubhouse sees now
+          </p>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-broadcast-ink shadow-card">
+            <div className="aspect-video w-full">
+              {feed.snapshot ? (
+                <iframe
+                  title="Clubhouse screen, live"
+                  src={`/tournament/${live.id}/tv`}
+                  loading="lazy"
+                  className="h-full w-full border-0"
+                />
+              ) : (
+                /*
+                 * The screen is driven by the connected club's live feed. Until
+                 * that is flowing, the desk sees the frame it will fill rather
+                 * than a fetch error, so the preview reads as waiting, not broken.
+                 */
+                <div className="flex h-full flex-col items-center justify-center gap-2.5 px-8 text-center">
+                  <span className="size-2 rounded-full bg-clay-lift/70" />
+                  <p className="font-serif text-[19px] leading-snug text-cream/85">
+                    The clubhouse screen appears here
+                  </p>
+                  <p className="text-[13px] text-cream/45">
+                    Live once the connected club is scoring
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-[12.5px] text-muted-foreground">
+            <span
+              className={`size-1.5 rounded-full ${quiet ? "bg-stone" : "bg-clay"}`}
+            />
+            {quiet ? "Quiet. The board only" : "Live. The board, with interludes"}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

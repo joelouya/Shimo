@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TournamentNav } from "@/components/admin/tournament-nav";
 import { ClubCrest, ClubSurface } from "@/components/club-brand";
 import { SponsorStrip } from "@/components/sponsor-strip";
 import { RecapPanel } from "@/components/admin/recap-panel";
@@ -203,6 +204,8 @@ export default function TournamentSummaryPage({
           />
         </div>
       </ClubSurface>
+
+      <TournamentNav id={t.id} />
 
       {t.sponsors?.length ? (
         <div className="mt-5">

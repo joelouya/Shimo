@@ -153,6 +153,17 @@
 
   --animate-live-pulse: live-pulse 2.2s ease-in-out infinite;
   --animate-marquee-in: marquee-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  /*
+   * Entrance animations for surfaces that mount alongside the field
+   * simulation. Deliberately CSS rather than a JavaScript animation: the sim
+   * runs a catch-up burst on boot that saturates the main thread, and a
+   * main-thread entrance (framer) started in that window can be starved and
+   * freeze part-way. A compositor animation completes on wall-clock time
+   * regardless, and the global reduced-motion block already collapses it.
+   */
+  --animate-enter-rise: enter-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-enter-fade: enter-fade 0.35s var(--ease-out) both;
 }
 
 @keyframes live-pulse {
@@ -191,6 +202,26 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes enter-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

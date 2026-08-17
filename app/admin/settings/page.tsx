@@ -15,11 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClubIdentityCard } from "@/components/admin/club-identity";
 import { CsvImportCard } from "@/components/admin/csv-import";
 import { DeskCard } from "@/components/admin/desk-card";
 import { TvSettingsCard } from "@/components/admin/tv-settings";
 import { guestResolveAbuseSummary } from "@/lib/guests-remote";
+import { FEATURES } from "@/lib/flags";
 import { IS_PILOT } from "@/lib/mode";
 import { resetDemo, reviewIntegrityEntry, useSim } from "@/lib/sim/store";
 
@@ -180,18 +182,33 @@ export default function SettingsPage() {
   const [autoFlag, setAutoFlag] = useState(true);
   const [publicBoards, setPublicBoards] = useState(true);
   const [attestReminders, setAttestReminders] = useState(true);
+  // Settings are grouped into jobs rather than stacked in one long column, so
+  // the page stops reading as a dump and starts reading as a console.
+  const [tab, setTab] = useState("club");
 
   return (
     <div>
       <header>
-        <p className="smallcaps text-clay">Settings</p>
+        <p className="smallcaps text-muted-foreground">Settings</p>
         <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
           Club settings
         </h1>
       </header>
 
-      <div className="mt-8 grid max-w-4xl grid-cols-2 items-start gap-6">
-        <div className="flex flex-col gap-6">
+      <Tabs value={tab} onValueChange={setTab} className="mt-8 max-w-4xl">
+        <TabsList className="h-10">
+          <TabsTrigger value="club" className="px-4 text-[13px]">Club</TabsTrigger>
+          <TabsTrigger value="competition" className="px-4 text-[13px]">Competition</TabsTrigger>
+          <TabsTrigger value="experience" className="px-4 text-[13px]">Experience</TabsTrigger>
+          <TabsTrigger value="operations" className="px-4 text-[13px]">Operations</TabsTrigger>
+        </TabsList>
+
+        {/*
+          forceMount keeps every tab in the tree so an in-progress edit, a
+          parsed CSV preview or an unsaved accent survives a glance at another
+          tab. Radix hides the inactive ones; only their state persists.
+        */}
+        <TabsContent value="club" forceMount className="mt-6 grid items-start gap-6 data-[state=inactive]:hidden md:grid-cols-2">
           <Card title="Club profile" sub="What golfers see across Shimo">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
@@ -232,7 +249,10 @@ export default function SettingsPage() {
               </div>
             </div>
           </Card>
+          <ClubIdentityCard />
+        </TabsContent>
 
+        <TabsContent value="competition" forceMount className="mt-6 grid items-start gap-6 data-[state=inactive]:hidden md:grid-cols-2">
           <Card
             title="Competition defaults"
             sub="Applied to every new tournament, editable per event"
@@ -274,16 +294,45 @@ export default function SettingsPage() {
               <Switch checked={attestReminders} onCheckedChange={setAttestReminders} />
             </SettingRow>
           </Card>
-        </div>
-
-        <div className="flex flex-col gap-6">
-          <ClubIdentityCard />
-          <TvSettingsCard />
-          <DeskCard />
+          {/*
+            Handicapping is the one place the product must be scrupulous about
+            what it is. Kenya's national WHS engine is run by Club Systems
+            under an R&A federation initiative; Shimo runs the tournament day
+            and produces a sealed, submission-ready result that feeds it.
+            Approved submission is being pursued and is not yet secured, so
+            this card says what is true today and nothing more. See
+            docs/COMMITMENTS.md.
+          */}
+          <Card
+            title="Handicapping"
+            sub="Works with the handicap system your club already uses"
+          >
+            <div className="flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3.5">
+              <div>
+                <p className="text-[13.5px] font-medium text-foreground">
+                  Submission-ready results
+                </p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Every certified card is sealed and exportable for the club&apos;s
+                  handicap returns. Direct submission to the national system is
+                  being arranged and is not live yet.
+                </p>
+              </div>
+              <Badge variant="secondary">Export</Badge>
+            </div>
+          </Card>
           {IS_PILOT && <IntegrityCard />}
+        </TabsContent>
+
+        <TabsContent value="experience" forceMount className="mt-6 grid items-start gap-6 data-[state=inactive]:hidden md:grid-cols-2">
+          <TvSettingsCard />
+        </TabsContent>
+
+        <TabsContent value="operations" forceMount className="mt-6 grid items-start gap-6 data-[state=inactive]:hidden md:grid-cols-2">
+          <DeskCard />
           {IS_PILOT && <GuestAccessCard />}
           <CsvImportCard />
-          {!IS_PILOT && (
+          {FEATURES.payments && (
           <Card
             title="Payments"
             sub="Illustrative only. Shimo does not settle money today"
@@ -325,35 +374,6 @@ export default function SettingsPage() {
             </div>
           </Card>
           )}
-
-          {/*
-            Handicapping is the one place the product must be scrupulous about
-            what it is. Kenya's national WHS engine is run by Club Systems
-            under an R&A federation initiative; Shimo runs the tournament day
-            and produces a sealed, submission-ready result that feeds it.
-            Approved submission is being pursued and is not yet secured, so
-            this card says what is true today and nothing more. See
-            docs/COMMITMENTS.md.
-          */}
-          <Card
-            title="Handicapping"
-            sub="Works with the handicap system your club already uses"
-          >
-            <div className="flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3.5">
-              <div>
-                <p className="text-[13.5px] font-medium text-foreground">
-                  Submission-ready results
-                </p>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Every certified card is sealed and exportable for the club&apos;s
-                  handicap returns. Direct submission to the national system is
-                  being arranged and is not live yet.
-                </p>
-              </div>
-              <Badge variant="secondary">Export</Badge>
-            </div>
-          </Card>
-
           {!IS_PILOT ? (
             <Card title="Demo" sub="This is a prototype. Data is simulated">
               <Button variant="outline" onClick={() => resetDemo()}>
@@ -379,8 +399,8 @@ export default function SettingsPage() {
               </p>
             </Card>
           )}
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

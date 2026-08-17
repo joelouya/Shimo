@@ -34,6 +34,7 @@ import { useActiveTournament, useSyncStatus,
 } from "@/lib/sim/hooks";
 import { retryFailedOps, setBulkScore, useSim } from "@/lib/sim/store";
 import type { Course, Player } from "@/lib/types";
+import { FEATURES } from "@/lib/flags";
 import { cn, toPar } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -45,12 +46,14 @@ const Cell = memo(function Cell({
   holeIdx,
   value,
   par,
+  gap,
   onEnter,
 }: {
   pid: string;
   holeIdx: number;
   value: number | null;
   par: number;
+  gap: boolean;
   onEnter: (pid: string) => void;
 }) {
   const [text, setText] = useState(value?.toString() ?? "");
@@ -121,6 +124,10 @@ const Cell = memo(function Cell({
         "focus:border-clay focus:ring-2 focus:ring-clay/25",
         value != null && d < 0 && "text-clay-deep",
         value != null && d > 1 && "text-stone",
+        // a skipped hole in the middle of a card: the one empty cell the desk
+        // must not miss. Amber, per the Three Flags Rule, and only when unfocused
+        // so it does not fight the clay focus ring while being typed.
+        gap && "border-amber-flag/50 bg-amber-wash/50 focus:bg-card",
         // no transition on the way in, 300ms on the way out: an acknowledgement
         // should appear the moment it is earned and leave without being watched
         "transition-[background-color,border-color] duration-300 ease-[var(--ease-out)]",
@@ -145,6 +152,10 @@ interface RowProps {
   allowance: number;
   isStableford: boolean;
   onEnter: (pid: string) => void;
+  focused: boolean;
+  onSelect: (pid: string | null) => void;
+  /** whether a blank hole before a filled one is an error worth flagging */
+  flagGaps: boolean;
 }
 
 const PlayerRow = memo(
@@ -158,11 +169,32 @@ const PlayerRow = memo(
     allowance,
     isStableford,
     onEnter,
+    focused,
+    onSelect,
+    flagGaps,
   }: RowProps) {
     const st = rowStats(player, scores, course, allowance);
+    // A gap is an empty hole with a played hole after it: a number the desk
+    // skipped, not a hole the group has simply not reached yet.
+    const lastFilled = scores.reduce(
+      (m: number, v: number | null, i: number) => (v != null ? i : m),
+      -1,
+    );
     return (
-      <tr className={cn("border-t border-border/60", cardIn && "bg-clay-wash/30")}>
-        <td className="sticky left-0 z-10 min-w-[168px] bg-background px-3 py-1.5">
+      <tr
+        className={cn(
+          "border-t border-border/60",
+          cardIn && "bg-clay-wash/30",
+          focused && "bg-accent/70",
+        )}
+      >
+        <td
+          onClick={() => onSelect(focused ? null : player.id)}
+          className={cn(
+            "sticky left-0 z-10 min-w-[168px] cursor-pointer px-3 py-1.5",
+            focused ? "bg-accent shadow-[inset_3px_0_0_var(--clay)]" : "bg-background",
+          )}
+        >
           <p className="truncate text-[14px] font-medium text-foreground">
             {player.name}
           </p>
@@ -171,12 +203,16 @@ const PlayerRow = memo(
           </p>
         </td>
         {course.holes.map((h, i) => (
-          <td key={h.hole} className="px-0.5 py-1.5">
+          <td
+            key={h.hole}
+            className={cn("px-0.5 py-1.5", i === 8 && "border-r-2 border-border")}
+          >
             <Cell
               pid={player.id}
               holeIdx={i}
               value={scores[i] ?? null}
               par={h.par}
+              gap={flagGaps && scores[i] == null && i < lastFilled}
               onEnter={onEnter}
             />
           </td>
@@ -221,7 +257,9 @@ const PlayerRow = memo(
     a.player.id === b.player.id &&
     a.scoresKey === b.scoresKey &&
     a.cardIn === b.cardIn &&
-    a.isStableford === b.isStableford,
+    a.isStableford === b.isStableford &&
+    a.focused === b.focused &&
+    a.flagGaps === b.flagGaps,
 );
 
 /* ------------------------------------------------------------------ */
@@ -304,6 +342,10 @@ function TeamRow({
   const teamPH = teamPlayingHandicap(members, course, allowances, maxCH ?? undefined);
   const card = scores[team.id] ?? [];
   const st = cardStats(card, course, teamPH, maxHoleScore ?? "none");
+  const teamLastFilled = card.reduce(
+    (m: number, v: number | null, i: number) => (v != null ? i : m),
+    -1,
+  );
   return (
     <tr className="border-t border-border/60">
       <td className="sticky left-0 z-10 min-w-[168px] bg-background px-3 py-1.5">
@@ -313,12 +355,16 @@ function TeamRow({
         </p>
       </td>
       {course.holes.map((h, i) => (
-        <td key={h.hole} className="px-0.5 py-1.5">
+        <td
+          key={h.hole}
+          className={cn("px-0.5 py-1.5", i === 8 && "border-r-2 border-border")}
+        >
           <Cell
             pid={team.id}
             holeIdx={i}
             value={card[i] ?? null}
             par={h.par}
+            gap={card[i] == null && i < teamLastFilled}
             onEnter={onEnter}
           />
         </td>
@@ -345,6 +391,16 @@ function TeamRow({
   );
 }
 
+/** Desk view filters. "review" is a group carrying an open flag. */
+type ScoreFilter = "all" | "incomplete" | "review" | "complete";
+
+const FILTERS: { id: ScoreFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "incomplete", label: "Incomplete" },
+  { id: "review", label: "Needs review" },
+  { id: "complete", label: "Complete" },
+];
+
 export default function BulkScoresPage() {
   const active = useActiveTournament();
   const scores = useRoundScores();
@@ -353,6 +409,11 @@ export default function BulkScoresPage() {
   const teamsByKey = useSim((s) => s.teams);
   const { online, failed } = useSyncStatus();
   const [scanOpen, setScanOpen] = useState(false);
+  // The desk's own view controls: which cards to show, and the one row being
+  // worked. Neither touches scoring; they only decide what is on screen.
+  const [filter, setFilter] = useState<ScoreFilter>("all");
+  const [focusedPid, setFocusedPid] = useState<string | null>(null);
+  const allFlags = useSim((s) => s.flags);
 
   const course = useMemo(
     () => (active ? courseById(active.tournament.courseId) : null),
@@ -373,16 +434,24 @@ export default function BulkScoresPage() {
   const focusNextPlayer = useCallback(
     (pid: string) => {
       const idx = flatPlayerIds.indexOf(pid);
-      const nextPid = flatPlayerIds[idx + 1];
-      if (!nextPid) return;
-      const card = scores[nextPid] ?? [];
-      let hole = card.findIndex((x) => x == null);
-      if (hole === -1) hole = 0;
       // defer until after blur/save settles
       setTimeout(() => {
-        document
-          .querySelector<HTMLInputElement>(`[data-cell="${nextPid}:${hole}"]`)
-          ?.focus();
+        // Walk forward to the next player whose cell is actually on screen. A
+        // filter can hide the immediate next player, and jumping to a row that
+        // is not mounted would silently drop focus rather than move it on.
+        for (let i = idx + 1; i < flatPlayerIds.length; i++) {
+          const nextPid = flatPlayerIds[i];
+          const card = scores[nextPid] ?? [];
+          let hole = card.findIndex((x) => x == null);
+          if (hole === -1) hole = 0;
+          const cell = document.querySelector<HTMLInputElement>(
+            `[data-cell="${nextPid}:${hole}"]`,
+          );
+          if (cell) {
+            cell.focus();
+            return;
+          }
+        }
       }, 0);
     },
     [flatPlayerIds, scores],
@@ -391,7 +460,7 @@ export default function BulkScoresPage() {
   if (!active || !course) {
     return (
       <div>
-        <p className="smallcaps text-clay">Enter scores from cards</p>
+        <p className="smallcaps text-muted-foreground">Enter scores from cards</p>
         <h1 className="mt-2 font-serif text-[30px] leading-tight text-foreground">
           No tournament running today
         </h1>
@@ -408,8 +477,32 @@ export default function BulkScoresPage() {
 
   const { tournament, groups } = active;
   const isStableford = tournament.format === "Stableford";
+  // Only stroke play requires every hole to be holed out, so a blank hole
+  // before a filled one is unambiguously a missed entry there. Stableford and
+  // Better Ball allow a legitimate pick-up, so a mid-card blank is not an error
+  // and must not be flagged.
+  const flagGaps = tournament.format === "Stroke Play";
   const fieldSize = flatPlayerIds.length;
   const cardsIn = flatPlayerIds.filter((pid) => cardIn[pid]).length;
+
+  // Groups carrying an open flag, for the "Needs review" filter.
+  const flaggedGroups = new Set(
+    allFlags.filter((f) => f.status === "open").map((f) => f.groupId),
+  );
+
+  // Whether the active filter leaves anything on screen, so an empty result
+  // reads as "all done here" rather than a blank table.
+  const anyVisible =
+    filter === "all" ||
+    active.groups.some((g) =>
+      g.playerIds.some((pid) =>
+        filter === "complete"
+          ? cardIn[pid]
+          : filter === "incomplete"
+            ? !cardIn[pid]
+            : flaggedGroups.has(g.id),
+      ),
+    );
 
   // a scramble is entered as one card per team; a better ball keeps per-player
   // cards (the team is derived from the better member on each hole)
@@ -424,7 +517,7 @@ export default function BulkScoresPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <p className="smallcaps text-clay">Enter scores from cards</p>
+            <p className="smallcaps text-muted-foreground">Enter scores from cards</p>
             <LiveBadge />
           </div>
           <h1 className="mt-2 font-serif text-[30px] leading-tight text-foreground">
@@ -460,18 +553,41 @@ export default function BulkScoresPage() {
               Cards in
             </p>
           </div>
-          <Button variant="outline" onClick={() => setScanOpen(true)}>
-            <ScanLine className="size-4" />
-            Scan card
-          </Button>
+          {FEATURES.scanCard && (
+            <Button variant="outline" onClick={() => setScanOpen(true)}>
+              <ScanLine className="size-4" />
+              Scan card
+            </Button>
+          )}
         </div>
       </header>
 
-      <p className="mt-4 text-[12.5px] text-muted-foreground">
-        <span className="font-medium text-ink-soft">Tab</span> moves across
-        holes · <span className="font-medium text-ink-soft">Enter</span> drops
-        to the next player · every cell saves the moment you leave it
-      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[12.5px] text-muted-foreground">
+          <span className="font-medium text-ink-soft">Tab</span> moves across
+          holes · <span className="font-medium text-ink-soft">Enter</span> drops
+          to the next player · every cell saves the moment you leave it
+        </p>
+        {!isScramble && (
+          <div className="flex rounded-xl border border-border bg-secondary/40 p-0.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                className={cn(
+                  "rounded-lg px-3 py-1 text-[12.5px] transition-colors",
+                  filter === f.id
+                    ? "bg-card font-medium text-foreground shadow-card"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="mt-3 overflow-auto rounded-2xl bg-card pb-1 shadow-card max-h-[calc(100vh-15rem)]">
         <table className="w-full border-separate border-spacing-0">
@@ -482,8 +598,15 @@ export default function BulkScoresPage() {
                   Player
                 </span>
               </th>
-              {course.holes.map((h) => (
-                <th key={h.hole} className="px-0.5 py-2 text-center">
+              {course.holes.map((h, i) => (
+                <th
+                  key={h.hole}
+                  className={cn(
+                    "px-0.5 py-2 text-center",
+                    // the turn: a band between the front nine and the back
+                    i === 8 && "border-r-2 border-border",
+                  )}
+                >
                   <p className="text-[12px] font-semibold text-foreground tnum">
                     {h.hole}
                   </p>
@@ -534,6 +657,11 @@ export default function BulkScoresPage() {
                     onEnter={focusNextPlayer}
                     scoresKeyFor={scoresKeyFor}
                     colSpan={21}
+                    filter={filter}
+                    groupFlagged={flaggedGroups.has(g.id)}
+                    focusedPid={focusedPid}
+                    onSelectRow={setFocusedPid}
+                    flagGaps={flagGaps}
                   />
                 ))}
           </tbody>
@@ -544,9 +672,20 @@ export default function BulkScoresPage() {
             tee times first.
           </p>
         )}
+        {groups.length > 0 && !isScramble && !anyVisible && (
+          <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+            {filter === "review"
+              ? "No cards need review. Every group is running clean."
+              : filter === "incomplete"
+                ? "Every card is in. Nothing left to enter."
+                : "No cards are in yet."}
+          </p>
+        )}
       </div>
 
-      <ScanCardDialog open={scanOpen} onOpenChange={setScanOpen} />
+      {FEATURES.scanCard && (
+        <ScanCardDialog open={scanOpen} onOpenChange={setScanOpen} />
+      )}
     </div>
   );
 }
@@ -566,6 +705,11 @@ function GroupRows({
   onEnter,
   scoresKeyFor,
   colSpan,
+  filter,
+  groupFlagged,
+  focusedPid,
+  onSelectRow,
+  flagGaps,
 }: {
   group: { id: string; number: number; teeTime: string; playerIds: string[] };
   byId: Map<string, Player>;
@@ -579,11 +723,25 @@ function GroupRows({
   onEnter: (pid: string) => void;
   scoresKeyFor: (pid: string) => string;
   colSpan: number;
+  filter: ScoreFilter;
+  groupFlagged: boolean;
+  focusedPid: string | null;
+  onSelectRow: (pid: string | null) => void;
+  flagGaps: boolean;
 }) {
   const players = group.playerIds
     .map((pid) => byId.get(pid))
     .filter((p): p is Player => Boolean(p));
-  if (!players.length) return null;
+
+  // The filter only decides what is on screen; it never touches a score.
+  const visible = players.filter((p) => {
+    if (filter === "complete") return cardIn[p.id];
+    if (filter === "incomplete") return !cardIn[p.id];
+    if (filter === "review") return groupFlagged;
+    return true;
+  });
+  if (!visible.length) return null;
+
   return (
     <>
       <tr>
@@ -593,10 +751,13 @@ function GroupRows({
         >
           <span className="smallcaps text-[10px] text-ink-soft">
             Group {group.number} · tee {group.teeTime}
+            {groupFlagged && (
+              <span className="ml-2 text-amber-flag">needs review</span>
+            )}
           </span>
         </td>
       </tr>
-      {players.map((p) => (
+      {visible.map((p) => (
         <PlayerRow
           key={p.id}
           player={p}
@@ -609,6 +770,9 @@ function GroupRows({
           allowance={allowance}
           isStableford={isStableford}
           onEnter={onEnter}
+          focused={focusedPid === p.id}
+          onSelect={onSelectRow}
+          flagGaps={flagGaps}
         />
       ))}
     </>
