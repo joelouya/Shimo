@@ -1,76 +1,60 @@
 "use client";
 
 /**
- * First-run onboarding for pilot players. A full-screen flow that turns a
- * phone into a signed-in player: welcome, magic-link sign-in, confirm the
- * roster match, signature method, permissions, add to home screen, ready.
+ * First-run onboarding for pilot players. A full-screen flow in four moments
+ * that turns a phone into a signed-in player: a greeting that names the
+ * tournament, a one-tap identity confirmation, magic-link sign-in (skipped
+ * when a session is already open), and the signature choice. The last tap
+ * drops the player straight onto their card.
  *
  * Signing in is what makes "you" real everywhere else (the leaderboard row,
- * the home greeting, and next, scoring your own card). The flow can be
- * skipped so the follow-only path keeps working without an account; signing
- * in later from Profile finishes the job.
+ * the home greeting, and scoring your own card). The flow can be skipped so
+ * the follow-only path keeps working without an account; signing in later
+ * from Profile finishes the job. Permissions and the add-to-home-screen prompt
+ * are asked for in context later, not here.
  *
  * Motion: one persistent shell, with the content sliding through it in the
- * direction of travel and each element cascading in behind the last. The
- * steps read as one continuous story rather than seven separate screens.
+ * direction of travel and each element cascading in behind the last, and a
+ * thin line that fills as the flow advances. The steps read as one continuous
+ * story rather than four separate screens.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
-  BellRing,
   Check,
   Fingerprint,
   Loader2,
-  MapPin,
   PenLine,
   ShieldCheck,
   Smartphone,
 } from "lucide-react";
 
 import { Logo, LogoMark } from "@/components/logo";
-import { useInstallKind } from "@/components/pwa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { clubById } from "@/lib/data";
 import { AUTH_AVAILABLE, sendLoginCode, signOut, verifyLoginCode } from "@/lib/sync/auth";
 import { IS_PILOT } from "@/lib/mode";
 import { accessMessage, memberAccess } from "@/lib/membership";
-import { useAuthReconcile } from "@/lib/sim/hooks";
+import { useActiveTournament, useAuthReconcile } from "@/lib/sim/hooks";
 import {
   authedPlayerId,
   setAuth,
-  setLocationConsent,
+  setDeviceIdentity,
   setOnboarded,
   setSignMethod,
   setUserPin,
   useSim,
   type SignMethod,
 } from "@/lib/sim/store";
-import { getGpsFix } from "@/lib/integrity";
+import type { Player } from "@/lib/types";
 import { cn, initials } from "@/lib/utils";
 
-type Step =
-  | "welcome"
-  | "signin"
-  | "profile"
-  | "cards"
-  | "signature"
-  | "permissions"
-  | "install"
-  | "ready";
+type Step = "greeting" | "identity" | "signin" | "signature";
 
-const ORDER: Step[] = [
-  "welcome",
-  "signin",
-  "profile",
-  "cards",
-  "signature",
-  "permissions",
-  "install",
-  "ready",
-];
+const ORDER: Step[] = ["greeting", "identity", "signin", "signature"];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -153,7 +137,7 @@ function WhoArt() {
   const figures = [
     { label: "Position", value: "1", sub: "of 36" },
     { label: "Points", value: "48", sub: null },
-    { label: "Playing HC", value: "12", sub: null },
+    { label: "Playing HC", value: "2", sub: null },
   ];
   return (
     <div className="rounded-2xl bg-card p-4 shadow-card">
@@ -288,7 +272,7 @@ const DEMO_STEPS = [
     key: "who",
     icon: <LogoMark className="size-6" />,
     title: "You are Joel Ouya",
-    body: "Handicap 12, three holes into the Captain's Prize at Muthaiga. The tournament is running right now, and the other thirty-five players are playing alongside you.",
+    body: "Handicap 2, three holes into the Captain's Prize at Muthaiga. The tournament is running right now, and the other thirty-five players are playing alongside you.",
     art: <WhoArt />,
   },
   {
@@ -314,7 +298,7 @@ function DemoIntro() {
   const finish = () => setOnboarded(true);
 
   return (
-    <Shell step={i + 1} total={DEMO_STEPS.length}>
+    <Shell progress={(i + 1) / DEMO_STEPS.length}>
       <AnimatePresence initial={false}>
         <motion.div
           key={step.key}
@@ -371,15 +355,19 @@ function DemoIntro() {
 
 /* ------------------------------------------------------------------ */
 
-/** The persistent frame: it never unmounts, so the story stays continuous. */
+/**
+ * The persistent frame: it never unmounts, so the story stays continuous.
+ *
+ * Progress is one thin line that fills as the flow advances, not a row of
+ * segments. A counter tells a player how much is left to endure; a line that
+ * simply grows tells them the same thing without ever naming a number.
+ */
 function Shell({
   children,
-  step,
-  total,
+  progress,
 }: {
   children: React.ReactNode;
-  step: number;
-  total: number;
+  progress: number;
 }) {
   return (
     <motion.div
@@ -405,23 +393,16 @@ function Shell({
       />
 
       <div className="relative mx-auto flex h-dvh w-full max-w-[430px] flex-col px-6 pb-8 pt-[max(env(safe-area-inset-top),20px)]">
-        <div className="flex items-center justify-between py-4">
+        <div className="flex items-center gap-4 py-4">
           <Logo className="text-[15px]" />
-          <div className="flex gap-1.5">
-            {Array.from({ length: total }, (_, i) => (
-              <span
-                key={i}
-                className="h-1 w-5 overflow-hidden rounded-full bg-border"
-              >
-                <motion.span
-                  className="block h-full w-full origin-left rounded-full bg-clay"
-                  initial={false}
-                  animate={{ scaleX: i < step ? 1 : 0 }}
-                  transition={{ duration: 0.45, ease: EASE, delay: i < step ? 0.05 : 0 }}
-                />
-              </span>
-            ))}
-          </div>
+          <span className="h-0.5 flex-1 overflow-hidden rounded-full bg-border">
+            <motion.span
+              className="block h-full w-full origin-left rounded-full bg-clay"
+              initial={false}
+              animate={{ scaleX: Math.max(0, Math.min(1, progress)) }}
+              transition={{ duration: 0.5, ease: EASE }}
+            />
+          </span>
         </div>
         {/* steps stack here absolutely, so one can leave as the next arrives */}
         <div className="relative flex-1 overflow-x-hidden">{children}</div>
@@ -458,13 +439,34 @@ function StepBody({
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * The pilot flow, in four moments: a greeting that names the day, a one-tap
+ * identity confirmation, sign-in (skipped when a session is already open), and
+ * the signature choice. There is no "you're all set" screen at the end: the
+ * last tap on the signature step drops the player straight onto their card,
+ * which is the thing they came to do.
+ *
+ * Identity can come before sign-in because it usually does: a player who
+ * reached this from a group code has already picked themselves off the tee
+ * sheet, so the device knows who they are and only has to have it confirmed.
+ * A player arriving cold goes greeting -> sign-in, and the email match names
+ * them. A player returning on a live session skips sign-in entirely.
+ */
 function OnboardingFlow() {
-  // A player who signed in by tapping the emailed link comes back on a fresh
-  // page load, so pick the flow up after sign-in rather than starting over.
-  const alreadyMatched = useSim((s) => Boolean(authedPlayerId(s)));
-  const [step, setStep] = useState<Step>(() =>
-    alreadyMatched ? "profile" : "welcome",
+  const matchId = useSim(authedPlayerId);
+  const deviceIdentity = useSim((s) => s.deviceIdentity);
+  const roster = useSim((s) => s.roster);
+  const authed = useSim((s) => Boolean(s.authEmail));
+
+  // The player this device already stands for, if any: the email match takes
+  // precedence, then the identity picked off the tee sheet.
+  const knownId = matchId ?? deviceIdentity;
+  const knownPlayer = useMemo(
+    () => roster.find((p) => p.id === knownId) ?? null,
+    [roster, knownId],
   );
+
+  const [step, setStep] = useState<Step>("greeting");
   const [dir, setDir] = useState(1);
   const idx = ORDER.indexOf(step);
 
@@ -474,8 +476,18 @@ function OnboardingFlow() {
   };
   const finish = () => setOnboarded(true);
 
+  // Leaving the greeting: confirm a known player first, otherwise go straight
+  // to sign-in, where the email match will name them.
+  const afterGreeting = () => go(knownPlayer ? "identity" : "signin");
+  // Confirming an identity: a signed-in member is done identifying and moves to
+  // the signature; anyone else signs in to claim the card (with a guest skip).
+  const afterIdentity = () => go(authed ? "signature" : "signin");
+  // Skipping sign-in keeps a claimed identity heading to the signature; a
+  // visitor with no identity is following along, and that is the whole flow.
+  const skipSignIn = () => (knownPlayer ? go("signature") : finish());
+
   return (
-    <Shell step={idx + 1} total={ORDER.length}>
+    <Shell progress={(idx + 1) / ORDER.length}>
       {/*
         No mode="wait": the outgoing and incoming steps overlap, which both
         reads better and avoids the stall that mode="wait" introduced. They sit
@@ -497,25 +509,20 @@ function OnboardingFlow() {
           }}
           className="absolute inset-0 flex flex-col overflow-y-auto"
         >
-          {step === "welcome" && (
-            <Welcome onNext={() => go("signin")} onSkip={finish} />
+          {step === "greeting" && (
+            <Greeting onNext={afterGreeting} onSkip={finish} />
           )}
-          {step === "signin" && (
-            <SignIn onMatched={() => go("profile")} onSkip={finish} />
-          )}
-          {step === "profile" && (
+          {step === "identity" && (
             <ConfirmProfile
-              onNext={() => go("signature")}
+              player={knownPlayer}
+              onNext={afterIdentity}
               onReject={() => go("signin")}
             />
           )}
-          {step === "cards" && <TwoCards onNext={() => go("signature")} />}
-          {step === "signature" && (
-            <SignatureSetup onNext={() => go("permissions")} />
+          {step === "signin" && (
+            <SignIn onMatched={() => go("signature")} onSkip={skipSignIn} />
           )}
-          {step === "permissions" && <Permissions onNext={() => go("install")} />}
-          {step === "install" && <InstallStep onNext={() => go("ready")} />}
-          {step === "ready" && <Ready onDone={finish} />}
+          {step === "signature" && <SignatureSetup onNext={finish} />}
         </motion.div>
       </AnimatePresence>
     </Shell>
@@ -524,7 +531,16 @@ function OnboardingFlow() {
 
 /* ---- steps ---- */
 
-function Welcome({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+/**
+ * The greeting. When a tournament is live the day names itself: the club crest,
+ * the event, and the course, so the first thing a player sees is the round they
+ * turned up for rather than a generic product welcome. With nothing live it
+ * falls back to the plain Shimo welcome.
+ */
+function Greeting({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+  const active = useActiveTournament();
+  const club = active ? clubById(active.tournament.clubId) : null;
+
   return (
     <div className="flex flex-1 flex-col">
       <Reveal i={0}>
@@ -537,26 +553,47 @@ function Welcome({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
           <LogoMark className="size-8" />
         </motion.div>
       </Reveal>
-      <Reveal i={1}>
-        <h1 className="mt-5 font-serif text-[30px] leading-tight text-foreground">
-          Welcome to Shimo
-        </h1>
-      </Reveal>
-      <Reveal i={2}>
-        <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
-          Your club runs its tournaments here. Live scoring, the leaderboard in
-          your pocket, and your card signed and settled without paper.
-        </p>
-      </Reveal>
-      <Reveal i={3}>
-        <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
-          Let&apos;s set up your phone. It takes about a minute.
-        </p>
-      </Reveal>
+      {active && club ? (
+        <>
+          <Reveal i={1}>
+            <p className="mt-5 smallcaps text-muted-foreground">{club.name}</p>
+          </Reveal>
+          <Reveal i={2}>
+            <h1 className="mt-2 font-serif text-[30px] leading-tight text-foreground">
+              {active.tournament.name}
+            </h1>
+          </Reveal>
+          <Reveal i={3}>
+            <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
+              You&apos;re joining the round at {active.course.name}. Set up your
+              phone once and your card is ready when you tee off.
+            </p>
+          </Reveal>
+        </>
+      ) : (
+        <>
+          <Reveal i={1}>
+            <h1 className="mt-5 font-serif text-[30px] leading-tight text-foreground">
+              Welcome to Shimo
+            </h1>
+          </Reveal>
+          <Reveal i={2}>
+            <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
+              Your club runs its tournaments here. Live scoring, the leaderboard
+              in your pocket, and your card signed and settled without paper.
+            </p>
+          </Reveal>
+          <Reveal i={3}>
+            <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
+              Let&apos;s set up your phone. It takes about a minute.
+            </p>
+          </Reveal>
+        </>
+      )}
       <div className="mt-auto flex flex-col gap-2 pt-8">
         <Reveal i={4}>
           <Button variant="clay" size="lg" className="w-full" onClick={onNext}>
-            Get started
+            {active ? "Continue" : "Get started"}
             <ArrowRight className="size-4" />
           </Button>
         </Reveal>
@@ -843,26 +880,24 @@ function NoMembership() {
   );
 }
 
+/**
+ * Identity confirmation. The player has usually already been named, either by
+ * an email match or by the tee-sheet pick that got them here, so this shows the
+ * name and asks for one tap rather than asking who they are from scratch.
+ */
 function ConfirmProfile({
+  player,
   onNext,
   onReject,
 }: {
+  player: Player | null;
   onNext: () => void;
   onReject: () => void;
 }) {
-  const matchId = useSim(authedPlayerId);
-  const roster = useSim((s) => s.roster);
-  const player = useMemo(
-    () => roster.find((p) => p.id === matchId) ?? null,
-    [roster, matchId],
-  );
+  const authed = useSim((s) => Boolean(s.authEmail));
 
-  /*
-   * An email the roster does not recognise used to render nothing at all, so
-   * a stranger who signed in got a blank screen and a member whose club had
-   * not invited them got the same blank screen. Both now get told which of
-   * those happened and what to do about it.
-   */
+  // Reached with an email that signed in but is not on the roster: name the
+  // state and offer the paths the club, not the app, can actually resolve.
   if (!player) return <NoMembership />;
   const club = clubById(player.clubId);
 
@@ -870,7 +905,9 @@ function ConfirmProfile({
     <StepBody icon={<Check className="size-6" />} title="Is this you?">
       <Reveal i={2}>
         <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
-          We matched your email to this member.
+          {authed
+            ? "We matched your email to this member."
+            : "You picked this player off the tee sheet."}
         </p>
       </Reveal>
       <Reveal i={3}>
@@ -905,8 +942,13 @@ function ConfirmProfile({
             variant="ghost"
             className="w-full text-muted-foreground"
             onClick={async () => {
-              await signOut();
-              setAuth(null, null);
+              // Drop whichever identity source named this player: the session if
+              // there is one, and the tee-sheet pick either way.
+              if (authed) {
+                await signOut();
+                setAuth(null, null);
+              }
+              setDeviceIdentity(null);
               onReject();
             }}
           >
@@ -915,45 +957,6 @@ function ConfirmProfile({
         </Reveal>
       </div>
     </StepBody>
-  );
-}
-
-/**
- * Why there are two cards, told immediately before we ask for a signature.
- *
- * Without this the flow asks a player to set up a signature having never said
- * what they will be signing. The two-card rule is the single thing that makes
- * a Shimo card hold up afterwards, and the person who has to follow it was the
- * one person never being told.
- */
-function TwoCards({ onNext }: { onNext: () => void }) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <StepBody
-        icon={<ShieldCheck className="size-6" />}
-        title="Two cards, one result"
-      >
-        <Reveal i={2}>
-          <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
-            Someone in your group keeps a second copy of your score, and you
-            keep one of theirs. Where the two disagree, the desk sees it before
-            the board does. That is Rule 3.3b, and it is why a card returned
-            through Shimo still holds up a week later.
-          </p>
-        </Reveal>
-        <Reveal i={3} className="mt-6">
-          <CardsArt />
-        </Reveal>
-      </StepBody>
-      <div className="mt-auto pt-8">
-        <Reveal i={4}>
-          <Button variant="clay" size="lg" className="w-full" onClick={onNext}>
-            Next
-            <ArrowRight className="size-4" />
-          </Button>
-        </Reveal>
-      </div>
-    </div>
   );
 }
 
@@ -1055,208 +1058,5 @@ function SignatureSetup({ onNext }: { onNext: () => void }) {
         </Reveal>
       </div>
     </StepBody>
-  );
-}
-
-/** One permission the app can ask for, and where the asking has got to. */
-function PermissionRow({
-  icon,
-  title,
-  body,
-  state,
-  onAsk,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-  state: "idle" | "granted" | "denied";
-  onAsk: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-ink-soft">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-medium text-foreground">{title}</p>
-        <p className="text-[12px] leading-snug text-muted-foreground">{body}</p>
-      </div>
-      {state === "granted" ? (
-        <motion.span
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.35, ease: EASE }}
-          className="flex items-center gap-1 text-[12px] text-clay-deep"
-        >
-          <Check className="size-3.5" /> On
-        </motion.span>
-      ) : (
-        <Button variant="outline" size="sm" onClick={onAsk}>
-          {state === "denied" ? "Retry" : "Allow"}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function Permissions({ onNext }: { onNext: () => void }) {
-  const [notif, setNotif] = useState<"idle" | "granted" | "denied">("idle");
-  const [loc, setLoc] = useState<"idle" | "granted" | "denied">("idle");
-
-  const askNotif = async () => {
-    try {
-      if (typeof Notification === "undefined") return setNotif("denied");
-      const res = await Notification.requestPermission();
-      setNotif(res === "granted" ? "granted" : "denied");
-    } catch {
-      setNotif("denied");
-    }
-  };
-
-  const askLoc = async () => {
-    try {
-      await getGpsFix(6000);
-      setLocationConsent("granted");
-      setLoc("granted");
-    } catch {
-      setLocationConsent("declined");
-      setLoc("denied");
-    }
-  };
-
-  return (
-    <StepBody icon={<BellRing className="size-6" />} title="Stay in the loop">
-      <Reveal i={2}>
-        <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
-          Both are optional, and you can change them anytime in Settings.
-        </p>
-      </Reveal>
-      <Reveal i={3}>
-        <div className="mt-5 flex flex-col gap-2.5">
-          <PermissionRow
-            icon={<BellRing className="size-4" />}
-            title="Notifications"
-            body="Tee-time reminders and position changes"
-            state={notif}
-            onAsk={askNotif}
-          />
-          <PermissionRow
-            icon={<MapPin className="size-4" />}
-            title="Location"
-            body="Confirms you signed your card at the course"
-            state={loc}
-            onAsk={askLoc}
-          />
-        </div>
-      </Reveal>
-      <div className="mt-auto pt-8">
-        <Reveal i={4}>
-          <Button variant="clay" size="lg" className="w-full" onClick={onNext}>
-            Continue
-            <ArrowRight className="size-4" />
-          </Button>
-        </Reveal>
-      </div>
-    </StepBody>
-  );
-}
-
-function InstallStep({ onNext }: { onNext: () => void }) {
-  const kind = useInstallKind();
-
-  return (
-    <StepBody icon={<Smartphone className="size-6" />} title="Keep it one tap away">
-      <Reveal i={2}>
-        <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
-          {kind === "installed"
-            ? "You're already running Shimo from your home screen. Perfect."
-            : kind === "ios"
-              ? "Tap the Share button, then “Add to Home Screen”. It works offline out on the course."
-              : "Add Shimo to your home screen. It opens instantly and works offline out on the course."}
-        </p>
-      </Reveal>
-      <Reveal i={3}>
-        <div className="mt-7 flex justify-center">
-          <motion.div
-            className="flex size-24 items-center justify-center rounded-[26px] bg-card shadow-lift"
-            initial={{ scale: 0.9, y: 6 }}
-            animate={{ scale: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: EASE }}
-          >
-            <LogoMark className="size-14" />
-          </motion.div>
-        </div>
-      </Reveal>
-      <div className="mt-auto flex flex-col gap-2 pt-8">
-        {kind === "native" && (
-          <Reveal i={4}>
-            <Button
-              variant="clay"
-              size="lg"
-              className="w-full"
-              onClick={async () => {
-                const ev = window.__shimoInstallEvent;
-                if (ev) {
-                  await ev.prompt();
-                  window.__shimoInstallEvent = null;
-                }
-                onNext();
-              }}
-            >
-              <Smartphone className="size-4" />
-              Add to home screen
-            </Button>
-          </Reveal>
-        )}
-        <Reveal i={5}>
-          <Button
-            variant={kind === "native" ? "ghost" : "clay"}
-            size="lg"
-            className={cn("w-full", kind === "native" && "text-muted-foreground")}
-            onClick={onNext}
-          >
-            {kind === "native" ? "Maybe later" : "Continue"}
-            {kind !== "native" && <ArrowRight className="size-4" />}
-          </Button>
-        </Reveal>
-      </div>
-    </StepBody>
-  );
-}
-
-function Ready({ onDone }: { onDone: () => void }) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <Reveal i={0}>
-        <motion.div
-          className="mt-6 flex size-14 items-center justify-center rounded-2xl bg-clay text-cream"
-          initial={{ scale: 0.7, rotate: -12 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 240, damping: 16 }}
-        >
-          <Check className="size-7" />
-        </motion.div>
-      </Reveal>
-      <Reveal i={1}>
-        <h1 className="mt-5 font-serif text-[30px] leading-tight text-foreground">
-          You&apos;re all set
-        </h1>
-      </Reveal>
-      <Reveal i={2}>
-        <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
-          Your place on the live board is now yours. When the club starts a
-          tournament day you&apos;ll follow it here, and score your own card
-          when it&apos;s your turn to play.
-        </p>
-      </Reveal>
-      <div className="mt-auto pt-8">
-        <Reveal i={3}>
-          <Button variant="clay" size="lg" className="w-full" onClick={onDone}>
-            Enter Shimo
-            <ArrowRight className="size-4" />
-          </Button>
-        </Reveal>
-      </div>
-    </div>
   );
 }

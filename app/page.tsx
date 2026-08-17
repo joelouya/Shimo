@@ -15,15 +15,31 @@
  * none yet.
  */
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, MonitorSmartphone, Smartphone } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { ReturnedCard } from "@/components/landing/returned-card";
 import { LiveDot } from "@/components/live-dot";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { getSession } from "@/lib/sync/auth";
 import { cn } from "@/lib/utils";
+
+/**
+ * Which door a device opens.
+ *
+ * The visitor is already on one device: a phone opens the golfer, a laptop
+ * opens the club. A coarse pointer or a narrow window reads as a phone.
+ */
+function routeForDevice(): "/app" | "/admin" {
+  if (typeof window === "undefined") return "/app";
+  const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const narrow = window.innerWidth < 1024;
+  return coarse || narrow ? "/app" : "/admin";
+}
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
@@ -174,19 +190,19 @@ const CLAIMS = [
   {
     n: "01",
     title: "A result that holds up.",
-    body: "Dual entry under Rule 3.3b: the player scores, the marker keeps a second card, and any disagreement surfaces before it reaches the board. The marker attests, the player certifies, and the card seals with a tamper-evident hash over every figure and every identity on it. The Committee gets an append-only audit trail and a real dispute path. This is rare in club software anywhere, not only here.",
+    body: "Dual entry under Rule 3.3b: the player scores, the marker keeps a second card, and any disagreement surfaces before it reaches the board. The marker attests, the player certifies, and the card seals with a tamper-evident hash over every figure and every identity on it. The Committee gets an append-only audit trail and a real dispute path.",
     evidence: <ChainEvidence />,
   },
   {
     n: "02",
     title: "Works where the golf is.",
-    body: "Parts of a golf course have no signal, and that is an ordinary condition rather than an error. Shimo scores offline, holds what it knows, says so quietly, and reconciles when the phone finds the club again. Built for a mid-range Android in direct sunlight over four hours, because that is what is actually in the pocket.",
+    body: "Parts of a golf course have no signal, and that is an ordinary condition rather than an error. Shimo scores offline, holds what it knows, says so quietly, and reconciles the moment the phone finds the club again.",
     evidence: <OfflineEvidence />,
   },
   {
     n: "03",
     title: "The club looks superb.",
-    body: "Generated fixture and results posters in the club's own crest and colour, and a clubhouse screen that runs the whole afternoon unattended and holds the room through prizegiving. It never shows a member's worst hole. A captain is buying an event that feels like an event, and this is most of what that means.",
+    body: "Generated fixture and results posters in the club's own crest and colour, and a clubhouse screen that runs the whole afternoon unattended and holds the room through prizegiving. It never shows a member's worst hole.",
     evidence: <BoardEvidence />,
   },
 ];
@@ -195,6 +211,41 @@ const CLAIMS = [
 
 export default function LandingPage() {
   const still = useReducedMotion();
+  const router = useRouter();
+  // A signed-in visitor is not a prospect: send them to their side rather than
+  // showing the marketing page. Gate the first paint on the session check so a
+  // returning user never sees this page flash before the redirect.
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getSession()
+      .then((session) => {
+        if (!active) return;
+        if (session) router.replace(routeForDevice());
+        else setChecking(false);
+      })
+      .catch(() => {
+        if (active) setChecking(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
+  if (checking) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, ease: EASE }}
+        >
+          <Logo className="text-[19px] opacity-70" />
+        </motion.div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-dvh">
@@ -240,8 +291,8 @@ export default function LandingPage() {
             className="mt-6 max-w-lg font-serif text-[19px] leading-relaxed text-ink-soft"
           >
             Shimo runs a club&apos;s tournament day end to end. Entries and tee
-            sheets, live scoring out on the course, cards certified to the Rules
-            of Golf, and a clubhouse screen worth watching.
+            sheets, live scoring on the course, cards certified to the Rules of
+            Golf, and a clubhouse screen worth watching.
           </motion.p>
 
           <motion.div
@@ -250,17 +301,14 @@ export default function LandingPage() {
             transition={{ duration: 0.75, ease: EASE, delay: 0.22 }}
             className="mt-8 flex flex-wrap items-center gap-3"
           >
-            <Button variant="clay" size="lg" asChild>
-              <Link href="/app">
-                <LiveDot />
-                See a round being played
-              </Link>
-            </Button>
-            <Button variant="outline" size="lg" asChild>
-              <Link href="/admin">
-                See the club&apos;s desk
-                <ArrowRight className="size-4" />
-              </Link>
+            <Button
+              variant="clay"
+              size="lg"
+              onClick={() => router.push(routeForDevice())}
+            >
+              <LiveDot />
+              Get started
+              <ArrowRight className="size-4" />
             </Button>
           </motion.div>
 
@@ -270,8 +318,7 @@ export default function LandingPage() {
             transition={{ duration: 0.8, ease: EASE, delay: 0.34 }}
             className="mt-6 text-[13px] leading-relaxed text-muted-foreground"
           >
-            Built for the clubs of Kenya, and then the continent. Both doors are
-            live and carry the same tournament.
+            Built for the clubs of Kenya, and every course after that.
           </motion.p>
         </div>
 
@@ -284,7 +331,7 @@ export default function LandingPage() {
       <section className="mx-auto w-full max-w-6xl px-6">
         <Reveal>
           <p className="smallcaps border-t border-border pt-6 text-muted-foreground">
-            What a club is actually buying
+            What&apos;s included
           </p>
         </Reveal>
 
@@ -314,69 +361,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---- the two doors ---- */}
-      <section className="mx-auto w-full max-w-6xl px-6 pb-24 pt-8">
-        <Reveal>
-          <p className="smallcaps border-t border-border pt-6 text-muted-foreground">
-            Have a look around
-          </p>
-          <p className="mt-3 max-w-xl font-serif text-[19px] leading-relaxed text-ink-soft">
-            Both sides run the same tournament at the same time. Open them side
-            by side and a score entered on the phone lands on the club&apos;s
-            desk within a second.
-          </p>
-        </Reveal>
-
-        <Reveal delay={0.06} className="mt-8">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Link
-              href="/app"
-              className="group rounded-2xl bg-card p-6 shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
-            >
-              <div className="flex size-11 items-center justify-center rounded-xl bg-clay-wash text-clay">
-                <Smartphone className="size-5" />
-              </div>
-              <h3 className="mt-4 font-serif text-xl text-foreground">
-                The golfer
-              </h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                Three holes into the Captain&apos;s Prize. Score the round,
-                attest a partner&apos;s card, watch the board move.
-              </p>
-              <p className="mt-4 flex items-center gap-1.5 text-[13px] font-medium text-clay">
-                Open the app
-                <ArrowRight className="size-3.5 transition-transform duration-[var(--dur-hover)] ease-[var(--ease-out)] group-hover:translate-x-0.5" />
-              </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Best in a phone-sized window
-              </p>
-            </Link>
-
-            <Link
-              href="/admin"
-              className="group rounded-2xl bg-primary p-6 text-primary-foreground shadow-card transition-[transform,box-shadow] duration-[var(--dur-hover)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift motion-reduce:hover:translate-y-0"
-            >
-              <div className="flex size-11 items-center justify-center rounded-xl bg-cream/10 text-clay-wash">
-                <MonitorSmartphone className="size-5" />
-              </div>
-              <h3 className="mt-4 font-serif text-xl">The club</h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-primary-foreground/60">
-                The tournament desk. Create events, set pairings, enter returned
-                cards, and run the day from Live Ops.
-              </p>
-              <p className="mt-4 flex items-center gap-1.5 text-[13px] font-medium text-clay-wash">
-                Open the desk
-                <ArrowRight className="size-3.5 transition-transform duration-[var(--dur-hover)] ease-[var(--ease-out)] group-hover:translate-x-0.5" />
-              </p>
-              <p className="mt-1 text-[11px] text-primary-foreground/60">
-                Best on a laptop, full width
-              </p>
-            </Link>
-          </div>
-        </Reveal>
-      </section>
-
-      <footer className="border-t border-border">
+      <footer className="mt-16 border-t border-border">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8">
           <Logo className="text-[15px]" />
           <p className="text-[13px] text-muted-foreground">

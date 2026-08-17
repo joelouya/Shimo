@@ -302,7 +302,7 @@ function QuestionsBuilder({
       <div>
         <Label>Custom questions</Label>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Optional. Asked on the registration form and kept for the club only —
+          Optional. Asked on the registration form and kept for the club only,
           never shared with a sponsor.
         </p>
       </div>

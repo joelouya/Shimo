@@ -72,7 +72,7 @@ export function teamPlayingHandicap(
 }
 
 /* ------------------------------------------------------------------ *
- * Scramble — one card, one team handicap
+ * Scramble: one card, one team handicap
  * ------------------------------------------------------------------ */
 
 /** A synthetic player standing in for the team, so the shared board code can
@@ -120,7 +120,7 @@ export function scrambleTeamRow(
 }
 
 /* ------------------------------------------------------------------ *
- * Better ball — every member keeps a card, the team takes the better hole
+ * Better ball: every member keeps a card, the team takes the better hole
  * ------------------------------------------------------------------ */
 
 /** One member's net and points on a hole, off their own playing handicap. */
@@ -194,7 +194,7 @@ export function teamStandings(rows: StandingRow[], mode: ViewMode): StandingRow[
 }
 
 /* ------------------------------------------------------------------ *
- * Match play — two sides, compared hole by hole
+ * Match play: two sides, compared hole by hole
  * ------------------------------------------------------------------ */
 
 export interface MatchResult {

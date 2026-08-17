@@ -417,7 +417,7 @@ export default function PairingsPage({
             className="fixed right-8 top-6 z-50 flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-[13px] text-primary-foreground shadow-lift"
           >
             <Check className="size-4 text-clay-wash" />
-            Tee sheet opened — print it or send it to the starter&apos;s desk
+            Tee sheet opened. Print it or send it to the starter&apos;s desk
           </motion.div>
         )}
       </AnimatePresence>

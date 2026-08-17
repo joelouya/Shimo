@@ -89,7 +89,7 @@ const P = (
 
 export const PLAYERS: Player[] = [
   // - the demo user and his group -
-  P(DEMO_USER_ID, "Joel Ouya", "muthaiga", 12),
+  P(DEMO_USER_ID, "Joel Ouya", "muthaiga", 2),
   P(MARKER_ID, "David Kamau", "muthaiga", 14),
   P("p-wanjiku-g", "Grace Wanjiku", "karen", 9, "F"),
   // - the field -
