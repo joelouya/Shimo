@@ -627,7 +627,7 @@ export default function LeaderboardPage() {
           <LiveBadge />
         </div>
         <div className="mt-2 flex items-start justify-between gap-3">
-          <h1 className="font-serif text-[28px] leading-tight text-foreground">
+          <h1 className="font-serif text-[32px] font-medium leading-[1.04] tracking-[-0.012em] text-foreground">
             {active.tournament.name}
           </h1>
           <ClubCrest

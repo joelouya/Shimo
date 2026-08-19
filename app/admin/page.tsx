@@ -230,7 +230,7 @@ export default function AdminDashboard() {
             })}{" "}
             · Muthaiga Golf Club
           </p>
-          <h1 className="mt-2 font-serif text-[34px] leading-[1.05] text-foreground">
+          <h1 className="mt-2 font-serif text-[clamp(36px,4.8vw,50px)] font-medium leading-[1.0] tracking-[-0.018em] text-foreground">
             Good morning, Wanjiru.
           </h1>
         </div>

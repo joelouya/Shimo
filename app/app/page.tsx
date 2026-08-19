@@ -185,7 +185,7 @@ export default function HomePage() {
         <p className="smallcaps text-clay">
           {tone === "classic" ? clubById(user.clubId).name : greeting}
         </p>
-        <h1 className="mt-1 font-serif text-[34px] leading-[1.05] text-foreground">
+        <h1 className="mt-1 font-serif text-[38px] font-medium leading-[1.0] tracking-[-0.018em] text-foreground">
           {tone === "classic" ? (
             <>
               {greeting},

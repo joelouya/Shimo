@@ -213,26 +213,26 @@ export default function TournamentSummaryPage({
         </div>
       ) : null}
 
-      {/* champion */}
+      {/* champion — the one gold moment in the system, given its full weight */}
       {champion && (
-        <section className="mt-8 overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-card">
-          <div className="flex items-center gap-5 px-7 py-6">
-            <Crown className="size-9 shrink-0 text-gold" />
+        <section className="mt-8 overflow-hidden rounded-2xl border-t-[3px] border-gold-bright bg-primary text-primary-foreground shadow-lift ring-1 ring-gold-bright/25">
+          <div className="flex items-center gap-5 px-7 py-7">
+            <Crown className="size-11 shrink-0 text-gold-bright" />
             <div className="min-w-0 flex-1">
-              <p className="smallcaps text-primary-foreground/60">Champion</p>
-              <p className="mt-0.5 font-serif text-[30px] leading-tight">
+              <p className="smallcaps text-gold-bright">Champion</p>
+              <p className="mt-1 font-serif text-[clamp(32px,4.6vw,44px)] font-medium leading-[1.02] tracking-[-0.012em]">
                 {champion.player.name}
               </p>
-              <p className="text-[13px] text-primary-foreground/60">
+              <p className="mt-1 text-[13px] text-primary-foreground/60">
                 {clubById(champion.player.clubId).short} · HC{" "}
                 {champion.player.handicap}
               </p>
             </div>
             <div className="text-right">
-              <p className="font-serif text-[40px] leading-none tnum">
+              <p className="font-serif text-[clamp(46px,6.5vw,62px)] leading-none text-gold-bright tnum">
                 {mode === "points" ? champion.points : toPar(champion.netToPar)}
               </p>
-              <p className="smallcaps text-primary-foreground/60">
+              <p className="smallcaps mt-1 text-primary-foreground/60">
                 {mode === "points" ? "points" : "net"}
               </p>
             </div>
