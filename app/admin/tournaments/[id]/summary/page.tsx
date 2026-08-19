@@ -190,7 +190,7 @@ export default function TournamentSummaryPage({
             <p className="smallcaps text-[var(--club-accent,var(--clay))]">
               {isFinal ? "Final results" : "Provisional standings"} · Prizegiving
             </p>
-            <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
+            <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
               {t.name}
             </h1>
             <p className="mt-2 text-[15px] text-muted-foreground">

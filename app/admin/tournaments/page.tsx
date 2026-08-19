@@ -319,7 +319,7 @@ export default function AdminTournamentsPage() {
       <header className="flex items-end justify-between">
         <div>
           <p className="smallcaps text-muted-foreground">Tournaments</p>
-          <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
+          <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
             The season, in one place
           </h1>
         </div>

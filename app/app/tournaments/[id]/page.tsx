@@ -141,7 +141,7 @@ export default function TournamentDetailPage({
           <p className="smallcaps mt-6 text-primary-foreground/60">
             {t.format} · {formatDateLong(t.date)}
           </p>
-          <h1 className="mt-2 font-serif text-[30px] leading-[1.1]">{t.name}</h1>
+          <h1 className="mt-2 font-serif text-[32px] font-medium leading-[1.05] tracking-[-0.012em]">{t.name}</h1>
           <p className="mt-2 flex items-center gap-1.5 text-[13px] text-primary-foreground/60">
             <MapPin className="size-3.5" />
             {club.name}, {club.town}

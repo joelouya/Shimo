@@ -178,7 +178,7 @@ export default function RyderBuilderPage() {
         </span>
         <div>
           <p className="smallcaps text-muted-foreground">New event</p>
-          <h1 className="font-serif text-[30px] leading-tight text-foreground">Ryder Cup</h1>
+          <h1 className="font-serif text-[clamp(30px,3.6vw,40px)] font-medium leading-[1.03] tracking-[-0.012em] text-foreground">Ryder Cup</h1>
         </div>
       </div>
 

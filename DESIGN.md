@@ -8,7 +8,7 @@ colors:
   ink: "#1a2332"
   ink-soft: "#414b5e"
   cream: "#f7f3ec"
-  card: "#fcfaf5"
+  card: "#fffdf8"
   sand: "#ece5d6"
   muted: "#efe9dd"
   accent-wash: "#f0e9db"
@@ -20,7 +20,10 @@ colors:
   amber-wash: "#f4ead2"
   red-flag: "#8e2a21"
   red-wash: "#f0dcd7"
-  gold: "#a08434"
+  gold: "#9a7d2e"
+  gold-deep: "#7c6320"
+  gold-bright: "#c69a3a"
+  gold-wash: "#f0e6cc"
   broadcast-ink: "#101722"
   clay-lift: "#d4744f"
   cream: "#f7f3ec"
@@ -229,7 +232,13 @@ Three flags, and no more. Each means one thing.
   announcement, an incomplete card.
 - **Red Flag** (`{colors.red-flag}`) on **Red Wash** (`{colors.red-wash}`):
   something is wrong or destructive. Disputes, deletion, failure.
-- **Gold** (`{colors.gold}`): the champion, and only the champion.
+- **Gold** (`{colors.gold}` / `gold-deep` / `gold-bright` / `gold-wash`): the
+  champion and the winner. Elevated from an icon-only tint into a real second
+  accent, but a scarce one: it marks the exceptional (the champion podium, a
+  division winner, a course record), never the everyday. Terracotta still rules
+  the ordinary screen under the Red Pencil Rule; gold answers only to a result
+  that has been won. `gold-bright` is the leaf itself, for large figures and
+  seals on the navy ground; `gold` and `gold-deep` carry text on paper.
 
 ### The broadcast ground
 
@@ -282,11 +291,18 @@ scoring grid read as a document rather than a spreadsheet.
 
 ### Hierarchy
 
-- **Display** (Fraunces, 30-34px, line-height 1.1): page titles and the subject
-  of an announcement. One per screen. Two steps, by depth rather than by
-  importance: **34px** for the title of a section index, **30px** for a page
-  within that section. The phone runs one step down again, at **28px** for an
-  index and **24px** on the in-round screens, where density is the point.
+- **Display** (Fraunces, amplified, line-height ~1.0, tracking -0.012 to
+  -0.018em, weight 500): page titles and the subject of an announcement, given
+  their full editorial weight. On the desk they run fluid, `clamp(34px, 4.4vw,
+  46px)` for a section index and `clamp(30px, 3.6vw, 40px)` for a page within
+  it, so a heading fills a wide desk without a fixed cap. The landing hero goes
+  further still, to `clamp(46px, 8vw, 88px)`. The phone, capped at 430px, uses
+  fixed steps rather than viewport units, so a heading never oversizes when the
+  column sits on a large screen: **38px** for the home greeting, **32px** for a
+  board or index. The in-round golfer screens hold at **24px**, where density is
+  the point and legibility of the score outranks the size of its title. A tight
+  negative tracking on the large sizes is what keeps Fraunces from loosening as
+  it grows.
 - **Headline** (Fraunces, 22px): section and card titles.
 - **Title** (Fraunces, 17px): the most common serif size in the system. Row
   headings, player names, panel titles.
@@ -346,11 +362,15 @@ answer.
 
 ## Elevation & Depth
 
-**Flat until it responds.** Surfaces sit flat on the page at rest. Depth is not a
-property of a component, it is an answer to the user: a card lifts under the
-cursor, a dialog arrives above the page, a menu separates from what it covers.
-Where separation is needed without interaction, the system uses a tonal step
-between cream, card and sand rather than a shadow.
+**Paper on paper, lifting when it responds.** The ground is not a flat screen
+colour: it carries a faint paper grain, a fixed film under the chrome and well
+below any dialog, so cream reads as stock rather than fill. A sheet rests on
+that ground with a gentle, real lift (the amplified shadow-card), enough to
+separate as paper on paper; depth then answers the user on top of that, a card
+rising further under the cursor, a dialog arriving above the page, a menu
+separating from what it covers. Where separation is needed without interaction,
+the system still reaches first for a tonal step between cream, card and sand.
+Every shadow stays tinted with the ink hue, never black.
 
 Every shadow is tinted with the ink hue (`rgb(26 35 50 / …)`) rather than with
 black, so it reads as paper shading rather than as a drop shadow floating over a
