@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -33,6 +33,40 @@ function scoreLabel(r: CumulativeRow, mode: ViewMode) {
   if (mode === "points") return `${r.points} pts`;
   if (mode === "net") return toPar(r.netToPar);
   return toPar(r.grossToPar);
+}
+
+/**
+ * The champion's figure, counted up.
+ *
+ * Prizegiving is the one ceremonial screen in the product, so the winning
+ * number arrives rather than simply appears: it climbs from zero to the total
+ * over a beat, the way a total is read out at the podium. Static results
+ * everywhere else stay still; this is the single place a number performs.
+ * Honours reduced motion by landing on the figure at once.
+ */
+function CountUp({ value, className }: { value: number; className?: string }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setShown(value);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const dur = 1100;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic: fast, then settles
+      setShown(Math.round(value * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <span className={className}>{shown}</span>;
 }
 
 function SharePublicBoard({ tournamentId }: { tournamentId: string }) {
@@ -215,7 +249,7 @@ export default function TournamentSummaryPage({
 
       {/* champion — the one gold moment in the system, given its full weight */}
       {champion && (
-        <section className="mt-8 overflow-hidden rounded-2xl border-t-[3px] border-gold-bright bg-primary text-primary-foreground shadow-lift ring-1 ring-gold-bright/25">
+        <section className="animate-enter-rise mt-8 overflow-hidden rounded-2xl border-t-[3px] border-gold-bright bg-primary text-primary-foreground shadow-lift ring-1 ring-gold-bright/25">
           <div className="flex items-center gap-5 px-7 py-7">
             <Crown className="size-11 shrink-0 text-gold-bright" />
             <div className="min-w-0 flex-1">
@@ -230,7 +264,11 @@ export default function TournamentSummaryPage({
             </div>
             <div className="text-right">
               <p className="font-serif text-[clamp(46px,6.5vw,62px)] leading-none text-gold-bright tnum">
-                {mode === "points" ? champion.points : toPar(champion.netToPar)}
+                {mode === "points" ? (
+                  <CountUp value={champion.points} />
+                ) : (
+                  toPar(champion.netToPar)
+                )}
               </p>
               <p className="smallcaps mt-1 text-primary-foreground/60">
                 {mode === "points" ? "points" : "net"}
