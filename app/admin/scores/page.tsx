@@ -461,7 +461,7 @@ export default function BulkScoresPage() {
     return (
       <div>
         <p className="smallcaps text-muted-foreground">Enter scores from cards</p>
-        <h1 className="mt-2 font-serif text-[30px] leading-tight text-foreground">
+        <h1 className="mt-2 font-serif text-[clamp(30px,3.6vw,40px)] font-medium leading-[1.03] tracking-[-0.012em] text-foreground">
           No tournament running today
         </h1>
         <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground">
@@ -520,7 +520,7 @@ export default function BulkScoresPage() {
             <p className="smallcaps text-muted-foreground">Enter scores from cards</p>
             <LiveBadge />
           </div>
-          <h1 className="mt-2 font-serif text-[30px] leading-tight text-foreground">
+          <h1 className="mt-2 font-serif text-[clamp(30px,3.6vw,40px)] font-medium leading-[1.03] tracking-[-0.012em] text-foreground">
             {tournament.name}
           </h1>
           <p className="mt-1 text-[13px] text-muted-foreground">

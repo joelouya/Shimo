@@ -106,7 +106,7 @@ export default function ProfilePage() {
           {initials(user.name)}
         </div>
         <div>
-          <h1 className="font-serif text-[28px] leading-tight text-foreground">
+          <h1 className="font-serif text-[32px] font-medium leading-[1.04] tracking-[-0.012em] text-foreground">
             {user.name}
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">

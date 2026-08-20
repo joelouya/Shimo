@@ -190,7 +190,7 @@ export default function SettingsPage() {
     <div>
       <header>
         <p className="smallcaps text-muted-foreground">Settings</p>
-        <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
+        <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
           Club settings
         </h1>
       </header>

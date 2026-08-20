@@ -220,7 +220,7 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <header className="flex items-end justify-between">
+      <header className="animate-enter-rise flex items-end justify-between">
         <div>
           <p className="smallcaps text-muted-foreground">
             {new Date().toLocaleDateString("en-KE", {
@@ -230,7 +230,7 @@ export default function AdminDashboard() {
             })}{" "}
             · Muthaiga Golf Club
           </p>
-          <h1 className="mt-2 font-serif text-[34px] leading-[1.05] text-foreground">
+          <h1 className="mt-2 font-serif text-[clamp(36px,4.8vw,50px)] font-medium leading-[1.0] tracking-[-0.018em] text-foreground">
             Good morning, Wanjiru.
           </h1>
         </div>
@@ -254,7 +254,7 @@ export default function AdminDashboard() {
         <LivePanel />
       </div>
 
-      <div className="mt-6 grid grid-cols-4 gap-4">
+      <div className="mt-6 grid grid-cols-4 gap-4 animate-enter-rise [animation-delay:120ms]">
         {IS_PILOT ? (
           <PilotTiles />
         ) : (
@@ -267,7 +267,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-6">
+      <div className="mt-8 grid grid-cols-2 gap-6 animate-enter-rise [animation-delay:200ms]">
         <section>
           <div className="mb-3 flex items-center justify-between">
             <p className="smallcaps text-muted-foreground">Upcoming</p>

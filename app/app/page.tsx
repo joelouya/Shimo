@@ -181,11 +181,11 @@ export default function HomePage() {
         </p>
       </header>
 
-      <div className="mt-7">
+      <div className="mt-7 animate-enter-rise">
         <p className="smallcaps text-clay">
           {tone === "classic" ? clubById(user.clubId).name : greeting}
         </p>
-        <h1 className="mt-1 font-serif text-[34px] leading-[1.05] text-foreground">
+        <h1 className="mt-1 font-serif text-[38px] font-medium leading-[1.0] tracking-[-0.018em] text-foreground">
           {tone === "classic" ? (
             <>
               {greeting},
@@ -204,16 +204,18 @@ export default function HomePage() {
 
       <InstallPrompt />
 
-      {IS_PILOT ? (
-        <PilotHomeLive />
-      ) : (
-        <section className="mt-7">
-          <SectionLabel>Live now</SectionLabel>
-          <LiveNowCard />
-        </section>
-      )}
+      <div className="animate-enter-rise [animation-delay:80ms]">
+        {IS_PILOT ? (
+          <PilotHomeLive />
+        ) : (
+          <section className="mt-7">
+            <SectionLabel>Live now</SectionLabel>
+            <LiveNowCard />
+          </section>
+        )}
+      </div>
 
-      <section className="mt-8">
+      <section className="mt-8 animate-enter-rise [animation-delay:160ms]">
         <SectionLabel>Your upcoming tournaments</SectionLabel>
         <div className="flex flex-col gap-3">
           {upcoming.length === 0 && (

@@ -212,7 +212,7 @@ export default function PosterPage({
 
       <header className="mt-6">
         <p className="smallcaps text-muted-foreground">Poster</p>
-        <h1 className="mt-2 font-serif text-3xl text-foreground">{t.name}</h1>
+        <h1 className="mt-2 font-serif text-[clamp(30px,3.4vw,40px)] font-medium tracking-[-0.012em] text-foreground">{t.name}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           1080 × 1350, sized for Instagram and WhatsApp. Everything on it comes
           from the tournament and your club identity, so correct it there and

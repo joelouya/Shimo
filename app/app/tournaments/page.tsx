@@ -76,7 +76,7 @@ export default function TournamentsPage() {
     <div className="pt-5">
       <header className="px-5">
         <p className="smallcaps text-clay">Discover</p>
-        <h1 className="mt-1 font-serif text-[28px] leading-tight text-foreground">
+        <h1 className="mt-1 font-serif text-[32px] font-medium leading-[1.04] tracking-[-0.012em] text-foreground">
           Tournaments across Kenya
         </h1>
         <p className="mt-1.5 text-[13px] text-muted-foreground">

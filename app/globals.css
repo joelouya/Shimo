@@ -19,9 +19,12 @@
      This tint is 5.49:1, and it is the same colour a shade further up rather
      than a second accent. */
   --clay-lift: #d4744f;
-  --card: #fcfaf5;
+  /* The sheet resting on the page. Brightened a shade from the old #fcfaf5 so
+     a card lifts off the cream ground with real presence, not a whisper: the
+     amplified read wants the paper to separate, not hide. */
+  --card: #fffdf8;
   --card-foreground: #1a2332;
-  --popover: #fcfaf5;
+  --popover: #fffdf8;
   --popover-foreground: #1a2332;
   --primary: #1a2332;
   --primary-foreground: #f7f3ec;
@@ -49,7 +52,13 @@
   --amber-wash: #f4ead2;
   --red-flag: #8e2a21;
   --red-wash: #f0dcd7;
-  --gold: #a08434;
+  /* Gold, the champion's colour, elevated from an icon-only tint into a real
+     second accent for winners, leaders and featured moments. Terracotta still
+     rules the everyday screen (Red Pencil); gold marks the exceptional. */
+  --gold: #9a7d2e;        /* icon + text on cream, clears 4.5:1 */
+  --gold-deep: #7c6320;   /* pressed / text on gold-wash */
+  --gold-bright: #c69a3a; /* the leaf itself, on dark grounds and seals */
+  --gold-wash: #f0e6cc;   /* champion ribbons, winner cards, the podium tint */
 }
 
 @theme inline {
@@ -85,6 +94,9 @@
   --color-red-flag: var(--red-flag);
   --color-red-wash: var(--red-wash);
   --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
+  --color-gold-bright: var(--gold-bright);
+  --color-gold-wash: var(--gold-wash);
   --color-cream: var(--cream);
   --color-broadcast-ink: var(--broadcast-ink);
   --color-clay-lift: var(--clay-lift);
@@ -110,9 +122,13 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --shadow-card: 0 1px 2px rgb(26 35 50 / 0.04), 0 6px 20px rgb(26 35 50 / 0.06);
-  --shadow-lift: 0 2px 4px rgb(26 35 50 / 0.06), 0 12px 32px rgb(26 35 50 / 0.1);
-  --shadow-pane: 0 1px 0 rgb(26 35 50 / 0.03), 0 16px 48px rgb(26 35 50 / 0.08);
+  /* Depth, amplified. The old steps were almost subliminal (0.04-0.1); these
+     give a resting sheet real lift on the cream ground and a hovered target a
+     clear rise, still tinted with ink rather than black so it reads as paper
+     shading, never a drop shadow. */
+  --shadow-card: 0 1px 2px rgb(26 35 50 / 0.05), 0 4px 12px rgb(26 35 50 / 0.07), 0 12px 32px rgb(26 35 50 / 0.05);
+  --shadow-lift: 0 2px 6px rgb(26 35 50 / 0.08), 0 16px 40px rgb(26 35 50 / 0.14);
+  --shadow-pane: 0 1px 0 rgb(26 35 50 / 0.04), 0 24px 64px rgb(26 35 50 / 0.12);
 
   /* ---- motion ----------------------------------------------------- *
    *
@@ -236,6 +252,20 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Paper grain. The whole system reads as a kept document rather than a screen,
+   so the ground carries a faint tooth instead of dead flatness. A fixed film,
+   well under the navigation and any dialog, pointer-events-none: texture only,
+   and so light it registers as feel rather than pattern. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.10  0 0 0 0 0.14  0 0 0 0 0.20  0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 ::selection {

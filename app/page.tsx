@@ -268,8 +268,9 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: still ? 0 : 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: EASE }}
-            className="smallcaps text-muted-foreground"
+            className="smallcaps flex items-center gap-3 text-muted-foreground"
           >
+            <span className="h-px w-8 bg-clay/60" />
             Tournament golf, beautifully run
           </motion.p>
 
@@ -277,18 +278,18 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: still ? 0 : 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.75, ease: EASE, delay: 0.06 }}
-            className="mt-5 font-serif text-[clamp(38px,6.4vw,62px)] leading-[1.04] text-foreground"
+            className="mt-5 font-serif text-[clamp(46px,8.2vw,88px)] font-medium leading-[0.98] tracking-[-0.021em] text-foreground text-balance"
           >
             Every card
             <br />
-            comes back signed.
+            comes back <span className="italic">signed.</span>
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: still ? 0 : 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.75, ease: EASE, delay: 0.14 }}
-            className="mt-6 max-w-lg font-serif text-[19px] leading-relaxed text-ink-soft"
+            className="mt-6 max-w-lg font-serif text-[clamp(19px,2.2vw,23px)] leading-[1.55] text-ink-soft"
           >
             Shimo runs a club&apos;s tournament day end to end. Entries and tee
             sheets, live scoring on the course, cards certified to the Rules of
@@ -344,13 +345,13 @@ export default function LandingPage() {
                 }`}
               >
                 <div className="max-w-xl">
-                  <span className="font-serif text-[22px] text-clay tnum">
+                  <span className="font-serif text-[clamp(32px,4.6vw,46px)] leading-none text-clay tnum">
                     {c.n}
                   </span>
-                  <h2 className="mt-3 font-serif text-[clamp(26px,3.4vw,34px)] leading-tight text-foreground">
+                  <h2 className="mt-3 font-serif text-[clamp(29px,4.2vw,44px)] font-medium leading-[1.04] tracking-[-0.012em] text-foreground text-balance">
                     {c.title}
                   </h2>
-                  <p className="mt-4 text-[15px] leading-[1.7] text-ink-soft">
+                  <p className="mt-5 max-w-prose text-[clamp(15px,1.7vw,16.5px)] leading-[1.7] text-ink-soft">
                     {c.body}
                   </p>
                 </div>

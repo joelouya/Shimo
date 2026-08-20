@@ -483,7 +483,7 @@ export default function LiveOpsPage() {
     return (
       <div>
         <p className="smallcaps text-muted-foreground">Live Ops</p>
-        <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
+        <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
           Nothing on the course today
         </h1>
         <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground">
@@ -509,7 +509,7 @@ export default function LiveOpsPage() {
               {active.roundInfo.firstTee}
             </p>
           </div>
-          <h1 className="mt-2 font-serif text-[34px] leading-tight text-foreground">
+          <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
             {active.tournament.name}
           </h1>
         </div>
