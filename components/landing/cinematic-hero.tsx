@@ -179,7 +179,7 @@ export function CinematicHero({
 
     const ctx = gsap.context(() => {
       gsap.set(".cin-track", { autoAlpha: 0, y: 60, scale: 0.86, filter: "blur(20px)", rotationX: -18 });
-      gsap.set(".cin-track-2", { autoAlpha: 1, clipPath: "inset(0 100% 0 0)" });
+      gsap.set(".cin-track-2", { autoAlpha: 1, clipPath: "inset(-0.3em 100% -0.3em 0)" });
       gsap.set(".cin-main-card", { yPercent: 120, autoAlpha: 1 });
       gsap.set([".cin-left", ".cin-right", ".cin-phone-wrap", ".cin-badge-fl", ".cin-widget"], { autoAlpha: 0 });
       gsap.set(".cin-cta", { autoAlpha: 0, scale: 0.82, filter: "blur(26px)" });
@@ -187,13 +187,13 @@ export function CinematicHero({
       const intro = gsap.timeline({ delay: 0.25 });
       intro
         .to(".cin-track", { duration: 1.7, autoAlpha: 1, y: 0, scale: 1, filter: "blur(0px)", rotationX: 0, ease: "expo.out" })
-        .to(".cin-track-2", { duration: 1.3, clipPath: "inset(0 0% 0 0)", ease: "power4.inOut" }, "-=1.0");
+        .to(".cin-track-2", { duration: 1.3, clipPath: "inset(-0.3em 0% -0.3em 0)", ease: "power4.inOut" }, "-=1.0");
 
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: containerRef.current,
           start: "top top",
-          end: "+=7000",
+          end: "+=5500",
           pin: true,
           scrub: 1,
           anticipatePin: 1,
@@ -259,10 +259,10 @@ export function CinematicHero({
 
       {/* Intro headline (Fraunces on paper) */}
       <div className="cin-hero-text absolute z-10 flex w-full flex-col items-center justify-center px-4 text-center">
-        <h1 className="cin-track cin-reveal cin-ink font-serif text-[clamp(40px,8vw,92px)] font-medium leading-[0.98] tracking-[-0.02em]">
+        <h1 className="cin-track cin-reveal cin-ink font-serif text-[clamp(40px,8vw,92px)] font-medium leading-[1.0] tracking-[-0.02em]">
           Every card
         </h1>
-        <h1 className="cin-track-2 cin-reveal font-serif text-[clamp(40px,8vw,92px)] font-medium italic leading-[0.98] tracking-[-0.02em] text-clay">
+        <h1 className="cin-track-2 cin-reveal font-serif text-[clamp(40px,8vw,92px)] font-medium italic leading-[1.02] tracking-[-0.02em] text-clay pb-[0.12em]">
           comes back signed.
         </h1>
         <p className="cin-track mt-6 max-w-md font-serif text-[clamp(16px,2vw,20px)] leading-relaxed text-ink-soft">

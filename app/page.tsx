@@ -16,12 +16,13 @@
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
 import { CinematicHero } from "@/components/landing/cinematic-hero";
+import { HowItWorks } from "@/components/landing/how-it-works";
+import { TopNav } from "@/components/landing/top-nav";
 import { ReturnedCard } from "@/components/landing/returned-card";
 import { LiveDot } from "@/components/live-dot";
 import { Logo } from "@/components/logo";
@@ -250,28 +251,24 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-dvh">
-      {/* The cinematic opening plays first, then scrolls into the editorial
-          page below. It renders nothing under reduced motion, where this
-          editorial hero serves directly. */}
+      {/* One floating pill, fixed over everything, so scrolling is never the
+          only way to move around. */}
+      <TopNav onGetStarted={() => router.push(routeForDevice())} />
+
+      {/* The cinematic opening plays first, then scrolls into the "how it
+          works" section and the editorial page below. It renders nothing under
+          reduced motion, where those serve directly. */}
       <CinematicHero
         onGetStarted={() => router.push(routeForDevice())}
         clubHref="/admin"
       />
 
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <Logo className="text-[19px]" />
-        <nav className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/app">The golfer</Link>
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/admin">The club</Link>
-          </Button>
-        </nav>
-      </header>
+      {/* Fills the navy panel the cinematic lifts away from: the product in a
+          few steps for a first-time visitor. */}
+      <HowItWorks onGetStarted={() => router.push(routeForDevice())} />
 
       {/* ---- hero ---- */}
-      <section className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 pb-20 pt-10 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pb-28 lg:pt-16">
+      <section className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 pb-20 pt-24 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pb-28 lg:pt-28">
         <div>
           <motion.p
             initial={{ opacity: 0, y: still ? 0 : 12 }}
