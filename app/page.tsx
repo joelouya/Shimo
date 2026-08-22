@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
+import { CinematicHero } from "@/components/landing/cinematic-hero";
 import { ReturnedCard } from "@/components/landing/returned-card";
 import { LiveDot } from "@/components/live-dot";
 import { Logo } from "@/components/logo";
@@ -249,6 +250,14 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-dvh">
+      {/* The cinematic opening plays first, then scrolls into the editorial
+          page below. It renders nothing under reduced motion, where this
+          editorial hero serves directly. */}
+      <CinematicHero
+        onGetStarted={() => router.push(routeForDevice())}
+        clubHref="/admin"
+      />
+
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
         <Logo className="text-[19px]" />
         <nav className="flex items-center gap-1">
