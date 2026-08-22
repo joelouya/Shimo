@@ -27,7 +27,7 @@ function scrollToId(id: string) {
 const linkClass =
   "rounded-full px-3.5 py-2 text-[13px] font-medium text-foreground/70 transition-colors hover:bg-foreground/[0.06] hover:text-foreground";
 
-export function TopNav({ onGetStarted }: { onGetStarted?: () => void }) {
+export function TopNav() {
   return (
     <nav className="pointer-events-none fixed inset-x-0 top-4 z-[70] flex justify-center px-4">
       <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-[color-mix(in_srgb,var(--color-foreground)_10%,transparent)] bg-[color-mix(in_srgb,var(--color-cream)_82%,transparent)] py-1.5 pr-1.5 pl-4 shadow-lift backdrop-blur-md">
@@ -43,9 +43,6 @@ export function TopNav({ onGetStarted }: { onGetStarted?: () => void }) {
         <span className="mx-1 hidden h-4 w-px bg-[color-mix(in_srgb,var(--color-foreground)_14%,transparent)] sm:block" />
 
         <div className="hidden items-center sm:flex">
-          <button type="button" onClick={() => scrollToId("how-it-works")} className={linkClass}>
-            How it works
-          </button>
           <Link href="/admin" className={linkClass}>
             The club
           </Link>
@@ -56,10 +53,10 @@ export function TopNav({ onGetStarted }: { onGetStarted?: () => void }) {
 
         <button
           type="button"
-          onClick={onGetStarted}
+          onClick={() => scrollToId("how-it-works")}
           className="ml-1 inline-flex items-center gap-1.5 rounded-full bg-clay px-4 py-2 text-[13px] font-medium text-cream shadow-xs transition-[background-color,transform] duration-200 hover:bg-clay-deep active:scale-[0.98]"
         >
-          Get started
+          See how it works
           <ArrowRight className="size-3.5" />
         </button>
       </div>

@@ -71,7 +71,7 @@ const STEPS: Step[] = [
 
 const AUTOPLAY_MS = 6000;
 
-export function HowItWorks({ onGetStarted }: { onGetStarted?: () => void }) {
+export function HowItWorks() {
   const reduce = useReducedMotion();
   const count = STEPS.length;
   const [active, setActive] = useState(0);
@@ -137,21 +137,13 @@ export function HowItWorks({ onGetStarted }: { onGetStarted?: () => void }) {
       className="relative scroll-mt-24 overflow-hidden bg-primary text-primary-foreground"
     >
       {/* A soft light from the top-left gives the ink panel depth without a flat
-          fill; a whisper of grain keeps it reading as material, not a screen. */}
+          fill. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
         style={{
           background:
             "radial-gradient(120% 90% at 15% 0%, rgba(255,255,255,0.06), transparent 55%)",
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.02] mix-blend-screen"
-        style={{
-          backgroundImage:
-            "url('data:image/svg+xml;utf8,<svg viewBox=\"0 0 200 200\" xmlns=\"http://www.w3.org/2000/svg\"><filter id=\"n\"><feTurbulence type=\"fractalNoise\" baseFrequency=\"0.8\" numOctaves=\"3\" stitchTiles=\"stitch\"/></filter><rect width=\"100%\" height=\"100%\" filter=\"url(%23n)\"/></svg>')",
         }}
       />
 
@@ -308,14 +300,18 @@ export function HowItWorks({ onGetStarted }: { onGetStarted?: () => void }) {
               </div>
             </div>
 
-            {/* Close with the one action */}
+            {/* One quiet nudge toward the close; the real ask lives at the end. */}
             <div className="mt-10 border-t border-cream/10 pt-8">
               <button
                 type="button"
-                onClick={onGetStarted}
-                className="group inline-flex items-center gap-2.5 rounded-xl bg-clay px-6 py-3.5 font-medium text-cream shadow-lift transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-clay-deep active:scale-[0.98]"
+                onClick={() => {
+                  document
+                    .getElementById("get-started")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="group inline-flex items-center gap-2.5 rounded-xl border border-cream/20 px-6 py-3.5 font-medium text-cream transition-colors duration-200 hover:border-cream/40 hover:bg-cream/5"
               >
-                Get started
+                Talk to us
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </button>
             </div>

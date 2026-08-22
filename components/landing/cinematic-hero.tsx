@@ -3,11 +3,12 @@
 /**
  * The cinematic opening.
  *
- * A pinned, scroll-driven sequence that plays before the editorial landing:
- * the headline resolves, a navy card rises and fills the frame, the golfer app
- * assembles inside a phone with the leader's figure counting up, Shimo's
- * moments float in, and a single Get started CTA lands before the card lifts
- * away into the page below.
+ * A pinned, scroll-driven overture that plays before the editorial hero:
+ * the opening line resolves, a navy card rises and fills the frame, the golfer
+ * app assembles inside a phone with the leader's figure counting up, Shimo's
+ * moments float in beside what the tool spans, and the whole card lifts away to
+ * reveal the hero below. It carries no call to action of its own; the page's
+ * asks live in the hero, the mechanism and the close.
  *
  * The mechanics are borrowed from a generic product hero; everything visible is
  * rebuilt in Shimo's world. Warm paper ground, ink navy card, Fraunces for
@@ -22,7 +23,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { Check, ArrowRight } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -119,18 +120,9 @@ const INJECTED_STYLES = `
   }
 `;
 
-export interface CinematicHeroProps
-  extends React.HTMLAttributes<HTMLDivElement> {
-  onGetStarted?: () => void;
-  clubHref?: string;
-}
+export type CinematicHeroProps = React.HTMLAttributes<HTMLDivElement>;
 
-export function CinematicHero({
-  onGetStarted,
-  clubHref = "/admin",
-  className,
-  ...props
-}: CinematicHeroProps) {
+export function CinematicHero({ className, ...props }: CinematicHeroProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const phoneRef = useRef<HTMLDivElement>(null);
@@ -174,7 +166,6 @@ export function CinematicHero({
   // The pinned scroll timeline.
   useEffect(() => {
     if (!enabled) return;
-    const isMobile = window.innerWidth < 768;
     const LEADER_PTS = 41;
 
     const ctx = gsap.context(() => {
@@ -182,7 +173,6 @@ export function CinematicHero({
       gsap.set(".cin-track-2", { autoAlpha: 1, clipPath: "inset(-0.3em 100% -0.3em 0)" });
       gsap.set(".cin-main-card", { yPercent: 120, autoAlpha: 1 });
       gsap.set([".cin-left", ".cin-right", ".cin-phone-wrap", ".cin-badge-fl", ".cin-widget"], { autoAlpha: 0 });
-      gsap.set(".cin-cta", { autoAlpha: 0, scale: 0.82, filter: "blur(26px)" });
 
       const intro = gsap.timeline({ delay: 0.25 });
       intro
@@ -193,7 +183,7 @@ export function CinematicHero({
         scrollTrigger: {
           trigger: containerRef.current,
           start: "top top",
-          end: "+=5500",
+          end: "+=2800",
           pin: true,
           scrub: 1,
           anticipatePin: 1,
@@ -215,14 +205,11 @@ export function CinematicHero({
         .fromTo(".cin-badge-fl", { y: 100, autoAlpha: 0, scale: 0.7, rotationZ: -8 }, { y: 0, autoAlpha: 1, scale: 1, rotationZ: 0, ease: "back.out(1.5)", duration: 1.4, stagger: 0.2 }, "-=2.0")
         .fromTo(".cin-left", { x: -50, autoAlpha: 0 }, { x: 0, autoAlpha: 1, ease: "power4.out", duration: 1.4 }, "-=1.4")
         .fromTo(".cin-right", { x: 50, autoAlpha: 0, scale: 0.82 }, { x: 0, autoAlpha: 1, scale: 1, ease: "expo.out", duration: 1.4 }, "<")
-        .to({}, { duration: 2.4 })
-        .set(".cin-hero-text", { autoAlpha: 0 })
-        .set(".cin-cta", { autoAlpha: 1 })
-        .to({}, { duration: 1.4 })
-        .to([".cin-phone-wrap", ".cin-badge-fl", ".cin-left", ".cin-right"], { scale: 0.9, y: -40, z: -200, autoAlpha: 0, ease: "power3.in", duration: 1.2, stagger: 0.05 })
-        .to(".cin-main-card", { width: isMobile ? "92vw" : "86vw", height: isMobile ? "90vh" : "84vh", borderRadius: isMobile ? "30px" : "40px", ease: "expo.inOut", duration: 1.8 }, "pull")
-        .to(".cin-cta", { scale: 1, filter: "blur(0px)", ease: "expo.inOut", duration: 1.8 }, "pull")
-        .to(".cin-main-card", { yPercent: -145, ease: "power3.in", duration: 1.5 });
+        // Hold on the assembled product, then lift the whole card away to reveal
+        // the editorial hero below. No CTA scene: the overture hands into the page.
+        .to({}, { duration: 2.2 })
+        .to(".cin-hero-text", { autoAlpha: 0, duration: 0.6 })
+        .to(".cin-main-card", { yPercent: -150, ease: "power3.in", duration: 1.6 });
     }, containerRef);
 
     // The pane can mount at zero height (fonts still loading, tab not yet laid
@@ -260,45 +247,14 @@ export function CinematicHero({
       {/* Intro headline (Fraunces on paper) */}
       <div className="cin-hero-text absolute z-10 flex w-full flex-col items-center justify-center px-4 text-center">
         <h1 className="cin-track cin-reveal cin-ink font-serif text-[clamp(40px,8vw,92px)] font-medium leading-[1.0] tracking-[-0.02em]">
-          Every card
+          Scored on the course.
         </h1>
         <h1 className="cin-track-2 cin-reveal font-serif text-[clamp(40px,8vw,92px)] font-medium italic leading-[1.02] tracking-[-0.02em] text-clay pb-[0.12em]">
-          comes back signed.
+          Certified by the club.
         </h1>
         <p className="cin-track mt-6 max-w-md font-serif text-[clamp(16px,2vw,20px)] leading-relaxed text-ink-soft">
           A club&apos;s whole tournament day, kept like a document.
         </p>
-      </div>
-
-      {/* CTA scene */}
-      <div className="cin-cta cin-reveal pointer-events-auto absolute z-10 flex w-full flex-col items-center justify-center px-4 text-center">
-        <p className="smallcaps mb-4 flex items-center gap-3 text-muted-foreground">
-          <span className="h-px w-8 bg-clay/60" /> Tournament golf, beautifully run
-        </p>
-        <h2 className="font-serif text-[clamp(34px,6vw,68px)] font-medium leading-[1.0] tracking-[-0.02em] text-foreground text-balance">
-          Start your tournament day.
-        </h2>
-        <p className="mx-auto mt-5 max-w-xl font-serif text-[clamp(17px,2.2vw,21px)] leading-relaxed text-ink-soft">
-          Entries and tee sheets, live scoring on the course, cards certified to
-          the Rules of Golf, and a clubhouse screen worth watching.
-        </p>
-        <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={onGetStarted}
-            className="group inline-flex items-center gap-2.5 rounded-xl bg-clay px-7 py-3.5 font-medium text-cream shadow-lift transition-[transform,background-color] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:bg-clay-deep active:scale-[0.98]"
-          >
-            <span className="size-1.5 rounded-full bg-cream animate-live-pulse" />
-            Get started
-            <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-          </button>
-          <a
-            href={clubHref}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-7 py-3.5 font-medium text-foreground shadow-card transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-lift"
-          >
-            See the club
-          </a>
-        </div>
       </div>
 
       {/* The navy sheet */}
@@ -310,11 +266,25 @@ export function CinematicHero({
           <div className="cin-sheen" aria-hidden="true" />
 
           <div className="relative z-10 mx-auto flex h-full w-full max-w-7xl flex-col items-center justify-evenly px-4 py-6 lg:grid lg:grid-cols-3 lg:gap-8 lg:px-12 lg:py-0">
-            {/* brand */}
-            <div className="cin-right cin-reveal order-1 z-20 flex w-full justify-center lg:order-3 lg:justify-end">
-              <h2 className="cin-cream-emboss font-serif text-[clamp(56px,12vw,132px)] font-medium leading-none tracking-[-0.03em]">
-                Shimo
+            {/* what the tool actually spans */}
+            <div className="cin-right cin-reveal order-1 z-20 flex w-full flex-col justify-center gap-6 lg:order-3 lg:items-end lg:text-right">
+              <h2 className="font-serif text-[clamp(30px,4vw,52px)] font-medium leading-[1.02] tracking-[-0.02em] text-cream">
+                One tournament,
+                <br />
+                every surface.
               </h2>
+              <div className="flex flex-wrap justify-center gap-2 lg:justify-end">
+                {["Scoring", "Certification", "Leaderboard", "Clubhouse TV"].map(
+                  (chip) => (
+                    <span
+                      key={chip}
+                      className="rounded-full border border-cream/15 bg-cream/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-cream/85"
+                    >
+                      {chip}
+                    </span>
+                  ),
+                )}
+              </div>
             </div>
 
             {/* phone with the golfer app */}
