@@ -40,15 +40,6 @@ const INJECTED_STYLES = `
     background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
   }
 
-  /* faint warm rule-grid on the paper, masked to the centre */
-  .cin-grid {
-    background-size: 64px 64px;
-    background-image:
-      linear-gradient(to right, color-mix(in srgb, var(--color-foreground) 4%, transparent) 1px, transparent 1px),
-      linear-gradient(to bottom, color-mix(in srgb, var(--color-foreground) 4%, transparent) 1px, transparent 1px);
-    mask-image: radial-gradient(ellipse at center, black 0%, transparent 68%);
-    -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 68%);
-  }
 
   /* headline on paper: navy ink with a soft paper shadow */
   .cin-ink {
@@ -192,7 +183,7 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
       });
 
       tl
-        .to([".cin-hero-text", ".cin-grid"], { scale: 1.14, filter: "blur(18px)", opacity: 0.18, ease: "power2.inOut", duration: 2 }, 0)
+        .to(".cin-hero-text", { scale: 1.14, filter: "blur(18px)", opacity: 0.18, ease: "power2.inOut", duration: 2 }, 0)
         .to(".cin-main-card", { yPercent: 0, ease: "power3.inOut", duration: 2 }, 0)
         .to(".cin-main-card", { width: "100%", height: "100%", borderRadius: "0px", ease: "power3.inOut", duration: 1.5 })
         .fromTo(".cin-phone-wrap",
@@ -242,7 +233,6 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
     >
       <style dangerouslySetInnerHTML={{ __html: INJECTED_STYLES }} />
       <div className="cin-grain" aria-hidden="true" />
-      <div className="cin-grid pointer-events-none absolute inset-0 z-0 opacity-60" aria-hidden="true" />
 
       {/* Intro headline (Fraunces on paper) */}
       <div className="cin-hero-text absolute z-10 flex w-full flex-col items-center justify-center px-4 text-center">
