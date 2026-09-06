@@ -174,7 +174,7 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
         scrollTrigger: {
           trigger: containerRef.current,
           start: "top top",
-          end: "+=2800",
+          end: "+=1900",
           pin: true,
           scrub: 1,
           anticipatePin: 1,

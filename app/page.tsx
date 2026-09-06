@@ -130,9 +130,9 @@ export default function LandingPage() {
             transition={{ duration: 0.75, ease: EASE, delay: 0.14 }}
             className="mt-6 max-w-lg font-serif text-[clamp(19px,2.2vw,23px)] leading-[1.55] text-ink-soft"
           >
-            Shimo runs a club&apos;s tournament day end to end. Entries and tee
-            sheets, live scoring on the course, cards certified to the Rules of
-            Golf, and a clubhouse screen worth watching.
+            Shimo is tournament management and live scoring for golf clubs.
+            Entries and tee sheets, live scoring on the course, cards certified
+            to the Rules of Golf, and a clubhouse screen worth watching.
           </motion.p>
 
           <motion.div

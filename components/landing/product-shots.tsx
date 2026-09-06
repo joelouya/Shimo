@@ -22,7 +22,7 @@ function Caption({ title, children }: { title: string; children: React.ReactNode
 
 export function ProductShots() {
   return (
-    <section className="border-t border-border bg-background">
+    <section id="the-product" className="scroll-mt-24 border-t border-border bg-background">
       <div className="mx-auto w-full max-w-6xl px-6 py-24 lg:py-32">
         <Reveal>
           <p className="smallcaps flex items-center gap-3 text-muted-foreground">

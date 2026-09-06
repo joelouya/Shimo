@@ -300,18 +300,19 @@ export function HowItWorks() {
               </div>
             </div>
 
-            {/* One quiet nudge toward the close; the real ask lives at the end. */}
+            {/* Escalates from the hero: now that you know the shape of the day,
+                go and see the real interface. The ask itself waits for the end. */}
             <div className="mt-10 border-t border-cream/10 pt-8">
               <button
                 type="button"
                 onClick={() => {
                   document
-                    .getElementById("get-started")
+                    .getElementById("the-product")
                     ?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
                 className="group inline-flex items-center gap-2.5 rounded-xl border border-cream/20 px-6 py-3.5 font-medium text-cream transition-colors duration-200 hover:border-cream/40 hover:bg-cream/5"
               >
-                Talk to us
+                See the real thing
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </button>
             </div>
