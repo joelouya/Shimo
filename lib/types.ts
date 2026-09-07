@@ -79,6 +79,13 @@ export interface Course {
   par: number;
   holes: Hole[];
   ratings: TeeRating[];
+  /**
+   * Whether the course can be used for a tournament yet. Absent means yes.
+   * `false` marks a course we list but whose data is not ready (no scorecard,
+   * or no WHS rating), so it shows in pickers as "coming soon" but cannot be
+   * selected until the data lands.
+   */
+  available?: boolean;
 }
 
 export interface Player {
