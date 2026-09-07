@@ -118,7 +118,7 @@ export function HowItWorks() {
     const isActive = i === active;
     const isPrev = (active - 1 + count) % count === i;
     const isNext = (active + 1) % count === i;
-    const transition = reduce ? "opacity 0.4s ease" : "all 0.7s cubic-bezier(.4,1.4,.35,1)";
+    const transition = reduce ? "opacity 0.4s ease" : "all 0.7s cubic-bezier(0.23, 1, 0.32, 1)";
     if (isActive) {
       return { zIndex: 3, opacity: 1, transform: "translateX(0) translateY(0) scale(1) rotateY(0deg)", transition };
     }
