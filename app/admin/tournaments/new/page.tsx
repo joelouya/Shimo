@@ -1050,9 +1050,12 @@ function CreateTournamentInner() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {["Yellow", "White", "Blue", "Red"].map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t} tees
+                        {(
+                          COURSES.find((c) => c.id === draft.courseId)?.ratings ??
+                          []
+                        ).map((r) => (
+                          <SelectItem key={r.tee} value={r.tee}>
+                            {r.tee} tees
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1062,15 +1065,25 @@ function CreateTournamentInner() {
                 <Field label="Course">
                   <Select
                     value={draft.courseId}
-                    onValueChange={(v) => setBasics({ courseId: v })}
+                    onValueChange={(v) => {
+                      // Reset the tee to the new course's default so the
+                      // selection always resolves to a real rating.
+                      const c = COURSES.find((x) => x.id === v);
+                      setBasics({ courseId: v, tees: c?.tees ?? draft.tees });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {COURSES.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
+                        <SelectItem
+                          key={c.id}
+                          value={c.id}
+                          disabled={c.available === false}
+                        >
                           {c.name}
+                          {c.available === false ? " · coming soon" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1159,15 +1172,23 @@ function CreateTournamentInner() {
                       <Field label="Course" hint="A championship can move courses between rounds.">
                         <Select
                           value={r.courseId}
-                          onValueChange={(v) => updateRound(i, { courseId: v })}
+                          onValueChange={(v) => {
+                            const c = COURSES.find((x) => x.id === v);
+                            updateRound(i, { courseId: v, tees: c?.tees ?? r.tees });
+                          }}
                         >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             {COURSES.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
+                              <SelectItem
+                                key={c.id}
+                                value={c.id}
+                                disabled={c.available === false}
+                              >
                                 {c.name}
+                                {c.available === false ? " · coming soon" : ""}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1176,7 +1197,7 @@ function CreateTournamentInner() {
                       <div className="grid grid-cols-2 gap-3">
                         <Field label="Tees">
                           <Select
-                            value={r.tees || "Yellow"}
+                            value={r.tees || courseById(r.courseId).tees}
                             onValueChange={(v) => updateRound(i, { tees: v })}
                           >
                             <SelectTrigger>
