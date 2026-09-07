@@ -50,9 +50,35 @@ const MUTHAIGA_HOLES = [
   { hole: 18, par: 4, si: 6, yards: 405 },
 ];
 
+// Karen Country Club, Nairobi. Real scorecard (par, stroke index and Yellow-tee
+// yardages) transcribed from the club card. Par 72, out 36 / in 36.
+const KAREN_HOLES = [
+  { hole: 1, par: 4, si: 17, yards: 339 },
+  { hole: 2, par: 5, si: 15, yards: 551 },
+  { hole: 3, par: 5, si: 11, yards: 518 },
+  { hole: 4, par: 4, si: 7, yards: 375 },
+  { hole: 5, par: 3, si: 9, yards: 172 },
+  { hole: 6, par: 4, si: 1, yards: 464 },
+  { hole: 7, par: 3, si: 13, yards: 162 },
+  { hole: 8, par: 4, si: 5, yards: 362 },
+  { hole: 9, par: 4, si: 3, yards: 427 },
+  { hole: 10, par: 4, si: 14, yards: 344 },
+  { hole: 11, par: 4, si: 8, yards: 375 },
+  { hole: 12, par: 4, si: 16, yards: 299 },
+  { hole: 13, par: 4, si: 2, yards: 446 },
+  { hole: 14, par: 3, si: 18, yards: 130 },
+  { hole: 15, par: 5, si: 12, yards: 527 },
+  { hole: 16, par: 3, si: 6, yards: 185 },
+  { hole: 17, par: 4, si: 4, yards: 447 },
+  { hole: 18, par: 5, si: 10, yards: 539 },
+];
+
 export const COURSES: Course[] = [
   { id: "muthaiga-main", clubId: "muthaiga", name: "Muthaiga Main Course", tees: "Yellow", par: 72, holes: MUTHAIGA_HOLES, ratings: [ { tee: "White", courseRating: 73.2, slope: 133 }, { tee: "Yellow", courseRating: 71.8, slope: 129 }, { tee: "Blue", courseRating: 74.1, slope: 136 }, { tee: "Red", courseRating: 69.5, slope: 122 } ] },
-  { id: "karen-main", clubId: "karen", name: "Karen Championship Course", tees: "Yellow", par: 72, holes: MUTHAIGA_HOLES, ratings: [ { tee: "White", courseRating: 73.2, slope: 133 }, { tee: "Yellow", courseRating: 71.8, slope: 129 }, { tee: "Blue", courseRating: 74.1, slope: 136 }, { tee: "Red", courseRating: 69.5, slope: 122 } ] },
+  // Real Karen CC card. NOTE: courseRating/slope below are PLACEHOLDERS until
+  // the club's official WHS ratings are confirmed; par, stroke index and
+  // yardages are real. Replace the four ratings once we have the real figures.
+  { id: "karen-main", clubId: "karen", name: "Karen Championship Course", tees: "Yellow", par: 72, holes: KAREN_HOLES, ratings: [ { tee: "White", courseRating: 72.8, slope: 132 }, { tee: "Yellow", courseRating: 71.4, slope: 128 }, { tee: "Red", courseRating: 69.2, slope: 121 }, { tee: "Green", courseRating: 67.4, slope: 116 } ] },
   { id: "sigona-main", clubId: "sigona", name: "Sigona Main Course", tees: "Yellow", par: 71, holes: MUTHAIGA_HOLES, ratings: [ { tee: "White", courseRating: 73.2, slope: 133 }, { tee: "Yellow", courseRating: 71.8, slope: 129 }, { tee: "Blue", courseRating: 74.1, slope: 136 }, { tee: "Red", courseRating: 69.5, slope: 122 } ] },
   { id: "windsor-main", clubId: "windsor", name: "Windsor Championship Course", tees: "Yellow", par: 72, holes: MUTHAIGA_HOLES, ratings: [ { tee: "White", courseRating: 73.2, slope: 133 }, { tee: "Yellow", courseRating: 71.8, slope: 129 }, { tee: "Blue", courseRating: 74.1, slope: 136 }, { tee: "Red", courseRating: 69.5, slope: 122 } ] },
   { id: "royal-main", clubId: "royal-nairobi", name: "Royal Nairobi Main Course", tees: "Yellow", par: 72, holes: MUTHAIGA_HOLES, ratings: [ { tee: "White", courseRating: 73.2, slope: 133 }, { tee: "Yellow", courseRating: 71.8, slope: 129 }, { tee: "Blue", courseRating: 74.1, slope: 136 }, { tee: "Red", courseRating: 69.5, slope: 122 } ] },
