@@ -27,7 +27,23 @@ export function PwaBoot() {
       process.env.NODE_ENV === "production" &&
       "serviceWorker" in navigator
     ) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      // A device already controlled by an older worker must be able to move
+      // onto a new one, or a stale cached bundle (e.g. a demo build cached
+      // before this deployment) keeps serving. `updateViaCache: "none"` fetches
+      // sw.js fresh so a version bump is seen; when the new worker takes
+      // control we reload once onto the fresh bundle. The `hadController` guard
+      // keeps first-time installs (no prior worker) from reloading.
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadController || reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+      navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((reg) => reg.update().catch(() => {}))
+        .catch(() => {});
     }
     // stash the install event - it often fires before any screen listens
     const onPrompt = (e: Event) => {
