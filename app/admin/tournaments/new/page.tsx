@@ -839,7 +839,12 @@ function CreateTournamentInner() {
     setTimeout(() => {
       if (editing) updateTournament(synced);
       else createTournament(synced);
-      router.push("/admin/tournaments");
+      // Land on the list flagging the new event, so the go-live step (Start
+      // tournament day) is obvious. Publishing only opens registration; the
+      // tournament is not live on players' phones until it is started.
+      router.push(
+        editing ? "/admin/tournaments" : `/admin/tournaments?created=${synced.id}`,
+      );
     }, 700);
   };
 

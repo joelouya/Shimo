@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, ChevronRight } from "lucide-react";
@@ -12,7 +13,7 @@ import { TournamentCard } from "@/components/golfer/tournament-card";
 import { DEMO_USER_ID, clubById, courseById, playerById } from "@/lib/data";
 import { handicapSet } from "@/lib/scoring";
 import { IS_PILOT } from "@/lib/mode";
-import { useActiveTournament, useUserLive } from "@/lib/sim/hooks";
+import { useActiveTournament, useSyncStatus, useUserLive } from "@/lib/sim/hooks";
 import { allTournaments, useSim } from "@/lib/sim/store";
 import { formatDate, ordinal } from "@/lib/utils";
 
@@ -279,6 +280,17 @@ export default function HomePage() {
 
 function PilotHomeLive() {
   const active = useActiveTournament();
+  const { online } = useSyncStatus();
+  // A joining device takes a few seconds to reach the club and hydrate the live
+  // tournament from the cloud. Hold a brief "connecting" state so the page does
+  // not flash "no tournament running" before that first sync has landed, which
+  // reads as broken. If a live tournament arrives, the card takes over at once.
+  const [settling, setSettling] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setSettling(false), 9000);
+    return () => clearTimeout(t);
+  }, []);
+  const connecting = !active && online && settling;
   return (
     <>
       <IdentityGate />
@@ -288,7 +300,15 @@ function PilotHomeLive() {
           <PilotLiveCard />
         </section>
       )}
-      {!active && (
+      {connecting && (
+        <div className="mt-8 flex items-center gap-3 rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
+          <span className="size-1.5 animate-live-pulse rounded-full bg-clay" />
+          <p className="text-[14px] text-muted-foreground">
+            Connecting to your club, checking for a live tournament.
+          </p>
+        </div>
+      )}
+      {!active && !connecting && (
         <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
           <p className="font-serif text-lg text-foreground">
             No tournament running

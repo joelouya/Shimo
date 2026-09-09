@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -314,8 +314,58 @@ export default function AdminTournamentsPage() {
     setRegistrationFor(t);
   }
 
+  // A tournament just published from the wizard arrives with ?created=<id>. Flag
+  // it so the go-live step is unmissable: publishing only opens registration,
+  // and nothing reaches players' phones until the day is started.
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("created");
+    if (id) {
+      setJustCreatedId(id);
+      window.history.replaceState(null, "", "/admin/tournaments");
+    }
+  }, []);
+  const justCreated =
+    justCreatedId && IS_PILOT
+      ? all.find((t) => t.id === justCreatedId && t.status === "upcoming")
+      : null;
+
   return (
     <div>
+      {justCreated && (
+        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-clay/30 bg-clay-wash/40 p-4 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <p className="text-[14px] font-medium text-foreground">
+              &ldquo;{justCreated.name}&rdquo; is published and open for
+              registration.
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+              It is not live on players&apos; phones yet. When play begins, start
+              the day to open live scoring and put it on every golfer&apos;s
+              screen.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="clay"
+              size="sm"
+              onClick={() => {
+                startTournamentDay(justCreated.id);
+                setJustCreatedId(null);
+              }}
+            >
+              Start tournament day
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setJustCreatedId(null)}
+            >
+              Later
+            </Button>
+          </div>
+        </div>
+      )}
       <header className="flex items-end justify-between">
         <div>
           <p className="smallcaps text-muted-foreground">Tournaments</p>
