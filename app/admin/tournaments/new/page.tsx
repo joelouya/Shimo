@@ -1046,54 +1046,35 @@ function CreateTournamentInner() {
                       onChange={(e) => setBasics({ date: e.target.value })}
                     />
                   </Field>
-                  <Field label="Tee selection">
+                  <Field label="Course">
                     <Select
-                      value={draft.tees}
-                      onValueChange={(v) => setBasics({ tees: v })}
+                      value={draft.courseId}
+                      onValueChange={(v) => {
+                        // Tees follow the course default so the handicap maths
+                        // always resolve to a real rating; there is no separate
+                        // tee picker (a mixed field is not one tee anyway).
+                        const c = COURSES.find((x) => x.id === v);
+                        setBasics({ courseId: v, tees: c?.tees ?? draft.tees });
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {(
-                          COURSES.find((c) => c.id === draft.courseId)?.ratings ??
-                          []
-                        ).map((r) => (
-                          <SelectItem key={r.tee} value={r.tee}>
-                            {r.tee} tees
+                        {COURSES.map((c) => (
+                          <SelectItem
+                            key={c.id}
+                            value={c.id}
+                            disabled={c.available === false}
+                          >
+                            {c.name}
+                            {c.available === false ? " · coming soon" : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </Field>
                 </div>
-                <Field label="Course">
-                  <Select
-                    value={draft.courseId}
-                    onValueChange={(v) => {
-                      // Reset the tee to the new course's default so the
-                      // selection always resolves to a real rating.
-                      const c = COURSES.find((x) => x.id === v);
-                      setBasics({ courseId: v, tees: c?.tees ?? draft.tees });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COURSES.map((c) => (
-                        <SelectItem
-                          key={c.id}
-                          value={c.id}
-                          disabled={c.available === false}
-                        >
-                          {c.name}
-                          {c.available === false ? " · coming soon" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
                 <Field
                   label="Format"
                   hint={
@@ -1199,38 +1180,19 @@ function CreateTournamentInner() {
                           </SelectContent>
                         </Select>
                       </Field>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Tees">
-                          <Select
-                            value={r.tees || courseById(r.courseId).tees}
-                            onValueChange={(v) => updateRound(i, { tees: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(courseById(r.courseId).ratings ?? []).map((t) => (
-                                <SelectItem key={t.tee} value={t.tee}>
-                                  {t.tee} tees
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </Field>
-                        <Field label="Tee interval" hint="Minutes between groups.">
-                          <Input
-                            type="number"
-                            min={5}
-                            max={20}
-                            value={r.teeInterval}
-                            onChange={(e) =>
-                              updateRound(i, {
-                                teeInterval: parseInt(e.target.value, 10) || 10,
-                              })
-                            }
-                          />
-                        </Field>
-                      </div>
+                      <Field label="Tee interval" hint="Minutes between groups.">
+                        <Input
+                          type="number"
+                          min={5}
+                          max={20}
+                          value={r.teeInterval}
+                          onChange={(e) =>
+                            updateRound(i, {
+                              teeInterval: parseInt(e.target.value, 10) || 10,
+                            })
+                          }
+                        />
+                      </Field>
 
                       {/* a cut only makes sense when another round follows */}
                       {i < draft.rounds.length - 1 && (

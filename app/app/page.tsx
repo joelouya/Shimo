@@ -280,6 +280,7 @@ export default function HomePage() {
 
 function PilotHomeLive() {
   const active = useActiveTournament();
+  const identity = useSim((s) => s.deviceIdentity);
   const { online } = useSyncStatus();
   // A joining device takes a few seconds to reach the club and hydrate the live
   // tournament from the cloud. Hold a brief "connecting" state so the page does
@@ -287,7 +288,7 @@ function PilotHomeLive() {
   // reads as broken. If a live tournament arrives, the card takes over at once.
   const [settling, setSettling] = useState(true);
   useEffect(() => {
-    const t = setTimeout(() => setSettling(false), 9000);
+    const t = setTimeout(() => setSettling(false), 4000);
     return () => clearTimeout(t);
   }, []);
   const connecting = !active && online && settling;
@@ -317,6 +318,21 @@ function PilotHomeLive() {
             When your club starts a tournament day, it appears here with the
             live leaderboard.
           </p>
+        </div>
+      )}
+      {/*
+        A code always has somewhere to go, even before the day is live: a group
+        code off the tee sheet or a personal registration code. Kept out only
+        once this device knows who it is.
+      */}
+      {!active && !identity && (
+        <div className="mt-4 text-center">
+          <Link
+            href="/play"
+            className="text-[13px] text-clay underline underline-offset-4 hover:text-clay-deep"
+          >
+            Have a code? Enter it
+          </Link>
         </div>
       )}
     </>

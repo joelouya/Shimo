@@ -10,6 +10,13 @@
  * - an op that keeps failing while online for 30s becomes "failed" and the UI
  *   offers Retry - never a raw error
  * - offline: everything waits, nothing fails
+ *
+ * Latency: writes kick the outbox the moment they land (registerDrainSignal),
+ * rather than waiting for the tick. Inbound relies on realtime, with a short
+ * fallback re-hydrate so a device converges within a few seconds even when
+ * realtime is not delivering (a paused/resumed free-tier project drops it
+ * silently), plus a one-shot reconcile just after a push so a marker's
+ * confirmation lands quickly.
  */
 
 import type { StoreApi } from "zustand";
@@ -18,6 +25,7 @@ import {
   applyRemoteEntity,
   applyRemoteScore,
   hydrateFromSnapshot,
+  registerDrainSignal,
   type SimState,
 } from "@/lib/sim/store";
 import { getRemote } from "./remote";
@@ -25,7 +33,12 @@ import { getRemote } from "./remote";
 const FAIL_AFTER_MS = 30_000;
 const TICK_MS = 3_000;
 const PRUNE_SYNCED_AFTER_MS = 5 * 60_000;
-const REHYDRATE_MS = 60_000;
+/* Fallback reconcile. Short on purpose: it is the whole safety net when
+   realtime is not delivering, so it bounds worst-case convergence to seconds. */
+const REHYDRATE_MS = 8_000;
+/* One reconcile shortly after a push, so the echo that confirms a marker's
+   figure lands fast even without realtime. */
+const RECONCILE_AFTER_PUSH_MS = 1_500;
 
 interface EngineDeps {
   store: StoreApi<SimState>;
@@ -41,18 +54,20 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
 
   const remote = getRemote();
 
-  /* ---- inbound: hydrate + realtime ---- */
+  /* ---- inbound: pull the live tournament and merge it ---- */
+  const hydrate = async () => {
+    if (remote.kind !== "supabase") return;
+    try {
+      const liveId =
+        store.getState().liveTournamentId ??
+        (await remote.findLiveTournamentId());
+      if (liveId) hydrateFromSnapshot(await remote.hydrate(liveId));
+    } catch {
+      /* offline or not-yet-created: try again on the next pass */
+    }
+  };
+
   if (remote.kind === "supabase") {
-    const hydrate = async () => {
-      try {
-        const liveId =
-          store.getState().liveTournamentId ??
-          (await remote.findLiveTournamentId());
-        if (liveId) hydrateFromSnapshot(await remote.hydrate(liveId));
-      } catch {
-        /* offline or not-yet-created: try again on the next pass */
-      }
-    };
     hydrate();
     // periodic reconcile catches anything realtime missed (dropped socket)
     setInterval(() => {
@@ -77,6 +92,17 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
 
   /* ---- outbound: drain the outbox ---- */
   let pushing = false;
+
+  // one pending reconcile at a time, so a burst of writes does not stack fetches
+  let reconcileScheduled = false;
+  const scheduleReconcile = () => {
+    if (reconcileScheduled || remote.kind !== "supabase") return;
+    reconcileScheduled = true;
+    setTimeout(() => {
+      reconcileScheduled = false;
+      if (navigator.onLine) hydrate();
+    }, RECONCILE_AFTER_PUSH_MS);
+  };
 
   const tick = async () => {
     if (!isLeader() || pushing) return;
@@ -109,6 +135,7 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
         );
         d.lastSyncedAt = now;
       });
+      scheduleReconcile();
     } catch {
       mutate((d) => {
         d.outbox = d.outbox.map((o) => {
@@ -130,4 +157,8 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
 
   setInterval(tick, TICK_MS);
   window.addEventListener("online", tick);
+  // a local write kicks the outbox at once, instead of waiting up to TICK_MS
+  registerDrainSignal(() => {
+    void tick();
+  });
 }

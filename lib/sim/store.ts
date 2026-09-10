@@ -616,6 +616,18 @@ function persist(s: SimState) {
   } catch {}
 }
 
+/*
+ * The sync engine registers a drain here so a local write can kick the outbox
+ * immediately instead of waiting for the next 3s tick. `pendingEnqueue` is set
+ * by `enqueueOp` and consumed once per mutate, so an action that enqueues many
+ * rows still schedules a single drain, and only after the state has committed.
+ */
+let drainSignal: (() => void) | null = null;
+let pendingEnqueue = false;
+export function registerDrainSignal(fn: () => void) {
+  drainSignal = fn;
+}
+
 function mutate(fn: (draft: SimState) => void) {
   const draft = structuredClone(simStore.getState());
   fn(draft);
@@ -626,6 +638,11 @@ function mutate(fn: (draft: SimState) => void) {
   if (isClient && !applyingRemote) {
     persist(draft);
     channel?.postMessage({ type: "state", state: draft });
+    if (pendingEnqueue && drainSignal) {
+      pendingEnqueue = false;
+      // after commit, so the drain reads the row it is meant to push
+      queueMicrotask(drainSignal);
+    }
   }
 }
 
@@ -897,6 +914,7 @@ function enqueueOp(
     attempts: 0,
   });
   draft.outbox = draft.outbox.slice(-600);
+  pendingEnqueue = true;
 }
 
 /** Room for several tournaments' worth of rows before the oldest are dropped. */
