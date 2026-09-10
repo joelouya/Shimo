@@ -89,23 +89,57 @@ function Fade({ children, delay = 0 }: { children: React.ReactNode; delay?: numb
 
 function CodeEntry({
   onResolved,
+  onGuest,
 }: {
   onResolved: (r: Resolved) => void;
+  onGuest: () => void;
 }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<null | "not-found" | "unavailable">(null);
 
+  /*
+   * One field, either kind of code. A group code (four characters, off the tee
+   * sheet) names a group; a personal registration code (six, from a guest's
+   * confirmation) opens a card. Try the group first, then the guest, so a
+   * tester never has to know which of ours they are holding.
+   */
   const submit = async () => {
     setProblem(null);
     setBusy(true);
-    const res = await resolveGroupCode(code);
-    setBusy(false);
-    if (res.status === "ok") {
-      onResolved({ tournamentId: res.tournamentId, round: res.round, groupId: res.groupId });
+
+    const g = await resolveGroupCode(code);
+    if (g.status === "ok") {
+      setBusy(false);
+      onResolved({ tournamentId: g.tournamentId, round: g.round, groupId: g.groupId });
       return;
     }
-    setProblem(res.status === "unavailable" ? "unavailable" : "not-found");
+
+    // this device already holds the entry (registered on this phone): instant
+    const local = guestForCode(simStore.getState(), code);
+    if (local) {
+      setDeviceIdentity(local.player.id);
+      setBusy(false);
+      onGuest();
+      return;
+    }
+    const res = await resolveGuestCodeRemote(code);
+    setBusy(false);
+    if (res.status === "ok") {
+      const ok = await enterResolvedGuest(res.tournamentId, res.guestId);
+      if (ok) {
+        onGuest();
+        return;
+      }
+      setProblem("unavailable");
+      return;
+    }
+
+    if (g.status === "unavailable" || res.status === "unavailable") {
+      setProblem("unavailable");
+    } else {
+      setProblem("not-found");
+    }
   };
 
   return (
@@ -113,17 +147,17 @@ function CodeEntry({
       <Fade>
         <p className="smallcaps text-muted-foreground">Tournament day</p>
         <h1 className="mt-3 font-serif text-[30px] leading-tight text-foreground">
-          Find your group
+          Enter your code
         </h1>
         <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
-          Type the four-character code printed beside your tee time, or scan the
-          code next to it.
+          The code beside your tee time on the sheet, or the personal code from
+          your registration. Either one works here.
         </p>
       </Fade>
 
       <Fade delay={0.08}>
         <div className="mt-8 space-y-2">
-          <Label htmlFor="group-code">Group code</Label>
+          <Label htmlFor="group-code">Your code</Label>
           <Input
             id="group-code"
             autoFocus
@@ -143,8 +177,8 @@ function CodeEntry({
           />
           {problem === "not-found" && (
             <p className="text-[13px] leading-relaxed text-red-flag">
-              That code did not match a group. Check it against the tee sheet, or
-              ask the starter.
+              That code did not match anything. Check it against your tee sheet
+              or registration, or ask the desk.
             </p>
           )}
           {problem === "unavailable" && (
@@ -168,10 +202,10 @@ function CodeEntry({
           {!busy && <ArrowRight className="size-4" />}
         </Button>
         <Link
-          href="/enter"
+          href="/app"
           className="mt-5 block text-center text-[13px] text-muted-foreground underline-offset-4 hover:underline"
         >
-          I have a personal registration code
+          I don&apos;t have a code
         </Link>
       </Fade>
     </div>
@@ -700,6 +734,7 @@ function Play() {
             setOverride(null);
             void applyResolved(r);
           }}
+          onGuest={goLive}
         />
       )}
       {screen.kind === "loading" && <Loading />}

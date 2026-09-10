@@ -28,6 +28,9 @@ import {
 
 export { CLIENT_ID, REMOTE_CONFIGURED } from "./client";
 
+/** Dev-only realtime tracing, off in production builds. */
+const REALTIME_DEBUG = process.env.NODE_ENV !== "production";
+
 export interface ScoreRow {
   tournament_id: string;
   /** which round of the tournament (1-based) */
@@ -253,11 +256,23 @@ function supabaseRemote(): RemoteAdapter {
               if (!row) return;
               // ignore the echo of our own score writes
               if (table === "scores" && row.client_id === CLIENT_ID) return;
+              if (REALTIME_DEBUG) {
+                console.debug(
+                  "[shimo realtime] delta",
+                  table,
+                  row.id ?? row.player_id ?? "",
+                );
+              }
               onChange(table, row);
             },
           );
         }
-        channel = ch.subscribe();
+        // Log the channel status so verification can tell whether realtime is
+        // actually delivering on this device: SUBSCRIBED means deltas will
+        // flow, CHANNEL_ERROR / TIMED_OUT means we are living on the poll.
+        channel = ch.subscribe((status) => {
+          if (REALTIME_DEBUG) console.info("[shimo realtime] channel", status);
+        });
       });
       return () => {
         channel?.unsubscribe();

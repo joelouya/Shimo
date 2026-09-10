@@ -9,6 +9,15 @@
         "dev:pilot"
       ],
       "port": 3001
+    },
+    {
+      "name": "shimo-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }

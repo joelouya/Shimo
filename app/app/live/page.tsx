@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -252,6 +252,23 @@ function PilotScoring() {
   const selected = pinned ?? Math.min(currentIdx, 17);
   const hole = course.holes[selected];
 
+  // Auto-advance: once both balls on the current hole are in on this phone the
+  // front of the card moves on, so stop honouring any hole the player tapped to
+  // review and bring the new current hole into view. Editing a past hole never
+  // moves the front, so it never yanks them away from a correction.
+  const curChipRef = useRef<HTMLButtonElement>(null);
+  const prevIdxRef = useRef(currentIdx);
+  useEffect(() => {
+    if (currentIdx === prevIdxRef.current) return;
+    prevIdxRef.current = currentIdx;
+    setPinned(null);
+    curChipRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "center",
+      behavior: "smooth",
+    });
+  }, [currentIdx]);
+
   const myPh = handicapSet(
     mePlayer?.handicap ?? 0,
     course,
@@ -330,6 +347,7 @@ function PilotScoring() {
               return (
                 <button
                   key={h.hole}
+                  ref={i === Math.min(currentIdx, 17) ? curChipRef : null}
                   onClick={() => setPinned(i === Math.min(currentIdx, 17) ? null : i)}
                   className={cn(
                     "flex size-11 shrink-0 flex-col items-center justify-center rounded-full border text-[14px] font-medium tnum transition-[color,background-color,border-color] duration-[var(--dur-hover)] ease-[var(--ease-out)] cursor-pointer",
@@ -483,6 +501,21 @@ function DemoLiveScoring() {
   const selected = pinned ?? Math.min(currentIdx, 17);
   const hole = LIVE_COURSE.holes[selected];
 
+  // Auto-advance to the next hole once the current one is complete (see the
+  // pilot path for the rationale).
+  const curChipRef = useRef<HTMLButtonElement>(null);
+  const prevIdxRef = useRef(currentIdx);
+  useEffect(() => {
+    if (currentIdx === prevIdxRef.current) return;
+    prevIdxRef.current = currentIdx;
+    setPinned(null);
+    curChipRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "center",
+      behavior: "smooth",
+    });
+  }, [currentIdx]);
+
   // discrepancies on Joe's card (marker disagrees)
   const discrepancies = useMemo(
     () =>
@@ -608,6 +641,7 @@ function DemoLiveScoring() {
               return (
                 <button
                   key={h.hole}
+                  ref={i === Math.min(currentIdx, 17) ? curChipRef : null}
                   onClick={() => setPinned(i === Math.min(currentIdx, 17) ? null : i)}
                   className={cn(
                     "flex size-11 shrink-0 flex-col items-center justify-center rounded-full border text-[14px] font-medium tnum transition-[color,background-color,border-color] duration-[var(--dur-hover)] ease-[var(--ease-out)] cursor-pointer",

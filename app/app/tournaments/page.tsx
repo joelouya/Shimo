@@ -18,11 +18,27 @@ const FORMATS: Format[] = [
   "Scramble",
 ];
 
+/* Relative to today, computed once at load: the pilot reloads often and a
+   day's drift on a month label does not matter. Avoids the stale hardcoded
+   "July / August" that had drifted past. */
+const NOW = new Date();
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+const ym = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+const TODAY_ISO = isoDay(NOW);
+const WEEK_END_ISO = isoDay(new Date(NOW.getTime() + 7 * 86_400_000));
+const THIS_MONTH = ym(NOW);
+const NEXT_MONTH_DATE = new Date(NOW.getFullYear(), NOW.getMonth() + 1, 1);
+const NEXT_MONTH = ym(NEXT_MONTH_DATE);
+
 const DATE_RANGES = [
   { id: "all", label: "Any date" },
   { id: "week", label: "Next 7 days" },
-  { id: "month", label: "July" },
-  { id: "next-month", label: "August" },
+  { id: "month", label: NOW.toLocaleDateString("en-KE", { month: "long" }) },
+  {
+    id: "next-month",
+    label: NEXT_MONTH_DATE.toLocaleDateString("en-KE", { month: "long" }),
+  },
 ];
 
 function Chip({
@@ -63,9 +79,9 @@ export default function TournamentsPage() {
       .filter((t) => !format || t.format === format)
       .filter((t) => !clubId || t.clubId === clubId)
       .filter((t) => {
-        if (range === "week") return t.date >= "2026-07-17" && t.date <= "2026-07-24";
-        if (range === "month") return t.date.startsWith("2026-07");
-        if (range === "next-month") return t.date.startsWith("2026-08");
+        if (range === "week") return t.date >= TODAY_ISO && t.date <= WEEK_END_ISO;
+        if (range === "month") return t.date.startsWith(THIS_MONTH);
+        if (range === "next-month") return t.date.startsWith(NEXT_MONTH);
         return true;
       })
       .filter((t) => !eligibleOnly || eligibilityFor(t).kind === "eligible")
