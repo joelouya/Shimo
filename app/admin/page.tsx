@@ -15,16 +15,41 @@ import { useActiveTournament, useStandings,
 import { allTournaments, groupHolesPlayed, useSim } from "@/lib/sim/store";
 import { paceReadings } from "@/lib/pace";
 import { roundKey } from "@/lib/rounds";
-import { formatDate, formatKES, toPar } from "@/lib/utils";
+import { cn, formatDate, formatKES, toPar } from "@/lib/utils";
 
-function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+type Metric = { label: string; value: string; sub?: string };
+
+/*
+ * The day's figures read as one ruled ledger rather than four floating tiles:
+ * a single sheet divided into columns by hairlines, the way the totals line is
+ * ruled off the foot of a scorecard. One object with internal rhythm, not a row
+ * of identical cards competing with the live panel above it. Exactly four cells,
+ * laid out 1 / 2 / 4 across the breakpoints, so the dividers fall cleanly.
+ */
+function DayLedger({ items }: { items: Metric[] }) {
   return (
-    <div className="rounded-2xl bg-card p-5 shadow-card">
-      <p className="smallcaps text-muted-foreground">{label}</p>
-      <p className="mt-2 font-serif text-[32px] leading-none text-foreground tnum">
-        {value}
-      </p>
-      {sub && <p className="mt-1.5 text-[11.5px] text-muted-foreground">{sub}</p>}
+    <div className="grid grid-cols-1 overflow-hidden rounded-2xl bg-card shadow-card sm:grid-cols-2 lg:grid-cols-4">
+      {items.map((m, i) => (
+        <div
+          key={m.label}
+          className={cn(
+            "px-5 py-[18px]",
+            i > 0 && "border-border/60",
+            i > 0 && "border-t sm:border-t-0",
+            i % 2 !== 0 && "sm:border-l",
+            i % 2 === 0 && i > 0 && "sm:border-t lg:border-t-0",
+            i % 4 !== 0 && "lg:border-l",
+          )}
+        >
+          <p className="smallcaps text-muted-foreground">{m.label}</p>
+          <p className="mt-2 font-serif text-[30px] leading-none text-foreground tnum">
+            {m.value}
+          </p>
+          {m.sub && (
+            <p className="mt-1.5 text-[11.5px] text-muted-foreground">{m.sub}</p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -170,40 +195,46 @@ function LivePanel() {
   );
 }
 
-function PilotTiles() {
+function usePilotMetrics(): Metric[] {
   const roster = useSim((s) => s.roster);
   const created = useSim((s) => s.created);
   const cardIn = useSim((s) => s.cardIn);
   const active = useActiveTournament();
   const fieldIds = active ? active.groups.flatMap((g) => g.playerIds) : [];
   const cardsIn = fieldIds.filter((pid) => cardIn[pid]).length;
-  return (
-    <>
-      <StatTile
-        label="Members on Shimo"
-        value={String(roster.length)}
-        sub="synced from the club roster"
-      />
-      <StatTile
-        label="Tournaments created"
-        value={String(created.length)}
-        sub={`${created.filter((t) => t.status === "upcoming").length} upcoming`}
-      />
-      <StatTile
-        label="Live today"
-        value={active ? "1" : "0"}
-        sub={active?.tournament.name ?? "nothing started"}
-      />
-      <StatTile
-        label="Cards in"
-        value={fieldIds.length ? `${cardsIn}/${fieldIds.length}` : "·"}
-        sub="from the scoring desk"
-      />
-    </>
-  );
+  return [
+    {
+      label: "Members on Shimo",
+      value: String(roster.length),
+      sub: "synced from the club roster",
+    },
+    {
+      label: "Tournaments created",
+      value: String(created.length),
+      sub: `${created.filter((t) => t.status === "upcoming").length} upcoming`,
+    },
+    {
+      label: "Live today",
+      value: active ? "1" : "0",
+      sub: active?.tournament.name ?? "nothing started",
+    },
+    {
+      label: "Cards in",
+      value: fieldIds.length ? `${cardsIn}/${fieldIds.length}` : "·",
+      sub: "from the scoring desk",
+    },
+  ];
 }
 
+const DEMO_METRICS: Metric[] = [
+  { label: "Members", value: "486", sub: "12 joined this quarter" },
+  { label: "Tournaments · July", value: "4", sub: "2 open for entries" },
+  { label: "Rounds scored on Shimo", value: "1,248", sub: "since March" },
+  { label: "Cards certified · July", value: "312", sub: "sealed and export-ready" },
+];
+
 export default function AdminDashboard() {
+  const pilotMetrics = usePilotMetrics();
   const created = useSim((s) => s.created);
   const dismissed = useSim((s) => s.dismissed);
   const upcoming = allTournaments(created, dismissed)
@@ -254,17 +285,8 @@ export default function AdminDashboard() {
         <LivePanel />
       </div>
 
-      <div className="mt-6 grid grid-cols-4 gap-4 animate-enter-rise [animation-delay:120ms]">
-        {IS_PILOT ? (
-          <PilotTiles />
-        ) : (
-          <>
-            <StatTile label="Members" value="486" sub="12 joined this quarter" />
-            <StatTile label="Tournaments · July" value="4" sub="2 open for entries" />
-            <StatTile label="Rounds scored on Shimo" value="1,248" sub="since March" />
-            <StatTile label="Cards certified · July" value="312" sub="sealed and export-ready" />
-          </>
-        )}
+      <div className="animate-enter-rise mt-6 [animation-delay:120ms]">
+        <DayLedger items={IS_PILOT ? pilotMetrics : DEMO_METRICS} />
       </div>
 
       <div className="mt-8 grid grid-cols-2 gap-6 animate-enter-rise [animation-delay:200ms]">
@@ -304,7 +326,9 @@ export default function AdminDashboard() {
         </section>
 
         <section>
-          <p className="smallcaps mb-3 text-muted-foreground">Recent results</p>
+          <div className="mb-3 flex h-[18px] items-center">
+            <p className="smallcaps text-muted-foreground">Recent results</p>
+          </div>
           <div className="overflow-hidden rounded-2xl bg-card shadow-card">
             {recent.map((t, i) => (
               <div

@@ -28,7 +28,7 @@ export function SyncStrip({ className }: { className?: string }) {
               ? `Offline. ${pending} change${pending > 1 ? "s" : ""} queued`
               : "Offline. Changes saved locally"}
           </p>
-          <span className="text-[11.5px] text-amber-flag/70">
+          <span className="text-[11.5px] text-amber-flag">
             They&apos;ll sync when you&apos;re back
           </span>
         </>
