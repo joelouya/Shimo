@@ -3224,17 +3224,42 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
       const key = roundKey(t.id, r.round ?? 1);
       applyScoreRow(draft, key, r.player_id, r.hole, r.gross, r.source);
     }
+    // Per-player round state a device writes optimistically (a returned card,
+    // an attest, a certification) must not be reverted by a snapshot that is
+    // older than what this device already holds. A full reconcile fetches the
+    // whole cloud state, and this one runs seconds after a push, so without the
+    // same staleness guard the realtime path uses, a just-certified card gets
+    // rolled back to "awaiting-player" until the write echoes - which reads as
+    // the certification bouncing the player back to the start, over and over.
     for (const r of snap.cardIn) {
+      if (isStale(draft, "card_in", r)) continue;
+      stamp(draft, "card_in", r);
       const key = roundKey(t.id, (r.round as number) ?? 1);
       cardInFor(draft, key)[r.player_id as string] = Boolean(r.is_in);
     }
     for (const r of snap.certifications) {
+      if (isStale(draft, "certifications", r)) continue;
+      stamp(draft, "certifications", r);
       const key = roundKey(t.id, (r.round as number) ?? 1);
       const c = rowToCert(r);
       certsFor(draft, key)[c.playerId] = c;
     }
-    draft.disputes = snap.disputes.map(rowToDispute);
-    draft.corrections = snap.corrections.map(rowToCorrection);
+    // Merge rather than replace, so a dispute or correction raised on this
+    // device but not yet pushed is not wiped by a reconcile that fetches the
+    // cloud set without it. Cloud rows are upserted by id, matching the
+    // realtime path; local-only rows survive until they sync.
+    for (const r of snap.disputes) {
+      const d = rowToDispute(r);
+      const i = draft.disputes.findIndex((x) => x.id === d.id);
+      if (i >= 0) draft.disputes[i] = d;
+      else draft.disputes.unshift(d);
+    }
+    for (const r of snap.corrections) {
+      const c = rowToCorrection(r);
+      const i = draft.corrections.findIndex((x) => x.id === c.id);
+      if (i >= 0) draft.corrections[i] = c;
+      else draft.corrections.unshift(c);
+    }
     for (const r of snap.audit) {
       const a = rowToAudit(r);
       if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
