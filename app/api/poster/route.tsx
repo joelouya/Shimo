@@ -272,7 +272,7 @@ function SponsorFoot({
   // row evenly and the title sponsor loses its label rather than the row losing
   // a sponsor. The strip is one line high in every case.
   const roomy = sorted.length <= 4;
-  const gap = roomy ? 40 : 26;
+  const gap = roomy ? 36 : 22;
   return (
     <div
       style={{
@@ -295,8 +295,8 @@ function SponsorFoot({
              * height whatever arrives, and still bills the title sponsor larger.
              */
             const box = isTitle
-              ? { w: 190, h: 54 }
-              : { w: roomy ? 150 : 118, h: roomy ? 40 : 34 };
+              ? { w: 200, h: 76 }
+              : { w: roomy ? 158 : 130, h: roomy ? 56 : 46 };
             return (
               <div
                 key={s.id}
@@ -318,7 +318,7 @@ function SponsorFoot({
                     style={{
                       fontFamily: "Fraunces",
                       fontWeight: 600,
-                      fontSize: isTitle ? 34 : roomy ? 25 : 21,
+                      fontSize: isTitle ? 44 : roomy ? 32 : 27,
                       color: NAVY,
                     }}
                   >
@@ -809,7 +809,7 @@ function ResultsPoster({ spec }: { spec: PosterSpec }) {
    */
   const titleLines = titleSize === 58 ? 2 : 1;
   const headerH = 380 + (titleLines - 1) * Math.round(titleSize * 1.04);
-  const footH = spec.sponsors?.length ? 190 : 76;
+  const footH = spec.sponsors?.length ? 232 : 76;
   const heroH = hero ? 148 + 30 : 0;
   const chromeH = 34 + heroH + 38 + 74; // padding, hero, column heads, note
   const budget = HEIGHT - headerH - footH - chromeH;

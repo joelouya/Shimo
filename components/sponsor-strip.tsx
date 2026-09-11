@@ -57,33 +57,33 @@ export function SponsorStrip({
 
   return (
     <div className={className}>
-      <p className={`smallcaps text-[9px] ${muted}`}>
+      <p className={`smallcaps text-[10px] ${muted}`}>
         {list.length === 1 ? "Sponsor" : "Sponsors"}
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2.5">
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-6 gap-y-3">
         {title && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {title.logoUrl ? (
               // a sponsor's own artwork, so Next's optimiser is bypassed
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={title.logoUrl}
                 alt={title.name}
-                className="h-8 w-auto max-w-[120px] object-contain"
+                className="h-12 w-auto max-w-[180px] object-contain"
               />
             ) : (
               <span
                 className={
                   tone === "dark"
-                    ? "text-[14px] font-medium text-primary-foreground/85"
-                    : "text-[14px] font-medium text-foreground"
+                    ? "text-[18px] font-medium text-primary-foreground/85"
+                    : "text-[18px] font-medium text-foreground"
                 }
               >
                 {title.name}
               </span>
             )}
             {showTitleLabel && (
-              <span className={`text-[10px] ${muted}`}>{tierLabel("title")}</span>
+              <span className={`text-[10.5px] ${muted}`}>{tierLabel("title")}</span>
             )}
           </div>
         )}
@@ -95,13 +95,13 @@ export function SponsorStrip({
               src={s.logoUrl}
               alt={s.name}
               title={`${s.name} · ${tierLabel(s.tier)}`}
-              className="h-6 w-auto max-w-[92px] object-contain opacity-85"
+              className="h-9 w-auto max-w-[140px] object-contain opacity-90"
             />
           ) : (
             <span
               key={s.id}
               title={tierLabel(s.tier)}
-              className={`text-[12.5px] ${
+              className={`text-[15px] ${
                 tone === "dark" ? "text-primary-foreground/70" : "text-ink-soft"
               }`}
             >
