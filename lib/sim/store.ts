@@ -293,6 +293,13 @@ export interface SimState {
   /** one row per guest per tournament, carrying their access code */
   guestEntries: GuestEntry[];
   /**
+   * Desk check-ins: who the club verified at the desk and (manually) took
+   * payment from, per tournament then player id. Local to the desk device for
+   * the pilot; the field the player was admitted to is the synced source of
+   * truth for who plays. Payment is a preview, recorded here, not processed.
+   */
+  checkIns: Record<string, Record<string, { at: number; paid: boolean }>>;
+  /**
    * What Shimo observed, so a recap pack can only ever report what happened.
    * Append-only and carrying no personal data. See lib/exposure.ts.
    */
@@ -452,6 +459,7 @@ export function buildInitialState(): SimState {
     roster,
     guests: [],
     guestEntries: [],
+    checkIns: {},
     exposure: [],
     pace: {},
     paceThresholdMin: 15,
@@ -606,6 +614,7 @@ function normalize(saved: SimState): SimState {
   out.created ??= [];
   out.dismissed ??= [];
   out.deskWelcomed ??= false;
+  out.checkIns ??= {};
   out.liveRound ||= 1;
   return out;
 }
@@ -1741,6 +1750,83 @@ export function guestsIn(s: SimState, tournamentId: string): Player[] {
     s.guestEntries.filter((e) => e.tournamentId === tournamentId).map((e) => e.guestId),
   );
   return s.guests.filter((g) => ids.has(g.id));
+}
+
+/** Add `mins` to an HH:MM tee time, wrapping at midnight. */
+function addMins(hhmm: string, mins: number): string {
+  const [h, m] = (hhmm || "07:30").split(":").map(Number);
+  const total = ((h || 0) * 60 + (m || 0) + mins + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(
+    total % 60,
+  ).padStart(2, "0")}`;
+}
+
+/**
+ * Desk check-in. On the day, a player presents the one-time code from their
+ * registration and the desk resolves it to this player. Checking them in
+ * records that the club verified them and took payment at the desk (a preview,
+ * not processed), and admits them to the round's field by seating them in a
+ * group, so their scorecard opens when the day is started. Idempotent: a second
+ * pass just refreshes the paid flag and never seats them twice.
+ */
+export function checkInGuest(
+  tournamentId: string,
+  player: Player,
+  opts: { paid?: boolean } = {},
+  round = 1,
+) {
+  mutate((draft) => {
+    if (!draft.roster.some((p) => p.id === player.id)) draft.roster.push(player);
+    ensureCard(draft, player.id, roundKey(tournamentId, round));
+    (draft.checkIns[tournamentId] ??= {})[player.id] = {
+      at: Date.now(),
+      paid: Boolean(opts.paid),
+    };
+    // make sure the player row is in the cloud for every device in the field
+    enqueueEntity(draft, "players", playerToRow(player), { conflict: "id" });
+  });
+
+  // seat them in a group if they are not already in one this round
+  const s = simStore.getState();
+  const key = roundKey(tournamentId, round);
+  const existing = s.pairings[key] ?? [];
+  if (existing.some((g) => g.playerIds.includes(player.id))) return;
+  const t =
+    s.created.find((x) => x.id === tournamentId) ??
+    TOURNAMENTS.find((x) => x.id === tournamentId);
+  const firstTee = t?.firstTee ?? "07:30";
+  const interval = t?.teeInterval || 10;
+  const groups = existing.map((g) => ({ ...g, playerIds: [...g.playerIds] }));
+  let target = groups.find((g) => g.playerIds.length < 4);
+  if (!target) {
+    target = {
+      id: `ci-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      number: groups.length + 1,
+      teeTime: "",
+      playerIds: [],
+    };
+    groups.push(target);
+  }
+  target.playerIds.push(player.id);
+  savePairings(
+    tournamentId,
+    groups.map((g, i) => ({
+      id: g.id,
+      number: i + 1,
+      teeTime: addMins(firstTee, i * interval),
+      playerIds: g.playerIds,
+      code: g.code,
+    })),
+    round,
+  );
+}
+
+/** A stable empty map so an un-checked-in tournament keeps one snapshot ref. */
+const EMPTY_CHECKINS: Record<string, { at: number; paid: boolean }> = {};
+
+/** The desk's check-ins for one tournament, keyed by player id. */
+export function checkInsFor(s: SimState, tournamentId: string) {
+  return s.checkIns[tournamentId] ?? EMPTY_CHECKINS;
 }
 
 /**
@@ -3168,6 +3254,32 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
         if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
         break;
       }
+    }
+  });
+}
+
+/**
+ * Merge the club's open (upcoming or live) tournaments discovered from the
+ * cloud into local state, so a published event a golfer never created still
+ * shows on their phone to register for. Upserts by id and honours staleness,
+ * exactly like a realtime tournament row; it never removes local-only events.
+ */
+export function mergeCloudTournaments(rows: Record<string, unknown>[]) {
+  if (!rows.length) return;
+  mutate((draft) => {
+    for (const row of rows) {
+      if (isStale(draft, "tournaments", row)) continue;
+      stamp(draft, "tournaments", row);
+      const t = rowToTournament(row);
+      if (t.status === "cancelled") {
+        draft.created = draft.created.filter((x) => x.id !== t.id);
+        if (draft.liveTournamentId === t.id) draft.liveTournamentId = null;
+        continue;
+      }
+      const i = draft.created.findIndex((x) => x.id === t.id);
+      if (i >= 0) draft.created[i] = t;
+      else draft.created.unshift(t);
+      if (t.status === "live") draft.liveTournamentId = t.id;
     }
   });
 }

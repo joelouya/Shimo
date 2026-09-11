@@ -188,6 +188,9 @@ export interface RemoteAdapter {
   hydrate(tournamentId: string): Promise<HydrationSnapshot>;
   /** the current live tournament id, if any device has started one */
   findLiveTournamentId(): Promise<string | null>;
+  /** every published event (upcoming or live), so a phone can list them to
+   *  register for before the day is started */
+  findOpenTournaments(): Promise<Record<string, unknown>[]>;
   /** realtime for every synced table; onChange(table, newRow). unsubscribe. */
   subscribeTables(
     onChange: (table: SyncTable, row: Record<string, unknown>) => void,
@@ -217,6 +220,9 @@ function localRemote(): RemoteAdapter {
     async findLiveTournamentId() {
       return null;
     },
+    async findOpenTournaments() {
+      return [];
+    },
     subscribeTables() {
       return () => {};
     },
@@ -242,6 +248,15 @@ function supabaseRemote(): RemoteAdapter {
         .limit(1)
         .maybeSingle();
       return (data?.id as string) ?? null;
+    },
+    async findOpenTournaments() {
+      const sb = await supabase();
+      const { data } = await sb
+        .from("tournaments")
+        .select("*")
+        .in("status", ["upcoming", "live"])
+        .order("date", { ascending: true });
+      return (data ?? []) as Record<string, unknown>[];
     },
     subscribeTables(onChange) {
       let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;

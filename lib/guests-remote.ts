@@ -20,7 +20,13 @@
 import { normaliseCode } from "@/lib/guests";
 import { REMOTE_CONFIGURED, supabase } from "@/lib/sync/client";
 import { getRemote } from "@/lib/sync/remote";
-import { hydrateFromSnapshot, setDeviceIdentity } from "@/lib/sim/store";
+import {
+  guestForCode,
+  hydrateFromSnapshot,
+  setDeviceIdentity,
+  simStore,
+} from "@/lib/sim/store";
+import type { Player } from "@/lib/types";
 
 export type GuestResolveResult =
   | { status: "ok"; tournamentId: string; guestId: string }
@@ -153,6 +159,42 @@ export async function enterResolvedGuest(
   } catch {
     return false;
   }
+}
+
+/**
+ * Resolve a code at the desk, to the player it belongs to, without becoming
+ * them. The desk verifies an arriving player against the one-time code on their
+ * registration, so this looks the code up (locally first, then the server) and
+ * brings the player's own row and their event into local state - but never
+ * sets the device identity, because the club laptop is not that golfer.
+ */
+export type DeskResolveResult =
+  | { status: "ok"; tournamentId: string; player: Player }
+  | { status: "not-found" }
+  | { status: "rate-limited"; until: Date | null }
+  | { status: "unavailable" };
+
+export async function resolveGuestForDesk(
+  input: string,
+): Promise<DeskResolveResult> {
+  const local = guestForCode(simStore.getState(), input);
+  if (local) {
+    return { status: "ok", tournamentId: local.tournamentId, player: local.player };
+  }
+  const res = await resolveGuestCodeRemote(input);
+  if (res.status !== "ok") return res;
+  try {
+    hydrateFromSnapshot(await getRemote().hydrate(res.tournamentId));
+  } catch {
+    return { status: "unavailable" };
+  }
+  const st = simStore.getState();
+  const player =
+    st.roster.find((p) => p.id === res.guestId) ??
+    st.guests.find((g) => g.id === res.guestId) ??
+    null;
+  if (!player) return { status: "unavailable" };
+  return { status: "ok", tournamentId: res.tournamentId, player };
 }
 
 /* ---- the club-facing signal ---- */

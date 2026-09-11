@@ -17,6 +17,7 @@ import {
   regClosesAt,
   registrationOpen,
 } from "@/lib/eligibility";
+import { IS_PILOT } from "@/lib/mode";
 import { isMultiRound, roundsOf } from "@/lib/rounds";
 import { availableTiers, isTiered, tierFor, tierPhrase } from "@/lib/pricing";
 import {
@@ -176,7 +177,20 @@ export default function TournamentDetailPage({
             <EligibilityTag t={t} />
           </div>
           <div className="mt-3">
-            {isRegistered ? (
+            {IS_PILOT ? (
+              t.status === "upcoming" ? (
+                <Button asChild className="w-full" variant="clay" size="lg">
+                  <Link href={`/register/${t.id}`}>
+                    Register for this tournament
+                  </Link>
+                </Button>
+              ) : (
+                <Button className="w-full" variant="secondary" size="lg" disabled>
+                  <Lock className="size-3.5" />
+                  {t.status === "live" ? "Live now" : "Entries closed"}
+                </Button>
+              )
+            ) : isRegistered ? (
               <Button className="w-full" variant="secondary" size="lg" disabled>
                 <Check className="size-4 text-clay" />
                 You&apos;re registered

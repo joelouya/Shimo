@@ -16,6 +16,7 @@ import {
   Printer,
   Trash2,
   Trophy,
+  UserCheck,
   Users,
 } from "lucide-react";
 
@@ -144,6 +145,14 @@ function TournamentRow({
               </Link>
             </Button>
             <RowMenu>
+              {IS_PILOT && (
+                <DropdownMenuItem asChild>
+                  <Link href={`/admin/tournaments/${t.id}/desk`}>
+                    <UserCheck />
+                    Check in players
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link href={`/admin/tournaments/${t.id}/pairings`}>
                   <Users />
@@ -195,6 +204,14 @@ function TournamentRow({
               </Button>
             )}
             <RowMenu>
+              {IS_PILOT && (
+                <DropdownMenuItem asChild>
+                  <Link href={`/admin/tournaments/${t.id}/desk`}>
+                    <UserCheck />
+                    Check in players
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => onEdit(t)}>
                 <Pencil />
                 Edit details
