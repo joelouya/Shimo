@@ -72,8 +72,6 @@ export function DeskWelcome() {
   const [dir, setDir] = useState(1);
   const idx = ORDER.indexOf(step);
 
-  const club = clubById(CLUB_ID);
-
   const go = (next: Step) => {
     setDir(ORDER.indexOf(next) >= idx ? 1 : -1);
     setStep(next);
@@ -100,7 +98,7 @@ export function DeskWelcome() {
             <div className="flex items-center gap-4 border-b border-border/60 px-8 py-5">
               <LogoMark className="size-7 shrink-0" />
               <span className="smallcaps text-muted-foreground">
-                Setting up {club.name}
+                Setting up your club
               </span>
               <span className="ml-auto h-0.5 w-40 overflow-hidden rounded-full bg-border">
                 <motion.span
@@ -122,7 +120,7 @@ export function DeskWelcome() {
                   transition={{ duration: 0.32, ease: EASE }}
                 >
                   {step === "welcome" && (
-                    <Welcome clubName={club.name} onNext={() => go("identity")} />
+                    <Welcome onNext={() => go("identity")} />
                   )}
                   {step === "identity" && (
                     <IdentityStep
@@ -213,7 +211,7 @@ function StepFoot({
   );
 }
 
-function Welcome({ clubName, onNext }: { clubName: string; onNext: () => void }) {
+function Welcome({ onNext }: { onNext: () => void }) {
   return (
     <div>
       <motion.div
@@ -225,7 +223,7 @@ function Welcome({ clubName, onNext }: { clubName: string; onNext: () => void })
         <LogoMark className="size-8" />
       </motion.div>
       <h2 className="mt-5 font-serif text-[30px] leading-tight text-foreground">
-        Welcome, {clubName}
+        Welcome to Shimo
       </h2>
       <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-soft">
         This sets up your tournament desk. Your crest and colour, your members,

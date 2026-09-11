@@ -256,6 +256,11 @@ function TournamentRow({
                   Pairings & tee times
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(t)}>
+                <Trash2 />
+                {isCreated ? "Delete tournament" : "Remove from list"}
+              </DropdownMenuItem>
             </RowMenu>
           </>
         )}
@@ -431,7 +436,9 @@ export default function AdminTournamentsPage() {
               <span className="font-medium text-foreground">{toDelete?.name}</span>{" "}
               {deleteIsRemoval
                 ? "is one of the example events Shimo ships with. Removing it clears it from your list. Nothing you created is affected."
-                : "will be removed for every device. This can't be undone. Only do this before the tournament has started."}
+                : toDelete?.status === "completed"
+                  ? "and its results will be removed for every device. This can't be undone."
+                  : "will be removed for every device. This can't be undone."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
