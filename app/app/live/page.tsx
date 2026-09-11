@@ -613,11 +613,11 @@ function DemoLiveScoring() {
               <p className="text-[13px] font-medium text-amber-flag">
                 Check with your marker: hole {discrepancies[0] + 1} differs
               </p>
-              <p className="text-[11px] text-amber-flag/70">
+              <p className="text-[11px] text-amber-flag">
                 Tap to compare and agree the score
               </p>
             </div>
-            <ChevronRight className="size-4 text-amber-flag/60" />
+            <ChevronRight className="size-4 text-amber-flag" />
           </motion.button>
         )}
       </AnimatePresence>

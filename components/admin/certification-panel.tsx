@@ -485,7 +485,7 @@ export function CertificationPanel() {
               */}
               {stage === "certified" && cert?.lockedHash && (
                 <p
-                  className="mt-0.5 font-mono text-[10px] leading-none text-stone/80 tnum"
+                  className="mt-0.5 font-mono text-[10px] leading-none text-stone tnum"
                   title={`Sealed · ${cert.lockedHash}`}
                 >
                   {cert.lockedHash.slice(0, 10)}
