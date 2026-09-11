@@ -25,6 +25,7 @@ import {
   applyRemoteEntity,
   applyRemoteScore,
   hydrateFromSnapshot,
+  mergeCloudTournaments,
   registerDrainSignal,
   type SimState,
 } from "@/lib/sim/store";
@@ -58,6 +59,9 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
   const hydrate = async () => {
     if (remote.kind !== "supabase") return;
     try {
+      // discover every published event, so an upcoming one a golfer never
+      // created still appears on their phone to register for
+      mergeCloudTournaments(await remote.findOpenTournaments());
       const liveId =
         store.getState().liveTournamentId ??
         (await remote.findLiveTournamentId());
