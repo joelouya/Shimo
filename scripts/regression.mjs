@@ -806,6 +806,15 @@ check("an ace outranks everything else on the queue",
 /* ------------------------------------------------------------------ */
 section("TV producer");
 const PR = await jiti.import("../lib/tv/producer.ts");
+const { FEATURES } = await jiti.import("../lib/flags.ts");
+/*
+ * The moments engine (reduced / full coverage) is wired but flag-gated in the
+ * product: the panel offers quiet and standard only, and anything asking for
+ * reduced or full resolves to standard while the flag is off. The checks
+ * below exercise the engine itself, so they run with the flag on; the shipped
+ * flag-off behaviour is pinned by its own check further down.
+ */
+FEATURES.tvMomentsEngine = true;
 
 const tvC = COURSES[0];
 const tvPlayers = [
@@ -815,6 +824,8 @@ const tvPlayers = [
 const tvT = {
   ...T, id: "t-tv", clubId: "sigona", courseId: tvC.id, format: "Stroke Play",
   handicapAllowance: 100, fieldProfile: "championship", status: "live",
+  // the fixture asks for full coverage itself: no profile defaults to it
+  tvCoverage: "full",
   rounds: [{ id: "r1", number: 1, name: "Round 1", date: "2030-01-01",
              courseId: tvC.id, tees: "White", firstTee: "07:00",
              teeInterval: 10, cut: null }],
@@ -844,6 +855,15 @@ const settledState = PR.reduce(S0,
   { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
 check("a settled eagle reaches the queue",
   settledState.queue.some((a) => a.kind === "eagle"), String(settledState.queue.length));
+check("with the moments engine off, full resolves to the calm standard board", (() => {
+  FEATURES.tvMomentsEngine = false;
+  try {
+    const s = PR.reduce(S0, { type: "snapshot", snapshot: snap(eagleRows("p1", 0), 0) }, 130_000);
+    return s.config.coverage === "standard" && s.queue.length === 0 && s.pending.length === 0;
+  } finally {
+    FEATURES.tvMomentsEngine = true;
+  }
+})());
 check("the announcement is dressed for the screen", (() => {
   const a = settledState.queue.find((x) => x.kind === "eagle");
   return a.headline === "Eagle" && a.subject === "Alice Wanjiru" && /par 5/.test(a.line);
@@ -1588,14 +1608,14 @@ section("Course records and club settings");
   })());
 
   check("a tournament can start the day quiet", (() => {
-    const quietT = { ...tvT, tvQuiet: true };
+    const quietT = { ...tvT, tvCoverage: undefined, tvQuiet: true };
     let s = PR.reduce(PR.initialState({ coverage: "full" }), { type: "snapshot",
       snapshot: { ...snap(eagleRows("p1", 0), 0), tournament: quietT } }, 130_000);
     s = PR.reduce(s, { type: "tick" }, 200_000);
     return s.config.coverage === "quiet" && s.mode === "leaderboard" && s.queue.length === 0;
   })());
   check("the panel overrules the tournament's default, not the other way round", (() => {
-    const quietT = { ...tvT, tvQuiet: true };
+    const quietT = { ...tvT, tvCoverage: undefined, tvQuiet: true };
     let s = PR.reduce(PR.initialState(), { type: "snapshot", snapshot: {
       ...snap(eagleRows("p1", 0), 0), tournament: quietT,
       decisions: [{ id: 1, kind: "quiet", payload: { on: false }, at: 1 }],
@@ -1628,8 +1648,8 @@ section("Coverage tiers");
     return out;
   };
 
-  check("defaults follow the field: championship full, medal standard, team quiet",
-    PF.defaultCoverage("championship") === "full" &&
+  check("defaults follow the field: a team day quiet, everything else standard",
+    PF.defaultCoverage("championship") === "standard" &&
     PF.defaultCoverage("club") === "standard" &&
     PF.defaultCoverage("stableford") === "standard" &&
     PF.defaultCoverage("team") === "quiet");
