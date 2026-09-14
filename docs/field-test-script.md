@@ -23,7 +23,8 @@ Do all of this on wifi, the day before.
 ### 1.1 Database
 
 - [ ] Migrations run in order in the Supabase SQL editor:
-      `schema.sql` → `schema-pilot.sql` → `schema-m2.sql` → `schema-m2c.sql` → `schema-m3.sql`
+      `schema.sql` → `schema-pilot.sql` → `schema-m2.sql` → `schema-m2c.sql` → `schema-m3.sql` → … → `schema-m21.sql` → `schema-m22.sql` → `schema-m23.sql`
+      (every file in `supabase/`, in number order; m22 adds the entries table, m23 the marker pairs)
 - [ ] Clean slate:
       ```sql
       truncate table tournaments, pairings, players, scores, card_in,
@@ -93,6 +94,21 @@ seven screens.
 - [ ] O6 in particular: a step stuck at partial opacity is a real bug and the
       one failure mode this flow has had before. Record which step and what you
       tapped to reach it.
+
+### 1.4b Registration before the day
+
+Publish the event from the desk the evening before and do this on the
+testers' phones, on mobile data, before anyone builds the tee sheet.
+
+| # | Step | PASS |
+|---|---|---|
+| R1 | Open the golfer app after the desk has published | The event appears under **Open for entry** within ten seconds, with a **Register** button, without anyone typing anything |
+| R2 | Tap **Register** | "You're in" toast, the card moves to **Your upcoming tournaments** |
+| R3 | On the desk, open the event's **Registrations** | The tester is listed as "from their phone" with the time; the tournaments row reads "1 registered" |
+| R4 | Tap **Withdraw** on the phone, then **Register** again | Both changes reach the desk; the count follows |
+| R5 | Airplane mode, then Register | The card says "You're in" at once; the strip shows one change queued; it reaches the desk after the radio comes back |
+
+- [ ] Seconds from tapping Register to the desk showing it: ______
 
 ### 1.5 The tournament
 

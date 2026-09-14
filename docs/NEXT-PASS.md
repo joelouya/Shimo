@@ -19,6 +19,13 @@ when it is done.
 
 ## Sync
 
+- Until `schema-m22.sql` is applied, the pilot cloud answers 404 for
+  `entries`; the per-table push keeps that from holding up scores, but the
+  outbox will show those ops as failed after 30s. Apply m22 before deploying
+  the registration loop.
+- `scripts/sim-live.mjs` and `purge_simulator_data()` do not know about
+  `entries` yet; extend the purge function in m24.
+
 - `lib/sync/remote.ts` `hydrate()` fetches the whole `players` table on every
   reconcile; filter to the field of the open tournaments plus the club's
   roster once `entries` exists.

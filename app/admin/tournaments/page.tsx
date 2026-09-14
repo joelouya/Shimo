@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { clubById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
+import { useSyncStatus } from "@/lib/sim/hooks";
 import {
   adoptTournament,
   allTournaments,
@@ -87,6 +88,45 @@ function RowMenu({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Whether the published event has actually reached the cloud. The desk is
+ * told the truth: "visible on phones" only once the tournament row has
+ * synced, "publishing" while it is queued, and "will publish when online"
+ * when there is no connection to push it over.
+ */
+function PublishStatus({ id }: { id: string }) {
+  const pending = useSim((s) =>
+    s.outbox.some(
+      (o) =>
+        o.status !== "synced" &&
+        o.kind === "entity" &&
+        o.payload.table === "tournaments" &&
+        (o.payload.row as { id?: string } | undefined)?.id === id,
+    ),
+  );
+  const { online } = useSyncStatus();
+  if (!IS_PILOT) return <>Published.</>;
+  if (!pending) return <>Published and visible on phones.</>;
+  return <>{online ? "Publishing to phones…" : "Saved here. It publishes to phones when you are back online."}</>;
+}
+
+/** "12 registered · 2 waitlisted", from the synced entries; the seed's
+ *  field size when the event has none yet. */
+function EntryCount({ t }: { t: Tournament }) {
+  const entries = useSim((s) => s.entries);
+  const mine = entries.filter((e) => e.tournamentId === t.id);
+  const registered = mine.filter((e) => e.status === "registered").length;
+  const waitlisted = mine.filter((e) => e.status === "waitlisted").length;
+  if (!mine.length) return <>{t.fieldSize} entered</>;
+  return (
+    <>
+      {registered} registered
+      {waitlisted > 0 && ` · ${waitlisted} waitlisted`}
+      {t.maxPlayers ? ` of ${t.maxPlayers}` : ""}
+    </>
+  );
+}
+
 function TournamentRow({
   t,
   isNew,
@@ -130,7 +170,7 @@ function TournamentRow({
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           {clubById(t.clubId).name} · {t.format} · {formatKES(t.entryFee)} ·{" "}
-          {t.fieldSize} entered
+          <EntryCount t={t} />
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -204,6 +244,12 @@ function TournamentRow({
               </Button>
             )}
             <RowMenu>
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/tournaments/${t.id}/registrations`}>
+                  <ClipboardList />
+                  Registrations
+                </Link>
+              </DropdownMenuItem>
               {IS_PILOT && (
                 <DropdownMenuItem asChild>
                   <Link href={`/admin/tournaments/${t.id}/desk`}>
@@ -362,9 +408,9 @@ export default function AdminTournamentsPage() {
               registration.
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-              It is not live on players&apos; phones yet. When play begins, start
-              the day to open live scoring and put it on every golfer&apos;s
-              screen.
+              <PublishStatus id={justCreated.id} /> Members can enter from their
+              phones now. When play begins, start the day to open live scoring
+              and put it on every golfer&apos;s screen.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">

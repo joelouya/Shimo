@@ -13,9 +13,11 @@ import { LiveBadge } from "@/components/live-dot";
 import { DEMO_USER_ID, clubById, courseById, findClub, findCourse, playerById } from "@/lib/data";
 import {
   eligibilityFor,
+  eligibilityForPlayer,
   eligibilitySummary,
   regClosesAt,
   registrationOpen,
+  type Eligibility,
 } from "@/lib/eligibility";
 import { IS_PILOT } from "@/lib/mode";
 import { useMe } from "@/lib/sim/hooks";
@@ -23,10 +25,13 @@ import { isMultiRound, roundsOf } from "@/lib/rounds";
 import { availableTiers, isTiered, tierFor, tierPhrase } from "@/lib/pricing";
 import {
   allTournaments,
+  capacityFromEntries,
   recordExposure,
   registerForTournament,
   useSim,
+  withdrawEntry,
 } from "@/lib/sim/store";
+import type { Player, Tournament, TournamentEntry } from "@/lib/types";
 import { formatDateLong, formatKES } from "@/lib/utils";
 
 /** How to reach the club, from its own identity settings. */
@@ -90,14 +95,19 @@ export default function TournamentDetailPage({
 }) {
   const { id } = use(params);
   const created = useSim((s) => s.created);
-  const registrations = useSim((s) => s.registrations);
+  const entries = useSim((s) => s.entries);
   const mePlayer = useMe();
   const t = allTournaments(created).find((x) => x.id === id);
 
-  /* The tournament's own page, counted the same way as the board. */
+  /*
+   * The tournament's own page, counted the same way as the board. Keyed on
+   * the id, not the object: every store write clones `created`, so keying on
+   * the object re-recorded on its own write, forever.
+   */
+  const tid = t?.id;
   useEffect(() => {
-    if (t) recordExposure(t.id, "tournament");
-  }, [t]);
+    if (tid) recordExposure(tid, "tournament");
+  }, [tid]);
 
   if (!t) {
     return (
@@ -113,8 +123,16 @@ export default function TournamentDetailPage({
   const club = findClub(t.clubId) ?? clubById("muthaiga");
   const course = findCourse(t.courseId) ?? courseById("muthaiga-main");
   const totalYards = course.holes.reduce((a, h) => a + h.yards, 0);
-  const eligibility = eligibilityFor(t);
-  const isRegistered = t.registered || registrations.includes(t.id);
+  const myEntry = mePlayer
+    ? entries.find((e) => e.tournamentId === t.id && e.playerId === mePlayer.id)
+    : undefined;
+  const entered = Boolean(myEntry && myEntry.status !== "withdrawn");
+  const capacity = capacityFromEntries(entries, t);
+  const registeredCount = entries.filter(
+    (e) => e.tournamentId === t.id && e.status === "registered",
+  ).length;
+  const eligibility = IS_PILOT && mePlayer ? eligibilityForPlayer(t, mePlayer) : eligibilityFor(t);
+  const isRegistered = t.registered || entered;
   const open = registrationOpen(t);
   // pilot: the player this phone stands for, if known; demo: Joel
   const me = IS_PILOT ? mePlayer : playerById(DEMO_USER_ID);
@@ -183,18 +201,14 @@ export default function TournamentDetailPage({
           </div>
           <div className="mt-3">
             {IS_PILOT ? (
-              t.status === "upcoming" ? (
-                <Button asChild className="w-full" variant="clay" size="lg">
-                  <Link href={`/register/${t.id}`}>
-                    Register for this tournament
-                  </Link>
-                </Button>
-              ) : (
-                <Button className="w-full" variant="secondary" size="lg" disabled>
-                  <Lock className="size-3.5" />
-                  {t.status === "live" ? "Live now" : "Entries closed"}
-                </Button>
-              )
+              <PilotEntryAction
+                t={t}
+                me={mePlayer}
+                entry={myEntry}
+                open={open}
+                capacity={capacity}
+                eligibility={eligibility}
+              />
             ) : isRegistered ? (
               <Button className="w-full" variant="secondary" size="lg" disabled>
                 <Check className="size-4 text-clay" />
@@ -233,7 +247,7 @@ export default function TournamentDetailPage({
             ) : (
               <>Registration closed</>
             )}{" "}
-            · {t.fieldSize} of {t.maxPlayers} entered
+            · {registeredCount} of {t.maxPlayers} entered
           </p>
         </div>
 
@@ -397,5 +411,119 @@ export default function TournamentDetailPage({
         )}
       </div>
     </div>
+  );
+}
+
+
+/**
+ * What a pilot player can do about entering, in one control. A member enters
+ * with a tap and can withdraw until the day; a guest goes through the form
+ * (that is where their code comes from); a phone that does not know who it is
+ * is told how to say so.
+ */
+function PilotEntryAction({
+  t,
+  me,
+  entry,
+  open,
+  capacity,
+  eligibility,
+}: {
+  t: Tournament;
+  me: Player | null;
+  entry?: TournamentEntry;
+  open: boolean;
+  capacity: { full: boolean; spotsLeft: number | null; waitlistOpen: boolean };
+  eligibility: Eligibility;
+}) {
+  const entered = Boolean(entry && entry.status !== "withdrawn");
+  if (t.status === "live") {
+    return (
+      <Button asChild className="w-full" variant={entered ? "clay" : "secondary"} size="lg">
+        <Link href={entered ? "/app/live" : "/app/leaderboard"}>
+          {entered ? "Open your card" : "Live now · follow the board"}
+        </Link>
+      </Button>
+    );
+  }
+  if (t.status !== "upcoming") {
+    return (
+      <Button asChild className="w-full" variant="secondary" size="lg">
+        <Link href="/app/leaderboard">Results</Link>
+      </Button>
+    );
+  }
+  if (entered) {
+    const waiting = entry?.status === "waitlisted";
+    return (
+      <div className="flex flex-col gap-2">
+        <Button className="w-full" variant="secondary" size="lg" disabled>
+          <Check className="size-4 text-clay" />
+          {waiting ? "You're on the waitlist" : "You're in"}
+        </Button>
+        {me && (
+          <Button
+            variant="ghost"
+            className="w-full text-muted-foreground"
+            onClick={() => withdrawEntry(t.id, me.id)}
+          >
+            Withdraw
+          </Button>
+        )}
+      </div>
+    );
+  }
+  if (!open) {
+    return (
+      <Button className="w-full" variant="secondary" size="lg" disabled>
+        <Lock className="size-3.5" />
+        Entries closed
+      </Button>
+    );
+  }
+  if (!me) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button asChild className="w-full" variant="clay" size="lg">
+          <Link href="/app/profile">Sign in to register</Link>
+        </Button>
+        <Button asChild variant="ghost" className="w-full text-muted-foreground">
+          <Link href={`/register/${t.id}`}>Register as a guest</Link>
+        </Button>
+      </div>
+    );
+  }
+  if (me.guest) {
+    return (
+      <Button asChild className="w-full" variant="clay" size="lg">
+        <Link href={`/register/${t.id}`}>Register for this tournament</Link>
+      </Button>
+    );
+  }
+  if (eligibility.kind !== "eligible") {
+    return (
+      <Button className="w-full" variant="secondary" size="lg" disabled>
+        <Lock className="size-3.5" />
+        {eligibility.label}
+      </Button>
+    );
+  }
+  if (capacity.full && !capacity.waitlistOpen) {
+    return (
+      <Button className="w-full" variant="secondary" size="lg" disabled>
+        <Lock className="size-3.5" />
+        Field full
+      </Button>
+    );
+  }
+  return (
+    <Button
+      className="w-full"
+      variant="clay"
+      size="lg"
+      onClick={() => registerForTournament(t.id)}
+    >
+      {capacity.full ? "Join the waitlist" : "Register"}
+    </Button>
   );
 }

@@ -17,6 +17,7 @@ import type {
   Player,
   Team,
   Tournament,
+  TournamentEntry,
 } from "@/lib/types";
 
 /* ---- tournaments ---- */
@@ -259,6 +260,32 @@ export function guestEntryToRow(e: GuestEntry) {
        number). It lands in the club's own store and never reaches a sponsor
        or any anon read, the same rule the guest's free-text notes follow. */
     answers: e.answers ?? null,
+  };
+}
+
+/* ---- entries (who is in the field, synced) ---- */
+
+export function entryToRow(e: TournamentEntry) {
+  return {
+    tournament_id: e.tournamentId,
+    player_id: e.playerId,
+    kind: e.kind,
+    status: e.status,
+    via: e.via,
+    registered_at: e.registeredAt,
+    updated_at: e.updatedAt,
+  };
+}
+
+export function rowToEntry(r: Record<string, unknown>): TournamentEntry {
+  return {
+    tournamentId: r.tournament_id as string,
+    playerId: r.player_id as string,
+    kind: ((r.kind as string) ?? "member") as TournamentEntry["kind"],
+    status: ((r.status as string) ?? "registered") as TournamentEntry["status"],
+    via: ((r.via as string) ?? "phone") as TournamentEntry["via"],
+    registeredAt: (r.registered_at as string) ?? new Date().toISOString(),
+    updatedAt: (r.updated_at as string) ?? (r.registered_at as string) ?? new Date().toISOString(),
   };
 }
 

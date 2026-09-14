@@ -201,6 +201,30 @@ export interface GuestEntry {
   answers?: Record<string, string>;
 }
 
+/** How someone came to be in a field, and where they stand in it. */
+export type EntryKind = "member" | "guest";
+export type EntryStatus = "registered" | "waitlisted" | "withdrawn";
+
+/**
+ * One person's place in one tournament's field, before the day. A member
+ * who tapped Register, a guest who registered through the form, or a walk-up
+ * the desk added. Synced through the entries table so the desk drawing the
+ * tee sheet and every phone see the same field. Carries no code and no
+ * contact data; the guest's code lives in GuestEntry and stays private.
+ */
+export interface TournamentEntry {
+  tournamentId: string;
+  playerId: string;
+  kind: EntryKind;
+  status: EntryStatus;
+  /** the phone (self-service) or the desk */
+  via: "phone" | "desk";
+  /** ISO datetime */
+  registeredAt: string;
+  /** ISO datetime of the last change; drives last-write-wins on the wire */
+  updatedAt: string;
+}
+
 export interface MemberInvite {
   /**
    * Unguessable and single-use. This is a credential: following it claims a

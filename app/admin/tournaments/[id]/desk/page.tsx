@@ -11,8 +11,8 @@
  *
  * Payment is not processed here - it is taken at the desk, by whatever means the
  * club already uses - so check-in records that it happened rather than moving
- * money. The code is the whole credential: there is no list of registrations to
- * browse, by design, so nothing here can leak who else is playing.
+ * money. A guest's code is their credential and is never listed; members have
+ * no code, so the desk sees who registered and checks them in by name.
  */
 
 import { use, useMemo, useState } from "react";
@@ -27,7 +27,7 @@ import { normaliseCode } from "@/lib/guests";
 import { resolveGuestForDesk } from "@/lib/guests-remote";
 import {
   allTournaments,
-  checkInGuest,
+  checkInPlayer,
   checkInsFor,
   useSim,
 } from "@/lib/sim/store";
@@ -51,6 +51,7 @@ export default function DeskPage({
   const roster = useSim((s) => s.roster);
   const guests = useSim((s) => s.guests);
   const checkIns = useSim((s) => checkInsFor(s, id));
+  const entries = useSim((s) => s.entries);
   const t = allTournaments(created).find((x) => x.id === id);
 
   const [code, setCode] = useState("");
@@ -115,10 +116,22 @@ export default function DeskPage({
 
   const admit = () => {
     if (!found) return;
-    checkInGuest(id, found.player, { paid: true });
+    checkInPlayer(id, found.player, { paid: true });
     setFound(null);
     setCode("");
   };
+
+  // registered (or waitlisted) and not yet through the desk: members arrive
+  // without a code, so this is how they are checked in
+  const waiting = entries
+    .filter((e) => e.tournamentId === id && e.status !== "withdrawn" && !checkIns[e.playerId])
+    .map((e) => ({
+      e,
+      player:
+        roster.find((p) => p.id === e.playerId) ?? guests.find((p) => p.id === e.playerId),
+    }))
+    .filter((x): x is { e: (typeof entries)[number]; player: Player } => Boolean(x.player))
+    .sort((a, b) => a.player.name.localeCompare(b.player.name));
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -143,8 +156,8 @@ export default function DeskPage({
       <section className="mt-8 rounded-2xl bg-card p-6 shadow-card">
         <Label htmlFor="desk-code">Player&apos;s registration code</Label>
         <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-          The six-character code from their confirmation. Read it off their phone
-          or type it in.
+          The code from their confirmation, like abc-123. Read it off their phone
+          or type it in. Members have no code: check them in from the list below.
         </p>
         <div className="mt-3 flex gap-3">
           <Input
@@ -221,6 +234,38 @@ export default function DeskPage({
           </div>
         )}
       </section>
+
+      {/* registered, not yet through the desk */}
+      {waiting.length > 0 && (
+        <section className="mt-8">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="smallcaps text-muted-foreground">Registered · not yet checked in</p>
+            <span className="text-[13px] text-muted-foreground tnum">{waiting.length}</span>
+          </div>
+          <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-card shadow-card">
+            {waiting.map(({ e, player }) => (
+              <div key={player.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-medium text-foreground">{player.name}</p>
+                  <p className="text-[12px] text-muted-foreground">
+                    {e.kind === "guest" ? "Guest" : "Member"}
+                    {e.status === "waitlisted" ? " · waitlisted" : ""}
+                    {player.handicap ? ` · HC ${player.handicap}` : ""}
+                  </p>
+                </div>
+                <Button
+                  variant={e.status === "waitlisted" ? "outline" : "clay"}
+                  size="sm"
+                  onClick={() => checkInPlayer(id, player, { paid: true })}
+                >
+                  <Check className="size-3.5" />
+                  {e.status === "waitlisted" ? "Admit · payment taken" : "Check in · payment taken"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* who is in so far */}
       <section className="mt-8">

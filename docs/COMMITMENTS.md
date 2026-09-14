@@ -42,6 +42,14 @@ Binding consequences:
 - **Guest data is opt-in for sponsors.** A guest's details reach a sponsor only
   where that guest explicitly agreed at registration. The default is no. See
   the Data section.
+- **Who is in a field is readable before the day.** Registrations live in an
+  `entries` table (member or guest, registered / waitlisted / withdrawn) so
+  every phone and the desk see the same field before it is started. It holds
+  player ids only, never a code, never contact details. Under the pilot's
+  anonymous policies anyone with the public key can therefore list which
+  players registered for an open event, the same way they can already read a
+  drawn tee sheet; the authenticated policies planned for the admin console
+  close that.
 - **A guest code is scoped and short-lived.** It opens one scorecard in one
   tournament and nothing else, it stops resolving once that tournament closes,
   and the codes are never enumerable: there is no surface, client or server,

@@ -55,20 +55,23 @@ import { CLIENT_ID } from "@/lib/sync/client";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import { defaultMarkers, markedByMe, markerOf, markersFor, validMarkers } from "@/lib/markers";
 import { rosterRowFor } from "@/lib/membership";
+import { registrationOpen } from "@/lib/eligibility";
 import {
   auditToRow,
   certToRow,
+  clubToRow,
   correctionToRow,
   disputeToRow,
+  entryToRow,
   guestEntryToRow,
   pairingToRow,
-  clubToRow,
   playerToRow,
   rowToAudit,
-  rowToClub,
   rowToCert,
+  rowToClub,
   rowToCorrection,
   rowToDispute,
+  rowToEntry,
   rowToPairing,
   rowToPlayer,
   rowToTeam,
@@ -87,6 +90,7 @@ import type {
   Sponsor,
   Team,
   Tournament,
+  TournamentEntry,
 } from "@/lib/types";
 
 const COURSE = COURSES.find((c) => c.id === "muthaiga-main")!;
@@ -284,7 +288,12 @@ export interface SimState {
   notifications: AppNotification[];
   lastUserPos: number;
   /** tournament ids the user registered for in this session */
-  registrations: string[];
+  /**
+   * Who is in each tournament's field before the day: members who tapped
+   * Register, guests who registered, walk-ups the desk added. Synced, so the
+   * desk drawing the tee sheet and every phone see the same field.
+   */
+  entries: TournamentEntry[];
   /** tournaments created through the admin wizard */
   created: Tournament[];
   mutuaFlagged: boolean;
@@ -465,7 +474,7 @@ export function buildInitialState(): SimState {
     flags: [],
     notifications: [],
     lastUserPos: 0,
-    registrations: [],
+    entries: [],
     created: [],
     mutuaFlagged: false,
     extraAmberFired: false,
@@ -622,6 +631,7 @@ function normalize(saved: SimState): SimState {
   out.roster ??= base.roster;
   out.guests ??= [];
   out.guestEntries ??= [];
+  out.entries ??= [];
   out.exposure ??= [];
   out.pace ??= {};
   out.paceThresholdMin ??= 15;
@@ -1685,14 +1695,169 @@ export function registrationCapacity(
   s: SimState,
   t: Tournament,
 ): { full: boolean; spotsLeft: number | null; waitlistOpen: boolean } {
+  return capacityFromEntries(s.entries, t);
+}
+
+/** The same reading from a list of entries, for components that select it. */
+export function capacityFromEntries(
+  entries: TournamentEntry[],
+  t: Tournament,
+): { full: boolean; spotsLeft: number | null; waitlistOpen: boolean } {
   const max = t.maxPlayers ?? 0;
   if (!max) return { full: false, spotsLeft: null, waitlistOpen: false };
-  const confirmed = s.guestEntries.filter(
-    (e) => e.tournamentId === t.id && !e.waitlisted,
+  const confirmed = entries.filter(
+    (e) => e.tournamentId === t.id && e.status === "registered",
   ).length;
   const spotsLeft = Math.max(0, max - confirmed);
   const full = spotsLeft === 0;
   return { full, spotsLeft, waitlistOpen: full && Boolean(t.waitlist) };
+}
+
+/* ---- entries: the field before the day ---- */
+
+const EMPTY_ENTRIES: TournamentEntry[] = [];
+
+/** Every entry for one tournament (any status). A stable ref when none. */
+export function entriesFor(s: SimState, tournamentId: string): TournamentEntry[] {
+  const list = s.entries.filter((e) => e.tournamentId === tournamentId);
+  return list.length ? list : EMPTY_ENTRIES;
+}
+
+export function entryOf(
+  s: SimState,
+  tournamentId: string,
+  playerId: string,
+): TournamentEntry | undefined {
+  return s.entries.find((e) => e.tournamentId === tournamentId && e.playerId === playerId);
+}
+
+/** This device's player's entry for a tournament, if any. */
+export function myEntry(s: SimState, tournamentId: string): TournamentEntry | undefined {
+  const me = meId(s);
+  return me ? entryOf(s, tournamentId, me) : undefined;
+}
+
+function upsertEntry(draft: SimState, e: TournamentEntry) {
+  const i = draft.entries.findIndex(
+    (x) => x.tournamentId === e.tournamentId && x.playerId === e.playerId,
+  );
+  if (i >= 0) draft.entries[i] = e;
+  else draft.entries.push(e);
+}
+
+/** Write an entry locally and queue it for the cloud (last write wins by updated_at). */
+function pushEntry(draft: SimState, e: TournamentEntry) {
+  upsertEntry(draft, e);
+  enqueueEntity(draft, "entries", entryToRow(e), { conflict: "tournament_id,player_id" });
+}
+
+/** Merge one entries row from the wire, honouring the staleness stamp. */
+function mergeEntryRow(draft: SimState, row: Record<string, unknown>) {
+  if (isStale(draft, "entries", row)) return;
+  stamp(draft, "entries", row);
+  upsertEntry(draft, rowToEntry(row));
+}
+
+export type RegisterResult =
+  | { ok: true; entry: TournamentEntry }
+  | { ok: false; reason: "no-identity" | "not-found" | "closed" | "full" };
+
+function tournamentById(s: SimState, id: string): Tournament | undefined {
+  return s.created.find((x) => x.id === id) ?? TOURNAMENTS.find((x) => x.id === id);
+}
+
+/**
+ * Put a player in a tournament's field. The phone path checks the window and
+ * the cap (a full field takes the waitlist if the club runs one); the desk
+ * can force a walk-up in regardless, because the desk decides.
+ */
+export function registerPlayer(
+  tournamentId: string,
+  playerId: string,
+  opts: { via: "phone" | "desk"; force?: boolean } = { via: "desk" },
+): RegisterResult {
+  const s = simStore.getState();
+  if (!playerId) return { ok: false, reason: "no-identity" };
+  const t = tournamentById(s, tournamentId);
+  if (!t) return { ok: false, reason: "not-found" };
+  const existing = entryOf(s, tournamentId, playerId);
+  if (existing && existing.status !== "withdrawn") return { ok: true, entry: existing };
+  if (!opts.force && !registrationOpen(t)) return { ok: false, reason: "closed" };
+  const cap = registrationCapacity(s, t);
+  const status: TournamentEntry["status"] | null = !cap.full
+    ? "registered"
+    : opts.force
+      ? "registered"
+      : cap.waitlistOpen
+        ? "waitlisted"
+        : null;
+  if (!status) return { ok: false, reason: "full" };
+  const now = new Date().toISOString();
+  const player = playerInField(s, playerId);
+  const entry: TournamentEntry = {
+    tournamentId,
+    playerId,
+    kind: player?.guest ? "guest" : "member",
+    status,
+    via: opts.via,
+    registeredAt: existing?.registeredAt ?? now,
+    updatedAt: now,
+  };
+  mutate((draft) => {
+    pushEntry(draft, entry);
+    if (opts.via === "phone") {
+      draft.notifications.unshift({
+        id: noteSeq++ + Math.floor(Math.random() * 1000) * 100000,
+        emoji: status === "waitlisted" ? "⏳" : "⛳️",
+        title:
+          status === "waitlisted"
+            ? `On the waitlist: ${t.name}`
+            : `You're in: ${t.name}`,
+        body:
+          status === "waitlisted"
+            ? "The field is full for now. The desk admits from the list as places open."
+            : "Entry recorded. Tee times come from the desk once the field is drawn.",
+        ts: Date.now(),
+      });
+    }
+  });
+  return { ok: true, entry };
+}
+
+/** The player this phone stands for registers themselves. */
+export function registerForTournament(id: string): RegisterResult {
+  const pid = meId(simStore.getState());
+  return registerPlayer(id, pid, { via: "phone" });
+}
+
+export function withdrawEntry(tournamentId: string, playerId: string) {
+  const existing = entryOf(simStore.getState(), tournamentId, playerId);
+  if (!existing || existing.status === "withdrawn") return;
+  mutate((draft) => {
+    pushEntry(draft, { ...existing, status: "withdrawn", updatedAt: new Date().toISOString() });
+  });
+}
+
+/** The desk admits someone from the waitlist. */
+export function promoteEntry(tournamentId: string, playerId: string) {
+  const existing = entryOf(simStore.getState(), tournamentId, playerId);
+  if (!existing || existing.status === "registered") return;
+  mutate((draft) => {
+    pushEntry(draft, {
+      ...existing,
+      status: "registered",
+      via: "desk",
+      updatedAt: new Date().toISOString(),
+    });
+  });
+}
+
+/** Entries discovered from the cloud for the open tournaments. */
+export function mergeCloudEntries(rows: Record<string, unknown>[]) {
+  if (!rows.length) return;
+  mutate((draft) => {
+    for (const row of rows) mergeEntryRow(draft, row);
+  });
 }
 
 /**
@@ -1786,6 +1951,17 @@ export function registerGuest(
       ...(input.answers ? { answers: input.answers } : {}),
     };
     draft.guestEntries.push(entry);
+    // the guest's place in the field, visible to the desk and every phone;
+    // the code above stays in guest_entries and is never listed
+    pushEntry(draft, {
+      tournamentId,
+      playerId: guest.id,
+      kind: "guest",
+      status: waitlisted ? "waitlisted" : "registered",
+      via: "phone",
+      registeredAt: entry.registeredAt,
+      updatedAt: entry.registeredAt,
+    });
     enqueueEntity(draft, "players", playerToRow(guest), { conflict: "id" });
     /* Push the entry itself, so a code registered on this phone resolves on a
        fresh one. guest_entries is non-enumerable and immutable: insert-only,
@@ -1826,7 +2002,7 @@ function addMins(hhmm: string, mins: number): string {
  * group, so their scorecard opens when the day is started. Idempotent: a second
  * pass just refreshes the paid flag and never seats them twice.
  */
-export function checkInGuest(
+export function checkInPlayer(
   tournamentId: string,
   player: Player,
   opts: { paid?: boolean } = {},
@@ -1839,6 +2015,23 @@ export function checkInGuest(
       at: Date.now(),
       paid: Boolean(opts.paid),
     };
+    // a walk-up, or someone off the waitlist: the desk has admitted them, so
+    // they are in the field whatever the entry said before
+    const now = new Date().toISOString();
+    const existing = draft.entries.find(
+      (e) => e.tournamentId === tournamentId && e.playerId === player.id,
+    );
+    if (!existing || existing.status !== "registered") {
+      pushEntry(draft, {
+        tournamentId,
+        playerId: player.id,
+        kind: player.guest ? "guest" : "member",
+        status: "registered",
+        via: existing?.via ?? "desk",
+        registeredAt: existing?.registeredAt ?? now,
+        updatedAt: now,
+      });
+    }
     // make sure the player row is in the cloud for every device in the field
     enqueueEntity(draft, "players", playerToRow(player), { conflict: "id" });
   });
@@ -1877,6 +2070,9 @@ export function checkInGuest(
     round,
   );
 }
+
+/** The desk path used to be guests only; the name stays for callers. */
+export const checkInGuest = checkInPlayer;
 
 /** A stable empty map so an un-checked-in tournament keeps one snapshot ref. */
 const EMPTY_CHECKINS: Record<string, { at: number; paid: boolean }> = {};
@@ -1959,6 +2155,9 @@ export function recordExposure(
       at: Date.now(),
       ...(seconds !== undefined ? { seconds } : {}),
     });
+    // observed, pushed, and then kept only as a recent window: the recap
+    // reads the cloud, and this device must not grow a season of rows
+    if (draft.exposure.length > 600) draft.exposure = draft.exposure.slice(-400);
     enqueueEntity(
       draft,
       "exposure_events",
@@ -2963,20 +3162,6 @@ export function meId(s: SimState): string {
   return authedPlayerId(s) ?? s.deviceIdentity ?? "";
 }
 
-export function registerForTournament(id: string) {
-  mutate((draft) => {
-    if (!draft.registrations.includes(id)) draft.registrations.push(id);
-    const t = [...draft.created, ...TOURNAMENTS].find((x) => x.id === id);
-    draft.notifications.unshift({
-      id: noteSeq++ + Math.floor(Math.random() * 1000) * 100000,
-      emoji: "⛳️",
-      title: `You're in: ${t?.name ?? "tournament"}`,
-      body: "Entry confirmed. Tee times publish 48h before.",
-      ts: Date.now(),
-    });
-  });
-}
-
 export function createTournament(t: Tournament) {
   mutate((draft) => {
     draft.created.unshift(t);
@@ -3475,6 +3660,10 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
         if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
         break;
       }
+      case "entries": {
+        upsertEntry(draft, rowToEntry(row));
+        break;
+      }
     }
   });
 }
@@ -3620,6 +3809,7 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
       const a = rowToAudit(r);
       if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
     }
+    for (const r of snap.entries ?? []) mergeEntryRow(draft, r);
   });
 }
 
