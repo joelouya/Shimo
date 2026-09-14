@@ -31,6 +31,7 @@ import type { Course, HoleScores, Player, Round, Tournament } from "@/lib/types"
 import {
   LIVE_COURSE,
   LIVE_TOURNAMENT,
+  type SavedGroup,
   liveKey,
   meId,
   roundCardIn,
@@ -40,11 +41,22 @@ import {
   roundScores,
   setAuth,
   simStore,
+  storageFailed,
+  subscribeStorage,
   useSim,
-  type SavedGroup,
 } from "./store";
 import { roundKey as roundKeyOf, roundOf, roundsOf } from "@/lib/rounds";
 import { AUTH_AVAILABLE, getSession, onAuthChange } from "@/lib/sync/auth";
+
+/** The club this console administers. */
+export function useClubId(): string {
+  return useSim((s) => s.clubId);
+}
+
+/** When the device last refused to save, or null while saves work. */
+export function useStorageFailed(): number | null {
+  return useSyncExternalStore(subscribeStorage, storageFailed, () => null);
+}
 
 /** The player this device acts as (picked identity in pilot, Joel in demo). */
 export function useMeId(): string {
@@ -115,9 +127,22 @@ export interface ActiveTournament {
 export function useActiveTournament(): ActiveTournament | null {
   const liveId = useSim((s) => s.liveTournamentId);
   const liveRound = useSim((s) => s.liveRound);
+  return useTournamentView(liveId, liveRound || 1);
+}
+
+/**
+ * The same shape for any tournament and round, live or not: the Committee
+ * room after the day, a round picker on the results page. In demo the seed
+ * tournament is the only one with a field.
+ */
+export function useTournamentView(
+  liveId: string | null,
+  liveRound: number,
+): ActiveTournament | null {
   const created = useSim((s) => s.created);
   const pairings = useSim((s) => s.pairings);
   const roster = useSim((s) => s.roster);
+  const guests = useSim((s) => s.guests);
 
   return useMemo(() => {
     const round = liveRound || 1;
@@ -138,7 +163,8 @@ export function useActiveTournament(): ActiveTournament | null {
     const info = roundOf(tournament, round);
     const groups = pairings[roundKeyOf(liveId, round)] ?? [];
     const ids = new Set(groups.flatMap((g) => g.playerIds));
-    const players = roster.filter((p) => ids.has(p.id));
+    // guests play too: a corporate field is mostly people off the roster
+    const players = [...roster, ...guests].filter((p) => ids.has(p.id));
     return {
       tournament,
       groups,
@@ -147,7 +173,7 @@ export function useActiveTournament(): ActiveTournament | null {
       roundInfo: info,
       course: COURSES.find((c) => c.id === info.courseId) ?? LIVE_COURSE,
     };
-  }, [liveId, liveRound, created, pairings, roster]);
+  }, [liveId, liveRound, created, pairings, roster, guests]);
 }
 
 /* ---- round-scoped views of the live round, in the shape components expect ---- */

@@ -19,6 +19,7 @@
  * believes rather than as a live readout of the screen.
  */
 
+import { REMOTE_CONFIGURED } from "@/lib/sync/client";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
 import {
@@ -68,7 +69,11 @@ function useProducer(snapshot: TvSnapshot | null) {
 export default function ProducerPanel() {
   const created = useSim((s) => s.created);
   const deskName = useSim((s) => s.deskName);
-  const live = allTournaments(created).find((t) => t.status === "live");
+  // the day the desk started, not whichever row happens to say live first
+  const liveId = useSim((s) => s.liveTournamentId);
+  const live =
+    allTournaments(created).find((t) => t.id === liveId && t.status === "live") ??
+    allTournaments(created).find((t) => t.status === "live");
   const feed = useTvFeed(live?.id ?? "");
   const producer = useProducer(feed.snapshot);
   const [now, setNow] = useState(() => Date.now());
@@ -80,14 +85,23 @@ export default function ProducerPanel() {
   }, []);
 
   const actor = deskName?.trim() || "the desk";
+  const [sendError, setSendError] = useState<string | null>(null);
   const send = async (
     kind: Parameters<typeof decide>[1],
     opts?: { factKey?: string; payload?: Record<string, string | boolean> },
   ) => {
     if (!live) return;
+    if (!REMOTE_CONFIGURED) {
+      // the screen reads the cloud, so without one there is nobody to tell
+      setSendError("The clubhouse screen reads from the cloud, which this build is not connected to.");
+      return;
+    }
     setBusy(kind + (opts?.factKey ?? ""));
+    setSendError(null);
     try {
       await decide(live.id, kind, { ...opts, actor });
+    } catch {
+      setSendError("That did not reach the screen. Check the connection and try again.");
     } finally {
       setBusy(null);
     }
@@ -174,6 +188,9 @@ export default function ProducerPanel() {
         {/* the operator console */}
         <div className="min-w-0">
       {/* what is happening now */}
+      {sendError && (
+        <p className="mb-4 rounded-xl bg-amber-wash px-4 py-3 text-[13px] text-amber-flag">{sendError}</p>
+      )}
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

@@ -73,6 +73,11 @@ export function countingGross(
 
 export type ViewMode = "points" | "net" | "gross";
 
+/** The view a format is read in: Stableford in points, everything else net. */
+export function viewModeFor(format: string | undefined): ViewMode {
+  return format === "Stableford" ? "points" : "net";
+}
+
 export interface StandingRow {
   player: Player;
   thru: number; // holes completed

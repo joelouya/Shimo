@@ -58,6 +58,7 @@ const Cell = memo(function Cell({
 }) {
   const [text, setText] = useState(value?.toString() ?? "");
   const [flash, setFlash] = useState(false);
+  const [refused, setRefused] = useState(false);
   const focused = useRef(false);
 
   useEffect(() => {
@@ -65,8 +66,19 @@ const Cell = memo(function Cell({
   }, [value]);
 
   const commit = () => {
+    // an empty cell clears the hole; a figure the store would refuse (0, or
+    // above 30) is put back to what was there rather than silently dropped
+    if (text.trim() !== "") {
+      const n = parseInt(text, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 30) {
+        setText(value?.toString() ?? "");
+        setRefused(true);
+        setTimeout(() => setRefused(false), 900);
+        return;
+      }
+    }
     const n = parseInt(text, 10);
-    const gross = Number.isFinite(n) && n >= 1 && n <= 15 ? n : null;
+    const gross = Number.isFinite(n) ? n : null;
     if (gross !== value) {
       setBulkScore(pid, holeIdx, gross);
       /*
@@ -104,8 +116,9 @@ const Cell = memo(function Cell({
       onChange={(e) => {
         const next = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
         setText(next);
-        // two digits can't grow further - hop to the next hole
-        if (next.length === 2) {
+        // two digits can't grow further - hop to the next hole, unless the
+        // figure is one the card will refuse, in which case stay put
+        if (next.length === 2 && Number(next) >= 10 && Number(next) <= 30) {
           const sibling = document.querySelector<HTMLInputElement>(
             `[data-cell="${pid}:${holeIdx + 1}"]`,
           );
@@ -122,6 +135,7 @@ const Cell = memo(function Cell({
       className={cn(
         "h-11 w-11 rounded-lg border border-border bg-card text-center text-[17px] font-medium tnum outline-none transition-colors",
         "focus:border-clay focus:ring-2 focus:ring-clay/25",
+        refused && "border-red-flag ring-2 ring-red-flag/30",
         value != null && d < 0 && "text-clay-deep",
         value != null && d > 1 && "text-stone",
         // a skipped hole in the middle of a card: the one empty cell the desk

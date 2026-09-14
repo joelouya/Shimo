@@ -33,6 +33,7 @@ export function TournamentNav({ id }: { id: string }) {
         ]
       : []),
     { label: "Results", href: `/admin/tournaments/${id}/summary` },
+    { label: "Committee", href: `/admin/tournaments/${id}/summary#committee` },
     { label: "Poster", href: `/admin/tournaments/${id}/poster` },
     ...(isLive ? [{ label: "TV", href: "/admin/tv" }] : []),
   ];

@@ -3273,6 +3273,7 @@ check("starting the day publishes the markers with the tee sheet", (() => {
   // a row saved by an older build carries none; the start fills it in
   S.simStore.setState({ ...st(), pairings: { ...st().pairings,
     [roundKey("t-marks", 1)]: [{ id: "g1", number: 1, teeTime: "07:00", playerIds: FM }] } }, true);
+  S.endTournamentDay("t-champs"); // one day on the course at a time
   S.startTournamentDay("t-marks", 1);
   const op = [...st().outbox].reverse().find((o) => o.kind === "entity" &&
     o.payload.table === "pairings" && o.payload.row.tournament_id === "t-marks");
@@ -3412,6 +3413,67 @@ section("Member registration: the field before the day");
   check("checking in a walk-up puts them in the field",
     S.entryOf(st(), "t-reg", "p-walkup")?.status === "registered" &&
       S.entryOf(st(), "t-reg", "p-walkup")?.via === "desk");
+}
+
+/* ------------------------------------------------------------------ */
+section("The day's lifecycle: one at a time, undoable, honest about results");
+{
+  const pid = FM[0];
+  check("t-marks is on the course", st().liveTournamentId === "t-marks");
+  S.raiseDispute(pid, 2, "The drop on the third", FM[1]);
+  const d = st().disputes.find((x) => x.tournamentId === "t-marks" && x.playerId === pid);
+  check("a dispute names its tournament", Boolean(d));
+  check("its row carries it and reads it back",
+    MAP.rowToDispute(MAP.disputeToRow("t-marks", d)).tournamentId === "t-marks");
+
+  S.endTournamentDay("t-marks");
+  check("ending the day stands the board down", st().liveTournamentId === null &&
+    st().created.find((t) => t.id === "t-marks").status === "completed");
+  await S.resolveDispute(d.id, { kind: "committee", score: 6, reason: "Committee ruling" });
+  const key = roundKey("t-marks", 1);
+  check("a dispute resolved after the day writes into its own tournament",
+    S.roundScores(st(), key)[pid][2] === 6);
+  check("and certifies that card, not today's",
+    S.roundCerts(st(), key)[pid]?.stage === "certified");
+  check("the ruling is filed under the right event",
+    st().auditLog.some((a) => a.kind === "dispute-resolved" && a.tournamentId === "t-marks"));
+  check("the score op names the tournament too", [...st().outbox].reverse().some((o) =>
+    o.kind === "resolve" && o.payload.playerId === pid && o.payload.tournamentId === "t-marks"));
+
+  // one day at a time
+  S.startTournamentDay("t-reg", 1);
+  check("a new day starts once the old one has ended", st().liveTournamentId === "t-reg");
+  const before = st().created.find((t) => t.id === "t-marks").status;
+  S.startTournamentDay("t-marks", 1);
+  check("a second day cannot start while one is on the course",
+    st().liveTournamentId === "t-reg" &&
+      st().created.find((t) => t.id === "t-marks").status === before &&
+      S.canStartTournamentDay(st(), "t-marks").ok === false);
+  S.endTournamentDay("t-marks");
+  check("ending an event that is not live leaves the live one alone",
+    st().liveTournamentId === "t-reg");
+
+  // undo a start
+  check("a day with no card in can be reopened", S.canReopenTournamentDay(st(), "t-reg"));
+  check("reopening puts it back to upcoming", S.reopenTournamentDay("t-reg") &&
+    st().liveTournamentId === null &&
+    st().created.find((t) => t.id === "t-reg").status === "upcoming");
+
+  // no golf, no winner
+  S.startTournamentDay("t-reg", 1);
+  S.endTournamentDay("t-reg");
+  check("ending with no scores names no winner",
+    st().created.find((t) => t.id === "t-reg").result === undefined);
+
+  // a copy is next week's event, not last month's
+  const src = st().created.find((t) => t.id === "t-reg");
+  const copyId = S.duplicateTournament("t-reg");
+  const copy = st().created.find((t) => t.id === copyId);
+  const sixDaysOn = new Date(Date.now() + 6 * 86_400_000).toISOString().slice(0, 10);
+  check("a duplicate is dated ahead", Boolean(copy) && copy.date >= sixDaysOn && copy.date > src.date);
+  check("its registration window moves with it",
+    copy.regClosesAt > src.regClosesAt && copy.rounds.every((r) => r.date >= copy.date));
+  check("it is upcoming with no result", copy.status === "upcoming" && copy.result === undefined);
 }
 
 /* ------------------------------------------------------------------ */

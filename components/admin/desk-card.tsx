@@ -32,7 +32,7 @@ export function DeskCard() {
 
   const save = () => {
     setDeskName(name);
-    if (pin.length >= 4) setAdminPin(pin);
+    if (/^\d{4}$/.test(pin)) setAdminPin(pin);
     setPin("");
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -68,21 +68,22 @@ export function DeskCard() {
           <Input
             type="password"
             inputMode="numeric"
+            maxLength={4}
             value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            placeholder={adminPin ? "••••  (set, type to replace)" : "4 digits or more"}
+            onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+            placeholder={adminPin ? "••••  (set, type to replace)" : "4 digits"}
           />
           <p className="text-[12px] text-muted-foreground">
             {adminPin
-              ? "Asked for each time a card is published."
-              : "Optional. Without one, publishing a card takes a single tap."}
+              ? "Four digits. Asked for when a card is published and for every Committee decision."
+              : "Optional, four digits. Without one, publishing a card takes a single tap."}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Button
             variant="clay"
-            disabled={!name.trim() && pin.length < 4}
+            disabled={!name.trim() && pin.length !== 4}
             onClick={save}
           >
             {saved ? <Check className="size-4" /> : <KeyRound className="size-4" />}

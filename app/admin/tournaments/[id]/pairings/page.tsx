@@ -28,6 +28,7 @@ import {
   registerPlayer,
   savePairings,
   setGroupMarkers,
+  setRoundFirstTee,
   simStore,
   useSim,
 } from "@/lib/sim/store";
@@ -260,10 +261,11 @@ export default function PairingsPage({
 }) {
   const { id } = use(params);
   const created = useSim((s) => s.created);
+  const dismissed = useSim((s) => s.dismissed);
   const roster = useSim((s) => s.roster);
   const guests = useSim((s) => s.guests);
   const entries = useSim((s) => s.entries);
-  const t = allTournaments(created).find((x) => x.id === id);
+  const t = allTournaments(created, dismissed).find((x) => x.id === id);
   const rounds = t ? roundsOf(t) : [];
 
   // pairings are per round: leaders get re-paired for the next one
@@ -342,6 +344,7 @@ export default function PairingsPage({
       (usingEntries ? registrants : roster.map((p) => p.id)).filter((pid) => !assigned.has(pid)),
     [usingEntries, registrants, roster, assigned],
   );
+  const [notice, setNotice] = useState<string | null>(null);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [rosterQuery, setRosterQuery] = useState("");
   const fromRoster = useMemo(() => {
@@ -425,6 +428,15 @@ export default function PairingsPage({
   }
 
   const movePlayer = (pid: string, toGroup: string | null) => {
+    if (toGroup != null) {
+      const target = groups.find((g) => g.id === toGroup);
+      if (target && !target.playerIds.includes(pid) && target.playerIds.length >= 4) {
+        // refused, and said so: the player stays where they were
+        setNotice(`Group ${groups.indexOf(target) + 1} already has four players.`);
+        setTimeout(() => setNotice(null), 2400);
+        return;
+      }
+    }
     setGroups((gs) => {
       const cleared = gs.map((g) => ({
         ...g,
@@ -496,7 +508,10 @@ export default function PairingsPage({
             <Input
               type="time"
               value={firstTee}
-              onChange={(e) => setFirstTee(e.target.value)}
+              onChange={(e) => {
+                setFirstTee(e.target.value);
+                setRoundFirstTee(id, round, e.target.value);
+              }}
               className="h-9 w-[110px]"
             />
           </div>
@@ -668,6 +683,9 @@ export default function PairingsPage({
               Add group
             </button>
           </div>
+          {notice && (
+            <p className="mb-2 rounded-lg bg-amber-wash px-3 py-2 text-[12px] text-amber-flag">{notice}</p>
+          )}
           <div className="grid grid-cols-3 gap-3">
             {groups.map((g, i) => (
               <div

@@ -48,11 +48,12 @@ export default function DeskPage({
 }) {
   const { id } = use(params);
   const created = useSim((s) => s.created);
+  const dismissed = useSim((s) => s.dismissed);
   const roster = useSim((s) => s.roster);
   const guests = useSim((s) => s.guests);
   const checkIns = useSim((s) => checkInsFor(s, id));
   const entries = useSim((s) => s.entries);
-  const t = allTournaments(created).find((x) => x.id === id);
+  const t = allTournaments(created, dismissed).find((x) => x.id === id);
 
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);

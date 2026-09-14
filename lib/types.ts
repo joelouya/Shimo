@@ -13,6 +13,8 @@ export type TournamentStatus = "upcoming" | "live" | "completed" | "cancelled";
  */
 export interface ClubIdentity {
   clubId: string;
+  /** the club's name as the desk wrote it; the seed's when absent */
+  name?: string;
   logoUrl?: string;
   /** one brand colour; light and dark tones are derived from it */
   accent?: string;
@@ -579,6 +581,12 @@ export interface Tournament {
   maxHandicap?: number;
   minHandicap?: number;
   ladiesOnly?: boolean;
+  /** men's event; the counterpart of ladiesOnly */
+  menOnly?: boolean;
+  /** how ties are split, as the club wrote it ("Back 9, then back 6…") */
+  countback?: string;
+  /** ISO date registration opens; absent means from publication */
+  regOpens?: string;
   /** age limits on the day of the first round, e.g. juniors under 25 */
   minAge?: number;
   maxAge?: number;

@@ -15,7 +15,22 @@ import { roundKey, roundsOf } from "@/lib/rounds";
 import { playerInField, simStore, teamsIn } from "@/lib/sim/store";
 import { scorecardSpec } from "./spec";
 
-export type PrintResult = "opened" | "no-pairings" | "failed";
+export type PrintResult = "opened" | "no-pairings" | "failed" | "blocked";
+
+/**
+ * Open the tab while we are still inside the click. A window opened after
+ * an await has lost the user gesture and is popup-blocked in Safari and
+ * Firefox, which used to look like a print that silently did nothing.
+ */
+function openTab(): Window | null {
+  try {
+    const w = window.open("", "_blank");
+    if (w) w.document.title = "Preparing the cards…";
+    return w;
+  } catch {
+    return null;
+  }
+}
 
 export async function printScorecards(tournamentId: string): Promise<PrintResult> {
   const s = simStore.getState();
@@ -29,6 +44,7 @@ export async function printScorecards(tournamentId: string): Promise<PrintResult
   const groups = s.pairings[roundKey(t.id, round.number)] ?? [];
   const teams = teamsIn(s, t.id, round.number);
   if (!groups.length && !teams.length) return "no-pairings";
+  const tab = openTab();
 
   const origin = window.location.origin;
 
@@ -82,11 +98,16 @@ export async function printScorecards(tournamentId: string): Promise<PrintResult
       headers: { "content-type": "application/json" },
       body: JSON.stringify(spec),
     });
-    if (!res.ok) return "failed";
+    if (!res.ok) {
+      tab?.close();
+      return "failed";
+    }
     const url = URL.createObjectURL(await res.blob());
-    window.open(url, "_blank");
+    if (tab) tab.location.href = url;
+    else if (!window.open(url, "_blank")) return "blocked";
     return "opened";
   } catch {
+    tab?.close();
     return "failed";
   }
 }

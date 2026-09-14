@@ -2,7 +2,7 @@
 
 import { CloudOff, RefreshCw } from "lucide-react";
 
-import { useSyncStatus } from "@/lib/sim/hooks";
+import { useStorageFailed, useSyncStatus } from "@/lib/sim/hooks";
 import { retryFailedOps, useSim } from "@/lib/sim/store";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,17 @@ import { cn } from "@/lib/utils";
  */
 export function SyncStrip({ className }: { className?: string }) {
   const { online, pending, failed } = useSyncStatus();
+  const storageFailed = useStorageFailed();
+  if (storageFailed) {
+    return (
+      <div className={cn("flex items-center gap-2.5 rounded-xl bg-amber-wash px-4 py-2.5", className)}>
+        <CloudOff className="size-4 shrink-0 text-amber-flag" />
+        <p className="flex-1 text-[13px] font-medium text-amber-flag">
+          This device is out of room to save. Scores still reach the club; keep this open and clear some space soon.
+        </p>
+      </div>
+    );
+  }
   if (online && failed === 0) return null;
   return (
     <div

@@ -50,6 +50,9 @@ export function tournamentToRow(t: Tournament) {
     max_age: t.maxAge ?? null,
     eligibility_note: t.eligibilityNote ?? null,
     ladies_only: t.ladiesOnly ?? false,
+    men_only: t.menOnly ?? false,
+    countback: t.countback ?? null,
+    reg_opens: t.regOpens ?? null,
     divisions: t.divisions,
     description: t.description,
     prizes: t.prizes,
@@ -103,6 +106,9 @@ export function rowToTournament(r: Record<string, unknown>): Tournament {
     maxAge: (r.max_age as number) ?? undefined,
     eligibilityNote: (r.eligibility_note as string) ?? undefined,
     ladiesOnly: Boolean(r.ladies_only),
+    menOnly: Boolean(r.men_only),
+    countback: (r.countback as string) ?? undefined,
+    regOpens: (r.reg_opens as string) ?? undefined,
     divisions: (r.divisions as Tournament["divisions"]) ?? [],
     description: (r.description as string) ?? "",
     prizes: (r.prizes as Tournament["prizes"]) ?? [],
@@ -345,6 +351,7 @@ export function disputeToRow(tournamentId: string, d: Dispute) {
 export function rowToDispute(r: Record<string, unknown>): Dispute {
   return {
     id: r.id as string,
+    tournamentId: r.tournament_id as string,
     playerId: r.player_id as string,
     round: (r.round as number) ?? 1,
     holeIdx: r.hole_idx as number,
@@ -384,6 +391,7 @@ export function correctionToRow(tournamentId: string, c: CorrectionRequest) {
 export function rowToCorrection(r: Record<string, unknown>): CorrectionRequest {
   return {
     id: r.id as string,
+    tournamentId: r.tournament_id as string,
     playerId: r.player_id as string,
     round: (r.round as number) ?? 1,
     holeIdx: r.hole_idx as number,
@@ -443,6 +451,7 @@ export function rowToAudit(r: Record<string, unknown>): AuditRecord {
 export function clubToRow(c: ClubIdentity) {
   return {
     id: c.clubId,
+    name: c.name ?? null,
     logo_url: c.logoUrl ?? null,
     accent: c.accent ?? null,
     phone: c.phone ?? null,
@@ -461,6 +470,7 @@ export function clubToRow(c: ClubIdentity) {
 export function rowToClub(r: Record<string, unknown>): ClubIdentity {
   return {
     clubId: r.id as string,
+    name: (r.name as string) ?? undefined,
     logoUrl: (r.logo_url as string) ?? undefined,
     accent: (r.accent as string) ?? undefined,
     phone: (r.phone as string) ?? undefined,

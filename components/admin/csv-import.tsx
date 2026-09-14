@@ -8,7 +8,7 @@
  */
 
 import { useRef, useState } from "react";
-import { Check, Copy, FileUp, Mail, Users } from "lucide-react";
+import { Check, FileUp, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -106,17 +106,30 @@ export function CsvImportCard() {
   const rosterCount = useSim((s) => s.roster.length);
   const [preview, setPreview] = useState<ParsedRow[] | null>(null);
   const [imported, setImported] = useState(0);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [invited, setInvited] = useState(false);
 
-  // the club the roster already belongs to, rather than a literal
-  const clubId = useSim((s) => s.roster.find((p) => !p.guest)?.clubId ?? "muthaiga");
+  const clubId = useSim((s) => s.clubId);
+  const roster = useSim((s) => s.roster);
+  const [skipped, setSkipped] = useState(0);
 
   const doImport = () => {
     if (!preview) return;
+    // a second import of the same sheet must not double the roster: a row is
+    // the same person when the email, the member number or the exact name
+    // already exists
+    const emails = new Set(roster.map((p) => (p.email ?? "").trim().toLowerCase()).filter(Boolean));
+    const numbers = new Set(roster.map((p) => (p.memberNo ?? "").trim()).filter(Boolean));
+    const names = new Set(roster.map((p) => p.name.trim().toLowerCase()));
+    let added = 0;
+    let dupes = 0;
     for (const row of preview) {
+      const email = (row.email ?? "").trim().toLowerCase();
+      const no = (row.memberNo ?? "").trim();
+      if ((email && emails.has(email)) || (no && numbers.has(no)) || names.has(row.name.trim().toLowerCase())) {
+        dupes++;
+        continue;
+      }
       addRosterMember({
-        id: `p-csv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `p-csv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}-${added}`,
         name: row.name,
         clubId,
         handicap: row.handicap,
@@ -125,8 +138,13 @@ export function CsvImportCard() {
         memberNo: row.memberNo || undefined,
         dob: row.dob,
       } satisfies Player);
+      if (email) emails.add(email);
+      if (no) numbers.add(no);
+      names.add(row.name.trim().toLowerCase());
+      added++;
     }
-    setImported(preview.length);
+    setImported(added);
+    setSkipped(dupes);
     setPreview(null);
   };
 
@@ -206,36 +224,12 @@ export function CsvImportCard() {
             <p className="flex items-center gap-1.5 text-[14px] font-medium text-foreground">
               <Check className="size-4 text-clay" />
               {imported} member{imported === 1 ? "" : "s"} added to the roster
+              {skipped > 0 && ` · ${skipped} already there, left as they were`}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setInvited(true);
-                  setTimeout(() => setInvited(false), 2500);
-                }}
-              >
-                <Mail className="size-3.5" />
-                {invited ? "Invites queued ✓" : "Bulk-invite by email"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(
-                      "https://shimo.golf/join/muthaiga-9F2K",
-                    );
-                  } catch {}
-                  setLinkCopied(true);
-                  setTimeout(() => setLinkCopied(false), 2500);
-                }}
-              >
-                <Copy className="size-3.5" />
-                {linkCopied ? "Link copied ✓" : "Copy club join link"}
-              </Button>
-            </div>
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              Next: prepare their invitation links from Members and share each one
+              by WhatsApp or email. Nothing is sent automatically.
+            </p>
           </div>
         )}
       </div>

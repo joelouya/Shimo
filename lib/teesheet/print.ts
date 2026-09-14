@@ -16,7 +16,22 @@ import { roundKey, roundsOf } from "@/lib/rounds";
 import { playerInField, simStore } from "@/lib/sim/store";
 import { teeSheetSpec } from "./spec";
 
-export type TeeSheetResult = "opened" | "no-pairings" | "failed";
+export type TeeSheetResult = "opened" | "no-pairings" | "failed" | "blocked";
+
+/**
+ * Open the tab while we are still inside the click. A window opened after
+ * an await has lost the user gesture and is popup-blocked in Safari and
+ * Firefox, which used to look like a print that silently did nothing.
+ */
+function openTab(): Window | null {
+  try {
+    const w = window.open("", "_blank");
+    if (w) w.document.title = "Preparing the sheet…";
+    return w;
+  } catch {
+    return null;
+  }
+}
 
 export async function printTeeSheet(
   tournamentId: string,
@@ -34,6 +49,7 @@ export async function printTeeSheet(
   const groups = s.pairings[roundKey(t.id, roundInfo.number)] ?? [];
   const withPlayers = groups.filter((g) => g.playerIds.length > 0);
   if (!withPlayers.length) return "no-pairings";
+  const tab = openTab();
 
   // a QR per group, pointing at the group by its code
   const origin = window.location.origin;
@@ -73,11 +89,16 @@ export async function printTeeSheet(
       headers: { "content-type": "application/json" },
       body: JSON.stringify(spec),
     });
-    if (!res.ok) return "failed";
+    if (!res.ok) {
+      tab?.close();
+      return "failed";
+    }
     const url = URL.createObjectURL(await res.blob());
-    window.open(url, "_blank");
+    if (tab) tab.location.href = url;
+    else if (!window.open(url, "_blank")) return "blocked";
     return "opened";
   } catch {
+    tab?.close();
     return "failed";
   }
 }

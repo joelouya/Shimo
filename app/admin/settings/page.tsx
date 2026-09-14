@@ -23,7 +23,23 @@ import { TvSettingsCard } from "@/components/admin/tv-settings";
 import { guestResolveAbuseSummary } from "@/lib/guests-remote";
 import { FEATURES } from "@/lib/flags";
 import { IS_PILOT } from "@/lib/mode";
-import { resetDemo, reviewIntegrityEntry, useSim } from "@/lib/sim/store";
+import {
+  clubIdentityOf,
+  resetDemo,
+  reviewIntegrityEntry,
+  setClubDefaults,
+  setClubId,
+  setClubIdentity,
+  useSim,
+} from "@/lib/sim/store";
+import { CLUBS } from "@/lib/data";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function Card({
   title,
@@ -179,9 +195,14 @@ function GuestAccessCard() {
 }
 
 export default function SettingsPage() {
-  const [autoFlag, setAutoFlag] = useState(true);
-  const [publicBoards, setPublicBoards] = useState(true);
-  const [attestReminders, setAttestReminders] = useState(true);
+  const clubId = useSim((s) => s.clubId);
+  const identity = useSim((s) => clubIdentityOf(s, clubId));
+  const defaults = useSim((s) => s.clubDefaults);
+  const live = useSim((s) => Boolean(s.liveTournamentId));
+  const seedName = CLUBS.find((c) => c.id === clubId)?.name ?? "";
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetWord, setResetWord] = useState("");
   // Settings are grouped into jobs rather than stacked in one long column, so
   // the page stops reading as a dump and starts reading as a console.
   const [tab, setTab] = useState("club");
@@ -212,14 +233,43 @@ export default function SettingsPage() {
           <Card title="Club profile" sub="What golfers see across Shimo">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label>Club name</Label>
-                <Input defaultValue="Muthaiga Golf Club" />
+                <Label htmlFor="club-select">Club</Label>
+                <Select value={clubId} onValueChange={(v) => setClubId(v)}>
+                  <SelectTrigger id="club-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLUBS.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Which club this desk runs. Its courses, crest and roster follow from it.
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="club-name">Club name, as members see it</Label>
+                <Input
+                  id="club-name"
+                  value={nameDraft ?? identity.name ?? seedName}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onBlur={() => {
+                    if (nameDraft != null && nameDraft.trim() !== (identity.name ?? seedName)) {
+                      setClubIdentity(clubId, { name: nameDraft.trim() || undefined });
+                    }
+                    setNameDraft(null);
+                  }}
+                  placeholder={seedName}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label>Default tees</Label>
-                  <Select defaultValue="Yellow">
-                    <SelectTrigger>
+                  <Label htmlFor="default-tees">Default tees</Label>
+                  <Select value={defaults.tees} onValueChange={(v) => setClubDefaults({ tees: v })}>
+                    <SelectTrigger id="default-tees">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -232,9 +282,12 @@ export default function SettingsPage() {
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>Tee interval</Label>
-                  <Select defaultValue="10">
-                    <SelectTrigger>
+                  <Label htmlFor="tee-interval">Tee interval</Label>
+                  <Select
+                    value={String(defaults.teeInterval)}
+                    onValueChange={(v) => setClubDefaults({ teeInterval: Number(v) })}
+                  >
+                    <SelectTrigger id="tee-interval">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -247,6 +300,9 @@ export default function SettingsPage() {
                   </Select>
                 </div>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                New tournaments start from these; each event can change them.
+              </p>
             </div>
           </Card>
           <ClubIdentityCard />
@@ -262,7 +318,10 @@ export default function SettingsPage() {
               label="Handicap allowance"
               hint="WHS recommendation for singles"
             >
-              <Select defaultValue="95">
+              <Select
+                value={String(defaults.allowance)}
+                onValueChange={(v) => setClubDefaults({ allowance: Number(v) })}
+              >
                 <SelectTrigger className="w-[110px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -277,21 +336,12 @@ export default function SettingsPage() {
             </SettingRow>
             <SettingRow
               label="Anomaly flags in Live Ops"
-              hint="Watch cards against expected scoring"
+              hint="Show pace and scoring flags during play. They are logged under Integrity either way."
             >
-              <Switch checked={autoFlag} onCheckedChange={setAutoFlag} />
-            </SettingRow>
-            <SettingRow
-              label="Public leaderboards"
-              hint="Anyone with the link can follow live"
-            >
-              <Switch checked={publicBoards} onCheckedChange={setPublicBoards} />
-            </SettingRow>
-            <SettingRow
-              label="Certification reminders"
-              hint="Nudge players who haven’t certified within 20 minutes"
-            >
-              <Switch checked={attestReminders} onCheckedChange={setAttestReminders} />
+              <Switch
+                checked={defaults.anomalyFlags}
+                onCheckedChange={(v) => setClubDefaults({ anomalyFlags: v })}
+              />
             </SettingRow>
           </Card>
           {/*
@@ -388,15 +438,47 @@ export default function SettingsPage() {
             </Card>
           ) : (
             <Card title="Pilot data" sub="Local data on this device">
-              <Button variant="outline" onClick={() => resetDemo()}>
+              <Button variant="outline" onClick={() => setResetOpen(true)} disabled={live}>
                 <RotateCcw className="size-4" />
                 Reset pilot data
               </Button>
               <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-                Clears tournaments, pairings, and entered scores on this
-                device and restores the club roster. Use with care on
-                tournament day.
+                {live
+                  ? "A tournament is on the course. End it before resetting this device."
+                  : "Clears tournaments, pairings and entered scores on this device and restores the club roster. Anything already in the cloud comes back on the next sync."}
               </p>
+              <Dialog open={resetOpen} onOpenChange={(o) => { setResetOpen(o); if (!o) setResetWord(""); }}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Reset this device?</DialogTitle>
+                    <DialogDescription>
+                      Local tournaments, pairings and scores on this device are cleared. Type RESET to confirm.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Input
+                    autoFocus
+                    value={resetWord}
+                    onChange={(e) => setResetWord(e.target.value.toUpperCase())}
+                    placeholder="RESET"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => setResetOpen(false)}>
+                      Keep it
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      disabled={resetWord !== "RESET"}
+                      onClick={() => {
+                        resetDemo();
+                        setResetOpen(false);
+                        setResetWord("");
+                      }}
+                    >
+                      Reset
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </Card>
           )}
         </TabsContent>

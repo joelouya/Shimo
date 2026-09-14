@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  RotateCcw,
   Trash2,
   Trophy,
   UserCheck,
@@ -41,13 +42,16 @@ import {
 import { clubById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import { useSyncStatus } from "@/lib/sim/hooks";
+import { roundKey } from "@/lib/rounds";
 import {
   adoptTournament,
   allTournaments,
+  canReopenTournamentDay,
   deleteTournament,
   dismissTournament,
   duplicateTournament,
   endTournamentDay,
+  reopenTournamentDay,
   startTournamentDay,
   useSim,
 } from "@/lib/sim/store";
@@ -137,6 +141,7 @@ function TournamentRow({
   onCopyRegistration,
   onDuplicate,
   onPrintScorecards,
+  onStart,
 }: {
   t: Tournament;
   isNew?: boolean;
@@ -147,7 +152,9 @@ function TournamentRow({
   onCopyRegistration: (t: Tournament) => void;
   onDuplicate: (t: Tournament) => void;
   onPrintScorecards: (t: Tournament) => void;
+  onStart: (t: Tournament) => void;
 }) {
+  const canReopen = useSim((s) => canReopenTournamentDay(s, t.id));
   return (
     <div
       className={`flex items-center gap-5 px-5 py-4 ${
@@ -208,6 +215,12 @@ function TournamentRow({
               {IS_PILOT && isCreated && (
                 <>
                   <DropdownMenuSeparator />
+                  {canReopen && (
+                    <DropdownMenuItem onSelect={() => reopenTournamentDay(t.id)}>
+                      <RotateCcw />
+                      Undo start (back to upcoming)
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onSelect={() => onEnd(t)}>
                     <Flag />
                     End tournament
@@ -227,11 +240,7 @@ function TournamentRow({
                     Pairings & tee times
                   </Link>
                 </Button>
-                <Button
-                  variant="clay"
-                  size="sm"
-                  onClick={() => startTournamentDay(t.id)}
-                >
+                <Button variant="clay" size="sm" onClick={() => onStart(t)}>
                   Start tournament day
                 </Button>
               </>
@@ -376,11 +385,39 @@ export default function AdminTournamentsPage() {
 
   const [registrationFor, setRegistrationFor] = useState<Tournament | null>(null);
   function copyRegistration(t: Tournament) {
-    void navigator.clipboard.writeText(
-      `${window.location.origin}/register/${t.id}`,
-    );
+    const url = `${window.location.origin}/register/${t.id}`;
+    // an insecure origin has no clipboard; the dialog shows the link either way
+    navigator.clipboard?.writeText(url).catch(() => {});
     setRegistrationFor(t);
   }
+
+  /*
+   * Starting is the one irreversible-feeling step of the day, so it asks:
+   * how big the field on the sheet is, and whether another day is still on
+   * the course (one at a time, or the desk splits between them).
+   */
+  const [toStart, setToStart] = useState<Tournament | null>(null);
+  // selectors return stable references (a map, an id, a row) and the shapes
+  // are derived outside them: a selector that builds a fresh object every
+  // call re-renders forever
+  const pairingsMap = useSim((s) => s.pairings);
+  const liveId = useSim((s) => s.liveTournamentId);
+  const liveRow = useSim((s) => s.created.find((t) => t.id === s.liveTournamentId));
+  const startState =
+    toStart && liveId && liveId !== toStart.id && liveRow?.status === "live"
+      ? { ok: false as const, liveName: liveRow.name }
+      : { ok: true as const };
+  const startField = useMemo(() => {
+    if (!toStart) return { groups: 0, players: 0 };
+    const gs = (pairingsMap[roundKey(toStart.id, 1)] ?? []).filter((g) => g.playerIds.length > 0);
+    return { groups: gs.length, players: gs.reduce((a, g) => a + g.playerIds.length, 0) };
+  }, [toStart, pairingsMap]);
+  const confirmStart = () => {
+    if (!toStart) return;
+    startTournamentDay(toStart.id);
+    setToStart(null);
+    setJustCreatedId(null);
+  };
 
   // A tournament just published from the wizard arrives with ?created=<id>. Flag
   // it so the go-live step is unmissable: publishing only opens registration,
@@ -400,6 +437,28 @@ export default function AdminTournamentsPage() {
 
   return (
     <div>
+      <Dialog open={Boolean(toStart)} onOpenChange={(o) => !o && setToStart(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start {toStart?.name}?</DialogTitle>
+            <DialogDescription>
+              {!startState.ok
+                ? `${startState.liveName} is still on the course. End it before starting another day.`
+                : startField.groups > 0
+                  ? `${startField.players} players in ${startField.groups} groups are on the tee sheet. Starting opens live scoring on every phone in the field and puts the event on the clubhouse screen.`
+                  : "There is no tee sheet yet. You can start anyway and seat players from the desk as they arrive, but a drawn sheet is the better morning."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setToStart(null)}>
+              Not yet
+            </Button>
+            <Button variant="clay" disabled={!startState.ok} onClick={confirmStart}>
+              Start the day
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {justCreated && (
         <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-clay/30 bg-clay-wash/40 p-4 sm:flex-row sm:items-center">
           <div className="flex-1">
@@ -417,10 +476,7 @@ export default function AdminTournamentsPage() {
             <Button
               variant="clay"
               size="sm"
-              onClick={() => {
-                startTournamentDay(justCreated.id);
-                setJustCreatedId(null);
-              }}
+              onClick={() => setToStart(justCreated)}
             >
               Start tournament day
             </Button>
@@ -468,7 +524,7 @@ export default function AdminTournamentsPage() {
               <p className="smallcaps mb-3 text-muted-foreground">{section.label}</p>
               <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-card shadow-card">
                 {section.items.map((t) => (
-                  <TournamentRow
+                  <TournamentRow onStart={(x) => setToStart(x)}
                     key={t.id}
                     t={t}
                     isNew={createdIds.has(t.id) && !IS_PILOT}
