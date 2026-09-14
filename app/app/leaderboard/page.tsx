@@ -1,8 +1,13 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { EyeOff, Flame } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AnimatePresence,
+  LayoutGroup,
+  motion,
+  useReducedMotion,
+} from "framer-motion";
+import { ChevronRight, EyeOff, Flame } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -256,10 +261,11 @@ const BoardRow = memo(
   }) {
     return (
       <motion.div
+        id={isUser ? "lb-self-row" : undefined}
         layout="position"
         transition={{ type: "spring", stiffness: 360, damping: 34 }}
         className={cn(
-          "border-b border-border/50 last:border-b-0",
+          "scroll-mt-24 border-b border-border/50 last:border-b-0",
           isUser && "bg-clay-wash/45",
         )}
       >
@@ -451,6 +457,78 @@ function CumulativeRows({
   );
 }
 
+/**
+ * Your line.
+ *
+ * Most of the room is looking for themselves, not the leader, and in a full
+ * field the player's own row is usually somewhere off the fold. This is the
+ * ruled line the board keeps for you: it appears only once your row has
+ * scrolled out of view, holds your position, total and gap, and returns you to
+ * your row with one tap. Navy, like the live and featured cards, so it reads as
+ * yours rather than as another leader.
+ */
+function SelfBar({
+  row,
+  mode,
+  dir,
+  onLocate,
+}: {
+  row: StandingRow;
+  mode: ViewMode;
+  dir: "up" | "down";
+  onLocate: () => void;
+}) {
+  const still = useReducedMotion();
+  const value = fmtScore(row, mode);
+  const unit = mode === "points" ? "pts" : mode;
+  const leader = row.position === 1 && row.gap === 0;
+  const gapText = leader
+    ? "Leading the field"
+    : mode === "points"
+      ? `${row.gap} off the lead`
+      : `${row.gap} to the lead`;
+
+  return (
+    <motion.div
+      initial={still ? { opacity: 0 } : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={still ? { opacity: 0 } : { opacity: 0, y: 14 }}
+      transition={{ duration: 0.26, ease: [0.22, 1, 0.32, 1] }}
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+66px)] z-30 mx-auto w-full max-w-[430px] px-5"
+    >
+      <button
+        onClick={onLocate}
+        aria-label="Go to your row on the leaderboard"
+        className="pointer-events-auto flex w-full items-center gap-3.5 rounded-2xl bg-primary px-4 py-2.5 text-left text-primary-foreground shadow-pane cursor-pointer"
+      >
+        <span className="flex flex-col items-center leading-none">
+          <span className="smallcaps text-[9px] text-primary-foreground/55">Pos</span>
+          <span className="mt-1 font-serif text-[22px] leading-none tnum text-cream">
+            {row.tied ? "T" : ""}
+            {row.position}
+          </span>
+        </span>
+        <span className="h-9 w-px shrink-0 bg-cream/15" />
+        <span className="min-w-0 flex-1">
+          <span className="smallcaps text-primary-foreground/55">Your line</span>
+          <span className="mt-0.5 block truncate text-[13.5px] text-primary-foreground/85">
+            <span className="font-serif tnum text-cream">{value}</span> {unit} ·{" "}
+            {gapText}
+          </span>
+        </span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-cream/10">
+          <ChevronRight
+            className={cn(
+              "size-4 text-cream",
+              dir === "down" ? "rotate-90" : "-rotate-90",
+            )}
+          />
+        </span>
+      </button>
+    </motion.div>
+  );
+}
+
 function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string }) {
   const active = useActiveTournament();
   // a Scramble or Better Ball is scored as teams; both hooks run every render
@@ -459,11 +537,52 @@ function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string 
   const individualRows = useStandings(mode, division);
   const rows = isTeamFormat(active?.tournament) ? teamRows : individualRows;
   const me = useMeId();
+  const still = useReducedMotion();
   const [expanded, setExpanded] = useState<string | null>(null);
   const toggle = useCallback(
     (id: string) => setExpanded((cur) => (cur === id ? null : id)),
     [],
   );
+
+  const myRow = rows.find((r) => r.player.id === me);
+  const hasSelf = Boolean(myRow);
+  const [selfInView, setSelfInView] = useState(true);
+  const [selfDir, setSelfDir] = useState<"up" | "down">("down");
+
+  // Watch the player's own row. The bar only earns its space once that row is
+  // off the fold, so the board itself carries the "you" when it can be seen.
+  useEffect(() => {
+    if (!hasSelf) {
+      setSelfInView(true);
+      return;
+    }
+    const el = document.getElementById("lb-self-row");
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        setSelfInView(entry.isIntersecting);
+        if (!entry.isIntersecting) {
+          // below the covered zone (bar + nav) reads as "down", above as "up"
+          setSelfDir(
+            entry.boundingClientRect.top > window.innerHeight - 160
+              ? "down"
+              : "up",
+          );
+        }
+      },
+      // discount the space the bar and bottom nav occupy, so a row tucked
+      // behind them counts as out of view rather than visible
+      { rootMargin: "0px 0px -150px 0px", threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasSelf, division, mode]);
+
+  const locateSelf = useCallback(() => {
+    document
+      .getElementById("lb-self-row")
+      ?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
+  }, [still]);
 
   return (
     <LayoutGroup>
@@ -486,6 +605,11 @@ function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string 
           />
         ))}
       </div>
+      <AnimatePresence>
+        {myRow && !selfInView && (
+          <SelfBar row={myRow} mode={mode} dir={selfDir} onLocate={locateSelf} />
+        )}
+      </AnimatePresence>
     </LayoutGroup>
   );
 }

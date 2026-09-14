@@ -231,10 +231,16 @@ export default function DeskPage({
           </span>
         </div>
         {checkedIn.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
-            <p className="text-[14px] text-muted-foreground">
-              No one checked in yet. Verify a code above to admit the first
-              player.
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-card/50 px-8 py-12 text-center">
+            <span className="flex size-11 items-center justify-center rounded-full bg-secondary text-stone">
+              <UserRound className="size-5" strokeWidth={1.75} />
+            </span>
+            <p className="mt-4 font-serif text-[17px] text-foreground">
+              The list opens with the first player
+            </p>
+            <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted-foreground">
+              Verify a code above to admit someone to the field. Everyone you
+              check in appears here as the day fills.
             </p>
           </div>
         ) : (
