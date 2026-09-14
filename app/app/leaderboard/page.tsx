@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import {
   AnimatePresence,
   LayoutGroup,
@@ -11,11 +11,11 @@ import { ChevronRight, EyeOff, Flame } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ClubCrest, ClubSurface } from "@/components/club-brand";
+import { ClubCrest } from "@/components/club-brand";
 import { SponsorStrip } from "@/components/sponsor-strip";
 import { LiveBadge } from "@/components/live-dot";
 import { LastUpdatedNote, SyncStrip } from "@/components/sync-status";
-import { DEMO_USER_ID, GROUPS, clubById, courseById, playerById } from "@/lib/data";
+import { DEMO_USER_ID, GROUPS, clubById, playerById } from "@/lib/data";
 import { roundsOf } from "@/lib/rounds";
 import {
   formatCutLine,
@@ -546,21 +546,21 @@ function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string 
 
   const myRow = rows.find((r) => r.player.id === me);
   const hasSelf = Boolean(myRow);
-  const [selfInView, setSelfInView] = useState(true);
+  // what the observer last reported; with no own row there is nothing to
+  // watch and the bar simply never shows
+  const [selfSeen, setSelfSeen] = useState(true);
+  const selfInView = !hasSelf || selfSeen;
   const [selfDir, setSelfDir] = useState<"up" | "down">("down");
 
   // Watch the player's own row. The bar only earns its space once that row is
   // off the fold, so the board itself carries the "you" when it can be seen.
   useEffect(() => {
-    if (!hasSelf) {
-      setSelfInView(true);
-      return;
-    }
+    if (!hasSelf) return;
     const el = document.getElementById("lb-self-row");
     if (!el) return;
     const io = new IntersectionObserver(
       ([entry]) => {
-        setSelfInView(entry.isIntersecting);
+        setSelfSeen(entry.isIntersecting);
         if (!entry.isIntersecting) {
           // below the covered zone (bar + nav) reads as "down", above as "up"
           setSelfDir(

@@ -30,6 +30,8 @@ export const CLUBS: Club[] = [
 ];
 
 export const clubById = (id: string) => CLUBS.find((c) => c.id === id)!;
+/** The same lookup without the assertion, for ids that may come off the wire. */
+export const findClub = (id: string | undefined) => CLUBS.find((c) => c.id === id);
 
 /* ------------------------------------------------------------------ */
 /* Courses (Muthaiga fully detailed - yellow tees)                     */
@@ -282,6 +284,7 @@ export const COURSES: Course[] = [
 ];
 
 export const courseById = (id: string) => COURSES.find((c) => c.id === id)!;
+export const findCourse = (id: string | undefined) => COURSES.find((c) => c.id === id);
 
 /* ------------------------------------------------------------------ */
 /* Players                                                             */
@@ -354,6 +357,7 @@ export const PLAYERS: Player[] = [
 ];
 
 export const playerById = (id: string) => PLAYERS.find((p) => p.id === id)!;
+export const findPlayer = (id: string | undefined) => PLAYERS.find((p) => p.id === id);
 
 /* ------------------------------------------------------------------ */
 /* Tournaments                                                         */

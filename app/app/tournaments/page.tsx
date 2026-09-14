@@ -86,7 +86,7 @@ export default function TournamentsPage() {
       })
       .filter((t) => !eligibleOnly || eligibilityFor(t).kind === "eligible")
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [created, format, clubId, range, eligibleOnly]);
+  }, [created, dismissed, format, clubId, range, eligibleOnly]);
 
   return (
     <div className="pt-5">

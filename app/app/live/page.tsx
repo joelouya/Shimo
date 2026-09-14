@@ -9,8 +9,8 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  KeyRound,
   Loader2,
-  PenLine,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LiveBadge } from "@/components/live-dot";
+import { PinChange } from "@/components/signature";
 import { SyncStrip } from "@/components/sync-status";
 import {
   CardReturnedView,
@@ -33,7 +34,6 @@ import {
   DEMO_USER_ID,
   MARKER_ID,
   clubById,
-  courseById,
   playerById,
 } from "@/lib/data";
 import { stablefordPoints, strokesReceived, handicapSet } from "@/lib/scoring";
@@ -221,9 +221,12 @@ function PilotScoring() {
   const markerScores = useRoundMarkerScores();
   const certs = useRoundCerts();
   const hidden = useSim((s) => s.hideLeaderboard);
+  const signMethod = useSim((s) => s.signMethod);
+  const userPin = useSim((s) => s.userPin);
+  const [pinOpen, setPinOpen] = useState(false);
 
   const tournament = active.tournament;
-  const course = courseById(tournament.courseId);
+  const course = active.course;
   const group = active.groups.find((g) => g.playerIds.includes(me));
   const marksId = markedByMe(group, me);
   const markedById = markerOf(group, me);
@@ -282,9 +285,20 @@ function PilotScoring() {
 
   const myStats = playerStats(scores, me, course, tournament.handicapAllowance);
   const roundComplete = currentIdx === 18;
+  /*
+   * Once the ceremony has been shown it stays. The reconcile can briefly
+   * hold an older copy of one cell, and a card that reads as 17 holes for a
+   * beat must not fold the signing screen back into hole entry under the
+   * player's thumb. Adjusted during render, the way the pairings page loads
+   * a round, so there is no extra commit.
+   */
+  const [ceremonyShown, setCeremonyShown] = useState(false);
+  if (roundComplete && !ceremonyShown) setCeremonyShown(true);
   const myCert = certs[me];
   // the card is back with the committee once certified (or a DQ was recorded)
   const returned = myCert?.stage === "certified" || myCert?.stage === "dq";
+  // the PIN is chosen at first run; this is the net for anyone who skipped it
+  const needsPin = signMethod === "pin" && !userPin && !returned;
 
   if (!mePlayer || !group) return null;
 
@@ -322,6 +336,33 @@ function PilotScoring() {
       </header>
 
       <SyncStrip className="mt-3" />
+      {needsPin && (
+        <div className="mt-3 flex items-center gap-3 rounded-2xl bg-card p-4 shadow-card">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-clay-wash text-clay-deep">
+            <KeyRound className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-medium text-foreground">Set the PIN you&apos;ll sign with</p>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              Four digits, once. You certify your card with it at the end.
+            </p>
+          </div>
+          <Button variant="clay" size="sm" onClick={() => setPinOpen(true)}>
+            Set PIN
+          </Button>
+        </div>
+      )}
+      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Set your PIN</DialogTitle>
+            <DialogDescription>
+              Four digits. You sign every card with it, so pick one you will remember.
+            </DialogDescription>
+          </DialogHeader>
+          <PinChange onDone={() => setPinOpen(false)} onCancel={() => setPinOpen(false)} />
+        </DialogContent>
+      </Dialog>
       {!returned && !roundComplete && <LocationConsentCard />}
 
       {returned ? (
@@ -365,11 +406,11 @@ function PilotScoring() {
             })}
           </div>
 
-          {roundComplete ? (
+          {roundComplete || ceremonyShown ? (
             <CertificationCeremony
               me={me}
-              marks={marksId ?? me}
-              markedBy={markedById ?? me}
+              marks={marksId}
+              markedBy={markedById}
               course={course}
             />
           ) : (

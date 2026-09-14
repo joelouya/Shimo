@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Check, Flag, Lock, MapPin, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ClubCrest, ClubSurface, useClubIdentity } from "@/components/club-brand";
+import { ClubCrest, useClubIdentity } from "@/components/club-brand";
 import { SponsorStrip } from "@/components/sponsor-strip";
 import { EligibilityTag } from "@/components/golfer/tournament-card";
 import { LiveBadge } from "@/components/live-dot";

@@ -19,7 +19,7 @@ import { OnboardingGate } from "@/components/golfer/onboarding";
 import { useGolferRouteMemory } from "@/components/pwa";
 import { SimGate } from "@/components/sim-gate";
 import { IS_PILOT } from "@/lib/mode";
-import { useSim } from "@/lib/sim/store";
+import { meId, roundCerts, useSim } from "@/lib/sim/store";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -66,7 +66,14 @@ function Splash() {
 
 function BottomNav() {
   const pathname = usePathname();
-  const attested = useSim((s) => s.attested);
+  // The pulse says "your card is open". Demo: until the scripted attest.
+  // Pilot: while a round is on and this player's card is not yet returned.
+  const cardOpen = useSim((s) => {
+    if (!IS_PILOT) return !s.attested;
+    if (!s.liveTournamentId) return false;
+    const c = roundCerts(s)[meId(s)];
+    return !(c?.stage === "certified" || c?.stage === "dq");
+  });
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[430px] border-t border-border/70 bg-card/92 pb-[max(env(safe-area-inset-bottom),8px)] backdrop-blur-md">
@@ -77,7 +84,7 @@ function BottomNav() {
               ? pathname === "/app"
               : pathname.startsWith(tab.href);
           const Icon = tab.icon;
-          const showLive = tab.label === "Live" && !attested;
+          const showLive = tab.label === "Live" && cardOpen;
           return (
             <Link
               key={tab.href}

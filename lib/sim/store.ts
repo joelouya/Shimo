@@ -54,6 +54,7 @@ import type { ExposureEvent, Surface } from "@/lib/exposure";
 import { CLIENT_ID } from "@/lib/sync/client";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import { defaultMarkers, markedByMe, markerOf, markersFor, validMarkers } from "@/lib/markers";
+import { rosterRowFor } from "@/lib/membership";
 import {
   auditToRow,
   certToRow,
@@ -2378,6 +2379,37 @@ export function markerAttest(
 }
 
 /**
+ * The desk attests a card in place of the marker: a single-ball group, a
+ * marker whose phone died, a marker who left early. Rule 3.3b wants a second
+ * person who kept the card, and the desk keeps every paper card, so this
+ * stands; it is recorded as the desk in the trail, never as the player. The
+ * player then certifies as normal.
+ */
+export function deskAttest(playerId: string) {
+  if (!playerId) return;
+  mutate((draft) => {
+    const t = activeTournamentOf(draft);
+    const cert = ensureCert(draft, playerId, "desk");
+    if (cert.stage !== "awaiting-marker") return;
+    cert.markerId = "desk";
+    cert.stage = "awaiting-player";
+    cert.markerAttestedAt = Date.now();
+    cert.markerMethod = "committee";
+    pushAudit(draft, {
+      kind: "marker-attested",
+      tournamentId: t.id,
+      round: draft.liveRound,
+      playerId,
+      actor: "desk",
+      ts: Date.now(),
+      detail: `The desk attested the card in place of the marker${draft.deskName ? ` (${draft.deskName})` : ""}.`,
+    });
+    syncCert(draft, playerId);
+    syncAuditTail(draft, 1);
+  });
+}
+
+/**
  * Stage B: the player certifies their own marker-attested card. Computes the
  * tamper-evidence record (hash, device, location, clubhouse distance) and
  * appends it - the card is now "returned" in the R&A sense.
@@ -2773,6 +2805,20 @@ export function setUserPin(pin: string) {
     d.userPin = pin;
   });
 }
+
+/**
+ * Change the signing PIN. The current one must be produced first when one
+ * exists, so a phone left on a table cannot have its PIN quietly replaced.
+ */
+export function changeUserPin(current: string | null, next: string): boolean {
+  if (!/^\d{4}$/.test(next)) return false;
+  const stored = simStore.getState().userPin;
+  if (stored && stored !== current) return false;
+  mutate((d) => {
+    d.userPin = next;
+  });
+  return true;
+}
 export function setAdminPin(pin: string) {
   mutate((d) => {
     d.adminPin = pin;
@@ -2840,6 +2886,21 @@ export function setAuth(email: string | null, userId: string | null) {
   mutate((d) => {
     d.authEmail = email ? email.trim().toLowerCase() : null;
     d.authUserId = userId;
+    /*
+     * Mirror a matched member into the device identity. meId prefers the
+     * session, but a session can blink (a token refresh, a slow getSession on
+     * a cold start) and for that beat the phone must not forget who it is
+     * mid-round. Signing out clears it explicitly; see Profile.
+     */
+    if (d.authEmail) {
+      const id = authedPlayerId(d);
+      if (id) {
+        d.deviceIdentity = id;
+        try {
+          localStorage.setItem(IDENTITY_KEY, id);
+        } catch {}
+      }
+    }
   });
 }
 
@@ -2872,9 +2933,8 @@ export function playerInField(s: SimState, pid: string): Player | undefined {
 }
 
 export function authedPlayerId(s: SimState): string | null {
-  if (!s.authEmail) return null;
-  const email = s.authEmail.toLowerCase();
-  return s.roster.find((p) => (p.email ?? "").toLowerCase() === email)?.id ?? null;
+  // by roster email, or by the address a member claimed their invite with
+  return rosterRowFor(s.roster, s.authEmail)?.id ?? null;
 }
 
 /**

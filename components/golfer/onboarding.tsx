@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * First-run onboarding for pilot players. A full-screen flow in four moments
+ * First-run onboarding for pilot players. A full-screen flow in five moments
  * that turns a phone into a signed-in player: a greeting that names the
  * tournament, a one-tap identity confirmation, magic-link sign-in (skipped
- * when a session is already open), and the signature choice. The last tap
+ * when a session is already open or the player arrived by a guest code), a
+ * short walkthrough of how the day works, and the signature choice, where the
+ * PIN is set once so it is simply used when a card is signed. The last tap
  * drops the player straight onto their card.
  *
  * Signing in is what makes "you" real everywhere else (the leaderboard row,
@@ -31,7 +33,9 @@ import {
   Smartphone,
 } from "lucide-react";
 
-import { Logo, LogoMark } from "@/components/logo";
+import { LogoMark } from "@/components/logo";
+import { EASE, Reveal, Shell, StepBody } from "@/components/golfer/onboarding-shell";
+import { Walkthrough } from "@/components/golfer/walkthrough";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { clubById } from "@/lib/data";
@@ -41,6 +45,7 @@ import { accessMessage, memberAccess } from "@/lib/membership";
 import { useActiveTournament, useAuthReconcile } from "@/lib/sim/hooks";
 import {
   authedPlayerId,
+  playerInField,
   setAuth,
   setDeviceIdentity,
   setOnboarded,
@@ -52,46 +57,17 @@ import {
 import type { Player } from "@/lib/types";
 import { cn, initials } from "@/lib/utils";
 
-type Step = "greeting" | "identity" | "signin" | "signature";
+type Step = "greeting" | "identity" | "signin" | "walkthrough" | "signature";
 
-const ORDER: Step[] = ["greeting", "identity", "signin", "signature"];
+const ORDER: Step[] = ["greeting", "identity", "signin", "walkthrough", "signature"];
 
-const EASE = [0.22, 1, 0.36, 1] as const;
-
-/* ---- motion vocabulary ---- */
-
-/**
- * Everything here uses plain inline initial/animate/exit objects rather than
- * named variants with `custom`. Under AnimatePresence mode="wait" that
- * indirection could leave an entering step stalled part-way through its
- * animation, so the step travel and the per-element cascade are both spelled
- * out directly. See Reveal for the cascade timing.
+/*
+ * Motion vocabulary: everything here uses plain inline initial/animate/exit
+ * objects rather than named variants with `custom`. Under AnimatePresence
+ * mode="wait" that indirection could leave an entering step stalled part-way
+ * through its animation, so the step travel and the per-element cascade are
+ * both spelled out directly. See Reveal in onboarding-shell for the cascade.
  */
-
-/**
- * A block inside a step, cascading in behind the one before it. `i` is its
- * place in the cascade, so the content assembles top to bottom.
- */
-function Reveal({
-  children,
-  className,
-  i = 0,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  i?: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55, ease: EASE, delay: 0.1 + i * 0.07 }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
 
 /**
  * First run, whichever build this is.
@@ -108,7 +84,10 @@ function Reveal({
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
   useAuthReconcile();
   const onboarded = useSim((s) => s.onboarded);
-  const pilotFlow = IS_PILOT && AUTH_AVAILABLE && !onboarded;
+  // The flow runs whether or not sign-in is configured: a guest who arrived
+  // by code still needs the walkthrough and a PIN; only the sign-in step
+  // itself depends on the keys being present.
+  const pilotFlow = IS_PILOT && !onboarded;
   const demoFlow = !IS_PILOT && !onboarded;
   return (
     <>
@@ -356,95 +335,12 @@ function DemoIntro() {
 /* ------------------------------------------------------------------ */
 
 /**
- * The persistent frame: it never unmounts, so the story stays continuous.
- *
- * Progress is one thin line that fills as the flow advances, not a row of
- * segments. A counter tells a player how much is left to endure; a line that
- * simply grows tells them the same thing without ever naming a number.
- */
-function Shell({
-  children,
-  progress,
-}: {
-  children: React.ReactNode;
-  progress: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1, transition: { duration: 0.4 } }}
-      exit={{ opacity: 0, transition: { duration: 0.45, ease: EASE } }}
-      className="fixed inset-0 z-50 overflow-hidden bg-background"
-    >
-      {/*
-        Ambient wash for depth. Deliberately static: a large blurred layer is
-        cheap to composite once but expensive to re-rasterise every frame, so
-        animating it would jank on the mid-range Androids the pilot targets.
-        The sense of travel comes from the content, which moves on transform
-        and opacity only.
-      */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[520px] -translate-x-1/2 opacity-70 blur-3xl"
-        style={{
-          background:
-            "radial-gradient(closest-side, var(--clay-wash), transparent 70%)",
-        }}
-      />
-
-      <div className="relative mx-auto flex h-dvh w-full max-w-[430px] flex-col px-6 pb-8 pt-[max(env(safe-area-inset-top),20px)]">
-        <div className="flex items-center gap-4 py-4">
-          <Logo className="text-[15px]" />
-          <span className="h-0.5 flex-1 overflow-hidden rounded-full bg-border">
-            <motion.span
-              className="block h-full w-full origin-left rounded-full bg-clay"
-              initial={false}
-              animate={{ scaleX: Math.max(0, Math.min(1, progress)) }}
-              transition={{ duration: 0.5, ease: EASE }}
-            />
-          </span>
-        </div>
-        {/* steps stack here absolutely, so one can leave as the next arrives */}
-        <div className="relative flex-1 overflow-x-hidden">{children}</div>
-      </div>
-    </motion.div>
-  );
-}
-
-function StepBody({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <Reveal i={0}>
-        <div className="mt-6 flex size-12 items-center justify-center rounded-2xl bg-clay-wash text-clay-deep">
-          {icon}
-        </div>
-      </Reveal>
-      <Reveal i={1}>
-        <h1 className="mt-5 font-serif text-[28px] leading-tight text-foreground">
-          {title}
-        </h1>
-      </Reveal>
-      {children}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-/**
- * The pilot flow, in four moments: a greeting that names the day, a one-tap
- * identity confirmation, sign-in (skipped when a session is already open), and
- * the signature choice. There is no "you're all set" screen at the end: the
- * last tap on the signature step drops the player straight onto their card,
- * which is the thing they came to do.
+ * The pilot flow, in five moments: a greeting that names the day, a one-tap
+ * identity confirmation, sign-in (skipped when a session is already open or
+ * the player came in by a guest code), the walkthrough, and the signature
+ * choice. There is no "you're all set" screen at the end: the last tap on the
+ * signature step drops the player straight onto their card, which is the
+ * thing they came to do.
  *
  * Identity can come before sign-in because it usually does: a player who
  * reached this from a group code has already picked themselves off the tee
@@ -455,16 +351,13 @@ function StepBody({
 function OnboardingFlow() {
   const matchId = useSim(authedPlayerId);
   const deviceIdentity = useSim((s) => s.deviceIdentity);
-  const roster = useSim((s) => s.roster);
   const authed = useSim((s) => Boolean(s.authEmail));
 
   // The player this device already stands for, if any: the email match takes
-  // precedence, then the identity picked off the tee sheet.
+  // precedence, then the identity picked off the tee sheet or opened by a
+  // guest code. Guests live outside the roster, so look in the whole field.
   const knownId = matchId ?? deviceIdentity;
-  const knownPlayer = useMemo(
-    () => roster.find((p) => p.id === knownId) ?? null,
-    [roster, knownId],
-  );
+  const knownPlayer = useSim((s) => (knownId ? (playerInField(s, knownId) ?? null) : null));
 
   const [step, setStep] = useState<Step>("greeting");
   const [dir, setDir] = useState(1);
@@ -477,14 +370,20 @@ function OnboardingFlow() {
   const finish = () => setOnboarded(true);
 
   // Leaving the greeting: confirm a known player first, otherwise go straight
-  // to sign-in, where the email match will name them.
-  const afterGreeting = () => go(knownPlayer ? "identity" : "signin");
-  // Confirming an identity: a signed-in member is done identifying and moves to
-  // the signature; anyone else signs in to claim the card (with a guest skip).
-  const afterIdentity = () => go(authed ? "signature" : "signin");
-  // Skipping sign-in keeps a claimed identity heading to the signature; a
-  // visitor with no identity is following along, and that is the whole flow.
-  const skipSignIn = () => (knownPlayer ? go("signature") : finish());
+  // to sign-in, where the email match will name them. With no sign-in
+  // configured there is nothing to claim, so the walkthrough is the tour.
+  const afterGreeting = () =>
+    go(knownPlayer ? "identity" : AUTH_AVAILABLE ? "signin" : "walkthrough");
+  // Confirming an identity: a signed-in member, or a guest who came in by
+  // code, is done identifying and moves on; anyone else signs in to claim
+  // the card (with a guest skip).
+  const afterIdentity = () =>
+    go(authed || knownPlayer?.guest ? "walkthrough" : "signin");
+  // Skipping sign-in keeps a claimed identity heading on; a visitor with no
+  // identity is following along, and the walkthrough is still worth a look.
+  const skipSignIn = () => go("walkthrough");
+  // After the walkthrough: a player sets how they sign; a follower is done.
+  const afterWalkthrough = () => (knownPlayer ? go("signature") : finish());
 
   return (
     <Shell progress={(idx + 1) / ORDER.length}>
@@ -520,7 +419,10 @@ function OnboardingFlow() {
             />
           )}
           {step === "signin" && (
-            <SignIn onMatched={() => go("signature")} onSkip={skipSignIn} />
+            <SignIn onMatched={() => go("walkthrough")} onSkip={skipSignIn} />
+          )}
+          {step === "walkthrough" && (
+            <Walkthrough onDone={afterWalkthrough} doneLabel={knownPlayer ? "Next" : "Start"} />
           )}
           {step === "signature" && <SignatureSetup onNext={finish} />}
         </motion.div>
@@ -611,7 +513,7 @@ function Greeting({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }
   );
 }
 
-function SignIn({
+export function SignIn({
   onMatched,
   onSkip,
 }: {
@@ -962,10 +864,12 @@ function ConfirmProfile({
 
 function SignatureSetup({ onNext }: { onNext: () => void }) {
   const current = useSim((s) => s.signMethod);
+  const existingPin = useSim((s) => s.userPin);
   const [method, setMethod] = useState<SignMethod>(
     current === "committee" ? "pin" : current,
   );
   const [pin, setPin] = useState("");
+  const [confirm, setConfirm] = useState("");
 
   const OPTIONS: { id: SignMethod; label: string; hint: string; icon: React.ReactNode }[] = [
     { id: "pin", label: "PIN", hint: "A four-digit code", icon: <ShieldCheck className="size-4" /> },
@@ -973,14 +877,15 @@ function SignatureSetup({ onNext }: { onNext: () => void }) {
     { id: "biometric", label: "Biometric", hint: "Face or fingerprint", icon: <Fingerprint className="size-4" /> },
   ];
 
-  const canContinue = method !== "pin" || pin.length === 4;
+  const pinReady = Boolean(existingPin) || (pin.length === 4 && confirm === pin);
+  const canContinue = method !== "pin" || pinReady;
 
   return (
     <StepBody icon={<PenLine className="size-6" />} title="How you'll sign">
       <Reveal i={2}>
         <p className="mt-3 text-[16px] leading-relaxed text-ink-soft">
           You certify your own card at the end of the round. Pick how. All three
-          are legally valid, and you can change it later.
+          are legally valid, and you can change it later in Profile.
         </p>
       </Reveal>
       <Reveal i={3}>
@@ -1028,14 +933,34 @@ function SignatureSetup({ onNext }: { onNext: () => void }) {
             transition={{ duration: 0.32, ease: EASE }}
             className="overflow-hidden"
           >
-            <Input
-              inputMode="numeric"
-              autoFocus
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              placeholder="Choose a 4-digit PIN"
-              className="mt-4 h-12 text-center text-[19px] tracking-[0.3em] tnum"
-            />
+            {existingPin ? (
+              <p className="mt-4 rounded-xl bg-secondary/60 px-4 py-3 text-[13px] text-muted-foreground">
+                Your 4-digit PIN is already set. Change it any time in Profile.
+              </p>
+            ) : (
+              <>
+                <Input
+                  inputMode="numeric"
+                  autoFocus
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="Choose a 4-digit PIN"
+                  className="mt-4 h-12 text-center text-[19px] tracking-[0.3em] tnum"
+                />
+                <Input
+                  inputMode="numeric"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="Enter it again"
+                  className="mt-2 h-12 text-center text-[19px] tracking-[0.3em] tnum"
+                />
+                {confirm.length === 4 && confirm !== pin && (
+                  <p className="mt-2 text-[13px] text-destructive">
+                    Those don&apos;t match yet.
+                  </p>
+                )}
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1048,7 +973,7 @@ function SignatureSetup({ onNext }: { onNext: () => void }) {
             disabled={!canContinue}
             onClick={() => {
               setSignMethod(method);
-              if (method === "pin") setUserPin(pin);
+              if (method === "pin" && !existingPin) setUserPin(pin);
               onNext();
             }}
           >

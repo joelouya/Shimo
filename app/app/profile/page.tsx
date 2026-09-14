@@ -1,9 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingDown } from "lucide-react";
+import { BookOpen, KeyRound, LogIn, TrendingDown } from "lucide-react";
 
+import { SignIn } from "@/components/golfer/onboarding";
+import { Walkthrough } from "@/components/golfer/walkthrough";
+import { PinChange } from "@/components/signature";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,11 +24,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
-  CLUBS,
   DEMO_USER_ID,
   USER_HISTORY,
   USER_HI_TREND,
-  clubById,
+  findClub,
   playerById,
 } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
@@ -32,12 +41,13 @@ import {
   useSim,
   type SignMethod,
 } from "@/lib/sim/store";
-import { signOut } from "@/lib/sync/auth";
+import { AUTH_AVAILABLE, signOut } from "@/lib/sync/auth";
 import { formatDate, initials, ordinal } from "@/lib/utils";
 
 /**
  * 12-month handicap index sparkline. Single series: no legend, endpoint
- * labeled, recessive baseline only.
+ * labeled, recessive baseline only. Demo only: a pilot member's index comes
+ * from the club roster and has no history here yet.
  */
 function HandicapSparkline() {
   const data = USER_HI_TREND;
@@ -79,22 +89,57 @@ function HandicapSparkline() {
   );
 }
 
+/** One row of the settings ledger: a label, a line under it, and a control. */
+function Row({
+  label,
+  hint,
+  children,
+  first,
+}: {
+  label: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+  first?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 px-4 py-3.5 ${
+        first ? "" : "border-t border-border/60"
+      }`}
+    >
+      <div className="min-w-0">
+        <Label className="text-foreground">{label}</Label>
+        {hint && (
+          <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{hint}</p>
+        )}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const identity = useSim((s) => s.deviceIdentity);
   const authEmail = useSim((s) => s.authEmail);
   const myId = useSim(meId);
   const roster = useSim((s) => s.roster);
-  const user =
-    IS_PILOT && myId
-      ? (roster.find((p) => p.id === myId) ?? playerById(DEMO_USER_ID))
-      : playerById(DEMO_USER_ID);
-  const club = clubById(user.clubId);
+  const guests = useSim((s) => s.guests);
   const hidden = useSim((s) => s.hideLeaderboard);
   const signMethod = useSim((s) => s.signMethod);
+  const userPin = useSim((s) => s.userPin);
   const tonePref = useSim((s) => s.tonePref);
-  const [scoreNotifs, setScoreNotifs] = useState(true);
-  const [teeReminders, setTeeReminders] = useState(true);
-  const [homeClub, setHomeClub] = useState(user.clubId);
+
+  const [dialog, setDialog] = useState<null | "pin" | "signin" | "how">(null);
+  const close = () => setDialog(null);
+
+  // Pilot: the real player this device stands for, or nobody. Demo: Joel.
+  const user = IS_PILOT
+    ? myId
+      ? (roster.find((p) => p.id === myId) ?? guests.find((p) => p.id === myId) ?? null)
+      : null
+    : playerById(DEMO_USER_ID);
+  const clubName = findClub(user?.clubId)?.name ?? "Your club";
+  const selfDeclared = Boolean(user?.guest?.selfDeclaredHandicap);
 
   const delta =
     USER_HI_TREND[USER_HI_TREND.length - 1].hi - USER_HI_TREND[0].hi;
@@ -103,14 +148,18 @@ export default function ProfilePage() {
     <div className="px-5 pt-5">
       <header className="flex items-center gap-4">
         <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary font-serif text-xl text-primary-foreground">
-          {initials(user.name)}
+          {user ? initials(user.name) : "?"}
         </div>
-        <div>
-          <h1 className="font-serif text-[32px] font-medium leading-[1.04] tracking-[-0.012em] text-foreground">
-            {user.name}
+        <div className="min-w-0">
+          <h1 className="truncate font-serif text-[32px] font-medium leading-[1.04] tracking-[-0.012em] text-foreground">
+            {user ? user.name : "Not signed in"}
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
-            {club.name} · Member since 2019
+            {!IS_PILOT
+              ? `${clubName} · Member since 2019`
+              : user
+                ? `${clubName} · ${user.guest ? "Guest" : "Member"}`
+                : "Sign in, or open your tournament code, to score your own card"}
           </p>
         </div>
       </header>
@@ -119,15 +168,23 @@ export default function ProfilePage() {
       <section className="mt-6 rounded-2xl bg-card p-5 shadow-card">
         <div className="flex items-start justify-between">
           <div>
-            <p className="smallcaps text-muted-foreground">Handicap index</p>
+            <p className="smallcaps text-muted-foreground">
+              {selfDeclared ? "Self-declared handicap" : "Handicap index"}
+            </p>
             <p className="mt-1 font-serif text-[44px] leading-none text-foreground tnum">
-              {USER_HI_TREND[USER_HI_TREND.length - 1].hi.toFixed(1)}
+              {!IS_PILOT
+                ? USER_HI_TREND[USER_HI_TREND.length - 1].hi.toFixed(1)
+                : user
+                  ? user.handicap
+                  : "–"}
             </p>
           </div>
-          <span className="flex items-center gap-1 rounded-full bg-clay-wash px-2.5 py-1 text-[11px] font-medium text-clay-deep tnum">
-            <TrendingDown className="size-3" />
-            {delta.toFixed(1)} this year
-          </span>
+          {!IS_PILOT && (
+            <span className="flex items-center gap-1 rounded-full bg-clay-wash px-2.5 py-1 text-[11px] font-medium text-clay-deep tnum">
+              <TrendingDown className="size-3" />
+              {delta.toFixed(1)} this year
+            </span>
+          )}
         </div>
         {!IS_PILOT && (
           <div className="mt-4">
@@ -140,8 +197,11 @@ export default function ProfilePage() {
         )}
         {IS_PILOT && (
           <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-            Your index comes from the club roster. The trend builds as attested
-            rounds come in.
+            {selfDeclared
+              ? "Declared at registration. It is labelled wherever it affects a result."
+              : user
+                ? "Your index comes from the club roster. The trend builds as attested rounds come in."
+                : "Your index appears here once the club knows who you are."}
           </p>
         )}
       </section>
@@ -207,81 +267,62 @@ export default function ProfilePage() {
         )}
       </section>
 
-      {/* settings */}
-      <section className="mt-7 pb-4">
-        <p className="smallcaps mb-3 text-muted-foreground">Settings</p>
+      {/* account */}
+      {IS_PILOT && (
+        <section className="mt-7">
+          <p className="smallcaps mb-3 text-muted-foreground">Account</p>
+          <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+            {authEmail ? (
+              <Row first label="Signed in" hint={`${authEmail}${user ? ` · ${user.name}` : ""}`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await signOut();
+                    setAuth(null, null);
+                    // the phone stops acting as this player too
+                    setDeviceIdentity(null);
+                  }}
+                >
+                  Sign out
+                </Button>
+              </Row>
+            ) : (
+              <Row
+                first
+                label={identity && user ? "This device is you" : "Sign in"}
+                hint={
+                  identity && user
+                    ? `${user.name} · ${user.guest ? "by your tournament code" : "picked off the tee sheet"}`
+                    : AUTH_AVAILABLE
+                      ? "Members sign in with the email the club has on file"
+                      : "Ask the desk for your tournament code"
+                }
+              >
+                <div className="flex gap-2">
+                  {identity && (
+                    <Button variant="outline" size="sm" onClick={() => setDeviceIdentity(null)}>
+                      Change
+                    </Button>
+                  )}
+                  {AUTH_AVAILABLE && (
+                    <Button variant="clay" size="sm" onClick={() => setDialog("signin")}>
+                      <LogIn className="size-3.5" />
+                      Sign in
+                    </Button>
+                  )}
+                </div>
+              </Row>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* signing */}
+      <section className="mt-7">
+        <p className="smallcaps mb-3 text-muted-foreground">Signing cards</p>
         <div className="overflow-hidden rounded-2xl bg-card shadow-card">
-          {IS_PILOT && authEmail && (
-            <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5">
-              <div className="min-w-0">
-                <Label className="text-foreground">Signed in</Label>
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                  {authEmail} · {user.name}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  await signOut();
-                  setAuth(null, null);
-                }}
-              >
-                Sign out
-              </Button>
-            </div>
-          )}
-          {IS_PILOT && !authEmail && identity && (
-            <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5">
-              <div>
-                <Label className="text-foreground">This device is you</Label>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {user.name} · following as a guest
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDeviceIdentity(null)}
-              >
-                Change
-              </Button>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-3 px-4 py-3.5">
-            <div>
-              <Label className="text-foreground">Scoreboard blindness</Label>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Hide the leaderboard while you play
-              </p>
-            </div>
-            <Switch checked={hidden} onCheckedChange={setHideLeaderboard} />
-          </div>
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5">
-            <div>
-              <Label className="text-foreground">Score notifications</Label>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Position changes and milestones
-              </p>
-            </div>
-            <Switch checked={scoreNotifs} onCheckedChange={setScoreNotifs} />
-          </div>
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5">
-            <div>
-              <Label className="text-foreground">Tee time reminders</Label>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                The evening before, and 90 minutes out
-              </p>
-            </div>
-            <Switch checked={teeReminders} onCheckedChange={setTeeReminders} />
-          </div>
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5">
-            <div>
-              <Label className="text-foreground">Signature method</Label>
-              <p className="mt-0.5 text-[12px] text-muted-foreground">
-                How you certify cards. All three are legally valid.
-              </p>
-            </div>
+          <Row first label="Signature method" hint="How you certify. All three are legally valid.">
             <Select
               value={signMethod === "committee" ? "pin" : signMethod}
               onValueChange={(v) => setSignMethod(v as SignMethod)}
@@ -295,14 +336,37 @@ export default function ProfilePage() {
                 <SelectItem value="biometric">Biometric</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5">
-            <div>
-              <Label className="text-foreground">Greeting tone</Label>
-              <p className="mt-0.5 text-[12px] text-muted-foreground">
-                How the home screen speaks to you
-              </p>
-            </div>
+          </Row>
+          <Row
+            label="Signing PIN"
+            hint={userPin ? "Set · four digits" : "Not set yet. You'll be asked before you can certify."}
+          >
+            <Button
+              variant={userPin ? "outline" : "clay"}
+              size="sm"
+              onClick={() => setDialog("pin")}
+            >
+              <KeyRound className="size-3.5" />
+              {userPin ? "Change PIN" : "Set PIN"}
+            </Button>
+          </Row>
+          <Row label="How Shimo works" hint="The two cards, the board, signing off, playing offline">
+            <Button variant="outline" size="sm" onClick={() => setDialog("how")}>
+              <BookOpen className="size-3.5" />
+              Show me
+            </Button>
+          </Row>
+        </div>
+      </section>
+
+      {/* preferences */}
+      <section className="mt-7 pb-4">
+        <p className="smallcaps mb-3 text-muted-foreground">Preferences</p>
+        <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+          <Row first label="Scoreboard blindness" hint="Hide the leaderboard while you play">
+            <Switch checked={hidden} onCheckedChange={setHideLeaderboard} />
+          </Row>
+          <Row label="Greeting tone" hint="How the home screen speaks to you">
             <Select
               value={tonePref}
               onValueChange={(v) => setTonePref(v as "editorial" | "classic")}
@@ -315,29 +379,53 @@ export default function ProfilePage() {
                 <SelectItem value="classic">Classic</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5">
-            <div className="shrink-0">
-              <Label className="text-foreground">Home club</Label>
-            </div>
-            <Select value={homeClub} onValueChange={setHomeClub}>
-              <SelectTrigger className="h-9 w-[190px] text-[13px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CLUBS.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          </Row>
         </div>
         <p className="mt-6 text-center text-[10px] text-muted-foreground">
-          Shimo · prototype build for the Kenya Golf Union
+          Shimo · {IS_PILOT ? "pilot build" : "demo build"}
         </p>
       </section>
+
+      {/* dialogs */}
+      <Dialog open={dialog === "pin"} onOpenChange={(o) => !o && close()}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{userPin ? "Change your PIN" : "Set your PIN"}</DialogTitle>
+            <DialogDescription>
+              Four digits. You sign every card with it, so pick one you will remember.
+            </DialogDescription>
+          </DialogHeader>
+          <PinChange onDone={close} onCancel={close} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "signin"} onOpenChange={(o) => !o && close()}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Sign in</DialogTitle>
+            <DialogDescription className="sr-only">
+              Sign in with the email your club has on file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-[420px] flex-col">
+            <SignIn onMatched={close} onSkip={close} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "how"} onOpenChange={(o) => !o && close()}>
+        <DialogContent className="max-h-[88dvh] max-w-sm overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="sr-only">How Shimo works</DialogTitle>
+            <DialogDescription className="sr-only">
+              A short tour of the app on tournament day.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-[560px] flex-col">
+            <Walkthrough onDone={close} doneLabel="Done" />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
