@@ -34,6 +34,9 @@ const COVERAGE = args.includes("--full") ? "full" : "reduced";
 
 const { COURSES, PLAYERS } = await jiti.import("../lib/data.ts");
 const PR = await jiti.import("../lib/tv/producer.ts");
+// The moments engine is flag-gated in the product (the panel offers quiet and
+// standard only). This drives the engine itself, so it runs with the flag on.
+(await jiti.import("../lib/flags.ts")).FEATURES.tvMomentsEngine = true;
 const TR = await jiti.import("../lib/tv/trust.ts");
 
 /* ---- assertions ---- */
