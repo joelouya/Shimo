@@ -53,6 +53,7 @@ import { stampsFor, type GroupPace } from "@/lib/pace";
 import type { ExposureEvent, Surface } from "@/lib/exposure";
 import { CLIENT_ID } from "@/lib/sync/client";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
+import { defaultMarkers, markedByMe, markerOf, markersFor, validMarkers } from "@/lib/markers";
 import {
   auditToRow,
   certToRow,
@@ -237,6 +238,11 @@ export interface SavedGroup {
    * on first save and stable thereafter, so the printed sheet keeps matching.
    */
   code?: string;
+  /**
+   * Who marks whom, playerId -> markerId, saved with the tee sheet so every
+   * device agrees. Absent on older rows; lib/markers derives the default.
+   */
+  markers?: Record<string, string>;
 }
 
 /**
@@ -913,12 +919,13 @@ function enqueueOp(
   draft: SimState,
   kind: SyncOp["kind"],
   payload: Record<string, unknown>,
+  ts = Date.now(),
 ) {
   draft.outbox.push({
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `${ts.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     kind,
     payload,
-    ts: Date.now(),
+    ts,
     status: "pending",
     attempts: 0,
   });
@@ -926,9 +933,13 @@ function enqueueOp(
   pendingEnqueue = true;
 }
 
-/** Room for several tournaments' worth of rows before the oldest are dropped. */
-const STAMP_LIMIT = 4000;
-const STAMP_KEEP = 3000;
+/**
+ * Room for several tournaments' worth of rows before the oldest are dropped.
+ * Score cells are stamped too (a phone writes ~36 a round, the desk a few
+ * thousand a day), so the ceiling is set for the desk device.
+ */
+const STAMP_LIMIT = 8000;
+const STAMP_KEEP = 6000;
 
 /**
  * What identifies one synced row, for ordering purposes. Most tables are keyed
@@ -942,6 +953,15 @@ function rowKey(table: string, row: Record<string, unknown>): string | null {
     case "card_in":
     case "certifications":
       return `${table}:${row.tournament_id}:${row.round ?? 1}:${row.player_id}`;
+    case "pairings":
+      return `pairings:${row.tournament_id}:${row.round ?? 1}:${row.group_id}`;
+    case "teams":
+      return `teams:${row.tournament_id}:${row.round ?? 1}:${row.team_id}`;
+    case "scores":
+      // one cell per source, matching the scores primary key (schema-m2)
+      return `scores:${row.tournament_id}:${row.round ?? 1}:${row.player_id}:${row.hole}:${row.source ?? "app"}`;
+    case "entries":
+      return `entries:${row.tournament_id}:${row.player_id}`;
     case "audit_log":
       return null; // insert-only and already idempotent by id
     default:
@@ -999,6 +1019,51 @@ function enqueueEntity(
     conflict: opts.conflict,
     insertOnly: opts.insertOnly,
   });
+}
+
+/** The row a score op becomes on the wire, for stamping and staleness checks. */
+function scoreStampRow(
+  tournamentId: string,
+  payload: { playerId: string; round: number; hole: number; source?: string },
+  updatedAt: string | undefined,
+) {
+  return {
+    tournament_id: tournamentId,
+    round: payload.round,
+    player_id: payload.playerId,
+    hole: payload.hole,
+    source: payload.source ?? "app",
+    updated_at: updatedAt,
+  };
+}
+
+/**
+ * Queue a score write and record it as this device's newest version of that
+ * cell, the way enqueueEntity does for a mapped row. The stamp is keyed the
+ * way pushOps keys the upsert and carries the same updated_at, so an older
+ * copy of the cell arriving later over the wire, or replayed by the post-push
+ * reconcile while the outbox is still draining, is ignored rather than
+ * written over what the player just entered. That replay is what used to
+ * reopen the hole-entry view in the middle of signing a card: one stale null
+ * and the round read as incomplete again.
+ */
+function enqueueScore(
+  draft: SimState,
+  kind: "score" | "resolve",
+  payload: {
+    playerId: string;
+    round: number;
+    hole: number;
+    gross: number | null;
+    source?: string;
+    tournamentId?: string;
+  },
+) {
+  const ts = Date.now();
+  const tournamentId =
+    payload.tournamentId ?? draft.liveTournamentId ?? LIVE_TOURNAMENT_ID;
+  stamp(draft, "scores", scoreStampRow(tournamentId, payload, new Date(ts).toISOString()));
+  enqueueOp(draft, kind, { ...payload, tournamentId }, ts);
 }
 
 function syncCert(draft: SimState, playerId: string) {
@@ -1110,7 +1175,7 @@ export function enterOwnScore(holeIdx: number, gross: number) {
     queueEcho(draft, { kind: "marker-joe", hole: holeIdx, at: Date.now() + 1700 });
     queueEcho(draft, { kind: "grace", hole: holeIdx, at: Date.now() + 2400 });
     maybeNotifyPosition(draft);
-    enqueueOp(draft, "score", {
+    enqueueScore(draft, "score", {
       playerId: DEMO_USER_ID,
       round: draft.liveRound,
       hole: holeIdx,
@@ -1126,7 +1191,7 @@ export function enterMarkerScore(holeIdx: number, gross: number) {
     ensureCard(draft, MARKER_ID, key);
     markerCardsFor(draft, key)[MARKER_ID][holeIdx] = gross;
     queueEcho(draft, { kind: "self-david", hole: holeIdx, at: Date.now() + 1300 });
-    enqueueOp(draft, "score", {
+    enqueueScore(draft, "score", {
       playerId: MARKER_ID,
       round: draft.liveRound,
       hole: holeIdx,
@@ -1141,28 +1206,10 @@ export function enterMarkerScore(holeIdx: number, gross: number) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Who marks whom inside a group. Round-robin, so in a group of [A,B,C,D]
- * A marks B, B marks C, C marks D and D marks A. Every player therefore has
- * exactly one marker and marks exactly one other player, which is what
- * Rule 3.3b assumes, and it is derived from the saved pairings so every
- * device agrees without extra state.
+ * Who marks whom inside a group: pairs, saved on the group so every device
+ * agrees, with a shared default for rows that carry none. See lib/markers.
  */
-export function markedByMe(group: SavedGroup | undefined, me: string): string | null {
-  if (!group) return null;
-  const ids = group.playerIds;
-  const i = ids.indexOf(me);
-  if (i < 0 || ids.length < 2) return null;
-  return ids[(i + 1) % ids.length];
-}
-
-/** The player who marks `me` (the inverse of markedByMe). */
-export function markerOf(group: SavedGroup | undefined, me: string): string | null {
-  if (!group) return null;
-  const ids = group.playerIds;
-  const i = ids.indexOf(me);
-  if (i < 0 || ids.length < 2) return null;
-  return ids[(i - 1 + ids.length) % ids.length];
-}
+export { markedByMe, markerOf };
 
 /**
  * Pilot: this device's player records their own score. Lands locally at once
@@ -1177,7 +1224,7 @@ export function enterOwnScorePilot(holeIdx: number, gross: number) {
     cardsFor(draft, key)[me][holeIdx] = gross;
     capturePace(draft, key, me);
     pushEvent(draft, me, holeIdx, gross);
-    enqueueOp(draft, "score", {
+    enqueueScore(draft, "score", {
       playerId: me,
       round: draft.liveRound,
       hole: holeIdx,
@@ -1200,7 +1247,7 @@ export function enterMarkerScoreFor(
     const key = liveKey(draft);
     ensureCard(draft, playerId, key);
     markerCardsFor(draft, key)[playerId][holeIdx] = gross;
-    enqueueOp(draft, "score", {
+    enqueueScore(draft, "score", {
       playerId,
       round: draft.liveRound,
       hole: holeIdx,
@@ -1260,7 +1307,7 @@ export function setBulkScore(pid: string, holeIdx: number, gross: number | null)
     if (gross != null && gross !== prev) pushEvent(draft, pid, holeIdx, gross);
     if (IS_PILOT) checkIntegrity(draft, pid);
     else maybeNotifyPosition(draft);
-    enqueueOp(draft, "score", {
+    enqueueScore(draft, "score", {
       playerId: pid,
       round: draft.liveRound,
       hole: holeIdx,
@@ -1950,7 +1997,17 @@ export function savePairings(
     const prior = draft.pairings[key] ?? [];
     const codeById = new Map(prior.map((g) => [g.id, g.code]).filter(([, c]) => c) as [string, string][]);
     const taken = new Set(codeById.values());
-    const coded = groups.map((g) => {
+    const priorById = new Map(prior.map((g) => [g.id, g] as const));
+    const coded = groups.map((g0) => {
+      /*
+       * Who marks whom is saved with the group. A swap the desk made survives
+       * an autosave that only moved a tee time; a change of membership
+       * recomputes the default so nobody is left marking someone who has
+       * moved groups.
+       */
+      const kept = g0.markers ?? priorById.get(g0.id)?.markers;
+      const markers = validMarkers(g0.playerIds, kept) ? kept : defaultMarkers(g0.playerIds);
+      const g = { ...g0, markers };
       const existing = g.code ?? codeById.get(g.id);
       if (existing) {
         taken.add(existing);
@@ -1968,8 +2025,53 @@ export function savePairings(
           conflict: "tournament_id,round,group_id",
         });
       }
+      // Nothing is deleted in the cloud, so a group the desk removed is
+      // published emptied. Every merge path drops an empty group, which is
+      // what keeps a removed group from coming back on the next reconcile.
+      for (const g of prior) {
+        if (coded.some((x) => x.id === g.id)) continue;
+        enqueueEntity(
+          draft,
+          "pairings",
+          pairingToRow(tournamentId, round, { ...g, playerIds: [] }),
+          { conflict: "tournament_id,round,group_id" },
+        );
+      }
     }
   });
+}
+
+/**
+ * The desk swaps who marks whom in one group (two players who arrived
+ * together keeping each other's cards). Refuses anything that is not a full,
+ * self-free assignment; publishes like a pairings save.
+ */
+export function setGroupMarkers(
+  tournamentId: string,
+  round: number,
+  groupId: string,
+  markers: Record<string, string>,
+): boolean {
+  const key = roundKey(tournamentId, round);
+  const g = (simStore.getState().pairings[key] ?? []).find((x) => x.id === groupId);
+  if (!g || !validMarkers(g.playerIds, markers)) return false;
+  mutate((draft) => {
+    const list = draft.pairings[key] ?? [];
+    const target = list.find((x) => x.id === groupId);
+    if (!target) return;
+    target.markers = { ...markers };
+    if (draft.liveTournamentId === tournamentId) {
+      enqueueEntity(draft, "pairings", pairingToRow(tournamentId, round, target), {
+        conflict: "tournament_id,round,group_id",
+      });
+    }
+  });
+  return true;
+}
+
+/** The marker assignment in force for a group (saved, or the shared default). */
+export function groupMarkers(g: SavedGroup): Record<string, string> {
+  return markersFor(g);
 }
 
 /** The teams that share a result, filed under the round the way pairings are. */
@@ -2007,6 +2109,8 @@ export function startTournamentDay(tournamentId: string, round = 1) {
     const key = roundKey(tournamentId, round);
     const groups = draft.pairings[key] ?? [];
     for (const g of groups) {
+      // every published group says who marks whom
+      if (!validMarkers(g.playerIds, g.markers)) g.markers = defaultMarkers(g.playerIds);
       for (const pid of g.playerIds) ensureCard(draft, pid, key);
     }
     // publish everything a joining device needs
@@ -2151,6 +2255,7 @@ export function groupsFromOrder(
       number: n + 1,
       teeTime: `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`,
       playerIds: ids.slice(i, i + size),
+      markers: defaultMarkers(ids.slice(i, i + size)),
     });
   }
   return groups;
@@ -2176,7 +2281,7 @@ export function resolveDiscrepancy(playerId: string, holeIdx: number, agreed: nu
     const flag = draft.flags.find((f) => f.id === `flag-user-h${holeIdx + 1}`);
     if (flag) flag.status = "reviewed";
     maybeNotifyPosition(draft);
-    enqueueOp(draft, "resolve", {
+    enqueueScore(draft, "resolve", {
       playerId,
       round: draft.liveRound,
       hole: holeIdx,
@@ -2222,6 +2327,33 @@ export function markerAttest(
     const t = activeTournamentOf(draft);
     const cert = ensureCert(draft, playerId, markerId);
     if (cert.stage === "disputed" || cert.stage === "certified") return;
+    /*
+     * The tee sheet says who keeps this card. Somebody else attesting it is
+     * not refused (the desk attests a single, and a group sorts itself out
+     * when a phone dies), but the Committee is told quietly so the trail
+     * shows who actually signed. Never blocks: a card held up for this would
+     * be worse than a note against it.
+     */
+    const group = roundPairings(draft).find((g) => g.playerIds.includes(playerId));
+    const assigned = markerOf(group, playerId);
+    if (IS_PILOT && group && assigned && assigned !== markerId) {
+      const who = (id: string) => playerInField(draft, id)?.name ?? id;
+      const already = draft.integrityLog.some(
+        (f) => f.playerId === playerId && f.id.startsWith("marker-"),
+      );
+      if (!already) {
+        draft.integrityLog.unshift({
+          id: `marker-${playerId}-${Date.now().toString(36)}`,
+          kind: "amber",
+          groupId: group.id,
+          playerId,
+          message: "Attested by a different marker than the tee sheet names",
+          detail: `${who(markerId)} attested ${who(playerId)}'s card; ${who(assigned)} was the marker on the sheet.`,
+          status: "open",
+          ts: Date.now(),
+        });
+      }
+    }
     cert.stage = "awaiting-player";
     cert.markerAttestedAt = Date.now();
     cert.markerMethod = artifact.method;
@@ -2497,7 +2629,7 @@ export async function resolveDispute(
     });
     enqueueEntity(draft, "disputes", disputeToRow(t.id, disp), { conflict: "id" });
     if (agreed != null) {
-      enqueueOp(draft, "resolve", {
+      enqueueScore(draft, "resolve", {
         playerId: d.playerId,
         round: d.round,
         hole: d.holeIdx,
@@ -2621,7 +2753,7 @@ export async function decideCorrection(
     });
     enqueueEntity(draft, "corrections", correctionToRow(t.id, corr), { conflict: "id" });
     if (approve) {
-      enqueueOp(draft, "resolve", {
+      enqueueScore(draft, "resolve", {
         playerId: corr.playerId,
         round: corr.round,
         hole: corr.holeIdx,
@@ -3115,6 +3247,7 @@ export function applyRemoteScore(
   source?: string,
   round?: number,
   tournamentId?: string,
+  updatedAt?: string,
 ) {
   /*
    * The same guard the desk path has. A row arriving over the wire has been
@@ -3126,16 +3259,23 @@ export function applyRemoteScore(
   if (!validGross(gross)) return;
   if (!Number.isInteger(holeIdx) || holeIdx < 0 || holeIdx > 17) return;
   const s = simStore.getState();
-  const key = roundKey(
-    tournamentId ?? s.liveTournamentId ?? LIVE_TOURNAMENT_ID,
-    round ?? s.liveRound ?? 1,
-  );
+  const tid = tournamentId ?? s.liveTournamentId ?? LIVE_TOURNAMENT_ID;
+  const rnd = round ?? s.liveRound ?? 1;
+  const key = roundKey(tid, rnd);
+  // Older than the copy of this cell the device already wrote or accepted:
+  // the wire delivers in any order, and a reconnect replays the backlog.
+  const stampRow = scoreStampRow(tid, { playerId: pid, round: rnd, hole: holeIdx, source }, updatedAt);
+  if (isStale(s, "scores", stampRow)) return;
   const current =
     source === "marker"
       ? roundMarkerScores(s, key)[pid]?.[holeIdx]
       : roundScores(s, key)[pid]?.[holeIdx];
-  if (current === gross) return;
+  const stampKey = rowKey("scores", stampRow);
+  const alreadyHeld = !updatedAt || (stampKey != null && s.stamps[stampKey] === updatedAt);
+  if (current === gross && alreadyHeld) return;
   mutate((draft) => {
+    stamp(draft, "scores", stampRow);
+    if (current === gross) return;
     applyScoreRow(draft, key, pid, holeIdx, gross, source);
     // the ticker only follows the round on the course, and only the player's
     // own card, never the marker's copy
@@ -3187,6 +3327,11 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
         const g = rowToPairing(row);
         const list = (draft.pairings[key] ??= []);
         const i = list.findIndex((x) => x.id === g.id);
+        if (g.playerIds.length === 0) {
+          // an emptied group is a removed group (see savePairings)
+          if (i >= 0) list.splice(i, 1);
+          break;
+        }
         if (i >= 0) list[i] = g;
         else list.push(g);
         list.sort((a, b) => a.number - b.number);
@@ -3298,25 +3443,40 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
     else draft.created.unshift(t);
     if (t.status === "live") draft.liveTournamentId = t.id;
 
-    // one tee sheet per round, filed under that round's key
-    const byRoundPairings: Record<string, SavedGroup[]> = {};
+    // One tee sheet per round, filed under that round's key. Merged by group
+    // rather than replaced, with the same staleness guard as the realtime
+    // path: a group this device saved or checked a player into moments ago
+    // carries a newer stamp than the cloud copy until the write echoes, and
+    // replacing the list wholesale made the player's group vanish from the
+    // Live tab for a beat on every reconcile.
     for (const row of snap.pairings) {
+      if (isStale(draft, "pairings", row)) continue;
+      stamp(draft, "pairings", row);
       const key = roundKey(t.id, (row.round as number) ?? 1);
-      (byRoundPairings[key] ??= []).push(rowToPairing(row));
-    }
-    for (const [key, groups] of Object.entries(byRoundPairings)) {
-      draft.pairings[key] = groups.sort((a, b) => a.number - b.number);
+      const g = rowToPairing(row);
+      const list = (draft.pairings[key] ??= []);
+      const i = list.findIndex((x) => x.id === g.id);
+      if (g.playerIds.length === 0) {
+        if (i >= 0) list.splice(i, 1);
+        continue;
+      }
+      if (i >= 0) list[i] = g;
+      else list.push(g);
+      list.sort((a, b) => a.number - b.number);
     }
 
-    // teams, filed under the same round key as pairings
-    const byRoundTeams: Record<string, Team[]> = {};
+    // teams, filed under the same round key as pairings, merged the same way
     for (const row of snap.teams ?? []) {
+      if (isStale(draft, "teams", row)) continue;
+      stamp(draft, "teams", row);
       const tm = rowToTeam(row);
-      byRoundTeams[roundKey(t.id, tm.round ?? 1)] ??= [];
-      byRoundTeams[roundKey(t.id, tm.round ?? 1)].push(tm);
-      ensureCard(draft, tm.id, roundKey(t.id, tm.round ?? 1));
+      const key = roundKey(t.id, tm.round ?? 1);
+      const list = (draft.teams[key] ??= []);
+      const i = list.findIndex((x) => x.id === tm.id);
+      if (i >= 0) list[i] = tm;
+      else list.push(tm);
+      ensureCard(draft, tm.id, key);
     }
-    for (const [key, list] of Object.entries(byRoundTeams)) draft.teams[key] = list;
 
     for (const r of snap.players) {
       const p = rowToPlayer(r);
@@ -3329,10 +3489,18 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
     // players recorded, and route each row to the card view it belongs to:
     // the player's own card, their marker's view of it, or (from the desk) the
     // agreed figure that settles both.
+    // Each cell is guarded by its stamp, so a cell this device wrote after
+    // the snapshot was taken keeps the local figure until the write echoes;
+    // and the wire's figures get the same sanity check the realtime path has.
     const ordered = [...snap.scores].sort((a, b) =>
       String(a.updated_at ?? "").localeCompare(String(b.updated_at ?? "")),
     );
     for (const r of ordered) {
+      if (!validGross(r.gross)) continue;
+      if (!Number.isInteger(r.hole) || r.hole < 0 || r.hole > 17) continue;
+      const row = r as unknown as Record<string, unknown>;
+      if (isStale(draft, "scores", row)) continue;
+      stamp(draft, "scores", row);
       const key = roundKey(t.id, r.round ?? 1);
       applyScoreRow(draft, key, r.player_id, r.hole, r.gross, r.source);
     }

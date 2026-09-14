@@ -87,6 +87,7 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
           row.source as string | undefined,
           (row.round as number) ?? 1,
           row.tournament_id as string | undefined,
+          row.updated_at as string | undefined,
         );
       } else {
         applyRemoteEntity(table, row);

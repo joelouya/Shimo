@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -25,9 +25,11 @@ import {
   groupsFromOrder,
   orderByStandings,
   savePairings,
+  setGroupMarkers,
   simStore,
   useSim,
 } from "@/lib/sim/store";
+import { describeMarkers, pairingOptions } from "@/lib/markers";
 import { roundKey, roundsOf } from "@/lib/rounds";
 import { printTeeSheet } from "@/lib/teesheet/print";
 import type { Player } from "@/lib/types";
@@ -36,6 +38,47 @@ import { cn, formatDateLong } from "@/lib/utils";
 interface DraftGroup {
   id: string;
   playerIds: string[];
+  /** who marks whom, carried so an autosave never undoes a desk swap */
+  markers?: Record<string, string>;
+}
+
+/** The order-and-membership fingerprint of a tee sheet, ignoring times. */
+function sheetSig(gs: { id: string; playerIds: string[] }[]) {
+  return gs.map((g) => `${g.id}:${g.playerIds.join(",")}`).join("|");
+}
+
+function MarkerLine({
+  group,
+  nameOf,
+  onSwap,
+}: {
+  group: { playerIds: string[]; markers?: Record<string, string> };
+  nameOf: (id: string) => string;
+  onSwap?: () => void;
+}) {
+  const lines = describeMarkers(group, nameOf);
+  if (!lines.length) return null;
+  return (
+    <div className="mt-2.5 flex items-start justify-between gap-2 border-t border-border/70 pt-2">
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        <span className="smallcaps mr-1.5">Marks</span>
+        {lines.join(" · ")}
+      </p>
+      {onSwap && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSwap();
+          }}
+          className="shrink-0 cursor-pointer text-[10.5px] font-medium text-clay hover:text-clay-deep"
+          title="Change which two players keep each other's cards"
+        >
+          Swap pairs
+        </button>
+      )}
+    </div>
+  );
 }
 
 function addMinutes(hhmm: string, mins: number) {
@@ -227,10 +270,13 @@ export default function PairingsPage({
    * and autosave never sees the gap between the two.
    */
   const [loadedRound, setLoadedRound] = useState<number | null>(null);
+  const lastSavedSig = useRef("");
   if (loadedRound !== round) {
     setLoadedRound(round);
     if (saved?.length) {
-      setGroups(saved.map((g) => ({ id: g.id, playerIds: [...g.playerIds] })));
+      setGroups(
+        saved.map((g) => ({ id: g.id, playerIds: [...g.playerIds], markers: g.markers })),
+      );
     } else if (isCaptains && round === 1) {
       setGroups(GROUPS.map((g) => ({ id: g.id, playerIds: [...g.playerIds] })));
     } else {
@@ -261,6 +307,7 @@ export default function PairingsPage({
   const interval = roundInfo?.teeInterval || t?.teeInterval || 10;
   useEffect(() => {
     if (!t) return;
+    lastSavedSig.current = sheetSig(groups);
     savePairings(
       id,
       groups.map((g, i) => ({
@@ -268,11 +315,31 @@ export default function PairingsPage({
         number: i + 1,
         teeTime: addMinutes(firstTee, i * interval),
         playerIds: g.playerIds,
+        markers: g.markers,
       })),
       round,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, firstTee, round]);
+
+  /*
+   * The round's tee sheet can change underneath this page: the desk checks a
+   * walk-up into a group on another tab, or a second device saves. Adopt
+   * that copy rather than autosaving the stale one back over it, which is
+   * how a player checked in at the desk used to vanish from the sheet.
+   */
+  useEffect(() => {
+    // an absent or emptied sheet is not a change to adopt: the page keeps its
+    // starter groups until something is actually saved for the round
+    if (!saved?.length) return;
+    const sig = sheetSig(saved);
+    if (sig === lastSavedSig.current || sig === sheetSig(groups)) return;
+    lastSavedSig.current = sig;
+    setGroups(
+      saved.map((g) => ({ id: g.id, playerIds: [...g.playerIds], markers: g.markers })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
 
   /**
    * Fill this round from the previous one's leaderboard: survivors of the cut
@@ -319,6 +386,18 @@ export default function PairingsPage({
           : g,
       );
     });
+  };
+
+  /** Cycle a fourball through its three pairings; the store publishes it. */
+  const swapPairs = (g: DraftGroup) => {
+    const current = saved?.find((x) => x.id === g.id)?.markers ?? g.markers;
+    const options = pairingOptions(g.playerIds);
+    const i = current
+      ? options.findIndex((o) => g.playerIds.every((pid) => o[pid] === current[pid]))
+      : -1;
+    const next = options[(i + 1) % options.length];
+    setGroups((gs) => gs.map((x) => (x.id === g.id ? { ...x, markers: next } : x)));
+    setGroupMarkers(id, round, g.id, next);
   };
 
   const exportPdf = async () => {
@@ -535,6 +614,16 @@ export default function PairingsPage({
                     </p>
                   )}
                 </div>
+                {g.playerIds.length >= 2 && (
+                  <MarkerLine
+                    group={{
+                      playerIds: g.playerIds,
+                      markers: saved?.find((x) => x.id === g.id)?.markers ?? g.markers,
+                    }}
+                    nameOf={(pid) => byId.get(pid)?.name.split(" ").pop() ?? pid}
+                    onSwap={g.playerIds.length === 4 ? () => swapPairs(g) : undefined}
+                  />
+                )}
               </div>
             ))}
           </div>

@@ -19,6 +19,7 @@ import { normaliseGroupCode } from "@/lib/group-code";
 import { REMOTE_CONFIGURED, supabase } from "@/lib/sync/client";
 import { getRemote } from "@/lib/sync/remote";
 import { groupForCode, hydrateFromSnapshot, simStore } from "@/lib/sim/store";
+import { roundKey } from "@/lib/rounds";
 
 export type GroupResolveResult =
   | { status: "ok"; tournamentId: string; round: number; groupId: string }
@@ -73,22 +74,20 @@ export async function resolveGroupCode(input: string): Promise<GroupResolveResul
  * Pull down the tournament a group belongs to, so its field, pairings and every
  * player's row are in local state before the player picks themselves out.
  *
- * Returns whether it landed; the screen that called it renders from the store
- * afterwards exactly as it would for someone who had the event all along.
+ * Always asks the server when it can: a device that opened the event earlier
+ * may hold yesterday's tee sheet, and the store merges what comes back group
+ * by group with its staleness guard, so the fetch is safe and the freshest
+ * order wins. With no signal, the copy already on the phone is better than
+ * nothing, and that is what the screen renders from.
  */
-export async function hydrateForGroup(tournamentId: string): Promise<boolean> {
-  // already here (the local resolve path): nothing to fetch.
-  if (simStore.getState().pairings) {
-    const has = Object.keys(simStore.getState().pairings).some((k) =>
-      k.startsWith(tournamentId),
-    );
-    if (has) return true;
-  }
-  if (!REMOTE_CONFIGURED) return false;
+export async function hydrateForGroup(tournamentId: string, round = 1): Promise<boolean> {
+  const have = () =>
+    (simStore.getState().pairings[roundKey(tournamentId, round)] ?? []).length > 0;
+  if (!REMOTE_CONFIGURED) return have();
   try {
     hydrateFromSnapshot(await getRemote().hydrate(tournamentId));
     return true;
   } catch {
-    return false;
+    return have();
   }
 }

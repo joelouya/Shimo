@@ -14,12 +14,15 @@
 
 import type { Course, Tournament } from "@/lib/types";
 import type { SavedGroup } from "@/lib/sim/store";
+import { markersFor } from "@/lib/markers";
 
 export interface TeeSheetRow {
   number: number;
   teeTime: string;
   /** display names, in play order within the group */
   players: string[];
+  /** whose card each player keeps, parallel to `players` ("" when nobody) */
+  marks: string[];
   /** the group's short code, printed for the camera-shy phone */
   code: string;
   /** a QR to land on this group, as a data: URI */
@@ -64,6 +67,13 @@ export function teeSheetSpec(args: {
       number: g.number,
       teeTime: g.teeTime,
       players: g.playerIds.map(nameOf),
+      marks: (() => {
+        const m = markersFor(g);
+        return g.playerIds.map((pid) => {
+          const marked = g.playerIds.find((other) => m[other] === pid);
+          return marked ? nameOf(marked) : "";
+        });
+      })(),
       code: g.code ?? "",
       qr: g.code ? qrByGroup[g.id] : undefined,
     }));

@@ -26,7 +26,6 @@ const NAVY = "#1a2332";
 const INK_SOFT = "#414b5e";
 const STONE = "#736d61";
 const BORDER = "#d9d1bf";
-const SHADE = "#efe9dc";
 
 const PAD = 64;
 const ROWS_PER_PAGE = 11;
@@ -69,13 +68,17 @@ function GroupRow({ row }: { row: TeeSheetRow }) {
             key={i}
             style={{
               display: "flex",
-              fontSize: 23,
-              color: INK_SOFT,
+              flexDirection: "column",
               width: "50%",
-              paddingBottom: 4,
+              paddingBottom: 6,
             }}
           >
-            {p}
+            <div style={{ display: "flex", fontSize: 23, color: INK_SOFT }}>{p}</div>
+            {row.marks?.[i] ? (
+              <div style={{ display: "flex", fontSize: 14, color: STONE, marginTop: 1 }}>
+                marks {row.marks[i]}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
