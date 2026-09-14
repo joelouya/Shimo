@@ -192,6 +192,39 @@ export function useStandings(mode: ViewMode, division?: string): StandingRow[] {
   }, [scores, mode, division, active]);
 }
 
+/**
+ * Standings for one specific round of a multi-round event, read as it was
+ * played: that round's field, cards and course. `round` equal to the live
+ * round is the same board useStandings gives.
+ */
+export function useRoundStandings(
+  mode: ViewMode,
+  division: string | undefined,
+  round: number,
+): StandingRow[] {
+  const active = useActiveTournament();
+  const key = active ? roundKeyOf(active.tournament.id, round) : "";
+  const scores = useSim((s) => (key ? (s.scores[key] ?? EMPTY_ROUND) : EMPTY_ROUND));
+  const groups = useSim((s) => (key ? (s.pairings[key] ?? EMPTY_GROUPS) : EMPTY_GROUPS));
+  const roster = useSim((s) => s.roster);
+  return useMemo(() => {
+    if (!active) return [];
+    const info = roundOf(active.tournament, round);
+    const course = COURSES.find((c) => c.id === info.courseId) ?? active.course;
+    const ids = new Set(groups.flatMap((g) => g.playerIds));
+    let players = IS_PILOT ? roster.filter((p) => ids.has(p.id)) : active.players;
+    if (!IS_PILOT || players.length === 0) players = active.players;
+    if (division && division !== "Overall") {
+      players = players.filter(
+        (p) => divisionFor(p.handicap, active.tournament.divisions) === division,
+      );
+    }
+    return computeStandings(players, scores, course, active.tournament.handicapAllowance, mode);
+  }, [active, round, scores, groups, roster, division, mode]);
+}
+const EMPTY_ROUND: Record<string, HoleScores> = {};
+const EMPTY_GROUPS: SavedGroup[] = [];
+
 /** True when the day is scored as teams rather than individuals. */
 export function isTeamFormat(t: Tournament | undefined): boolean {
   return t?.format === "Scramble" || t?.format === "Better Ball";

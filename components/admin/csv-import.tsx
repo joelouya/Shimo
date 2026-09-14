@@ -109,13 +109,16 @@ export function CsvImportCard() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [invited, setInvited] = useState(false);
 
+  // the club the roster already belongs to, rather than a literal
+  const clubId = useSim((s) => s.roster.find((p) => !p.guest)?.clubId ?? "muthaiga");
+
   const doImport = () => {
     if (!preview) return;
     for (const row of preview) {
       addRosterMember({
         id: `p-csv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         name: row.name,
-        clubId: "muthaiga",
+        clubId,
         handicap: row.handicap,
         gender: row.gender,
         email: row.email || undefined,

@@ -84,7 +84,7 @@ export function ProductShots() {
                 />
               </div>
               <Caption title="The golfer scores from their phone">
-                Hole by hole, marking a partner's card, no download.
+                Hole by hole, marking a partner&apos;s card, no download.
               </Caption>
             </figure>
           </Reveal>

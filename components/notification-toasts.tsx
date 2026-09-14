@@ -32,7 +32,7 @@ export function NotificationToasts() {
   }, [notifications, mountTs]);
 
   return (
-    <div className="pointer-events-none absolute inset-x-3 top-3 z-50 flex flex-col gap-2">
+    <div className="pointer-events-none fixed left-1/2 top-[max(env(safe-area-inset-top),12px)] z-50 flex w-[calc(100%-24px)] max-w-[406px] -translate-x-1/2 flex-col gap-2">
       <AnimatePresence>
         {visible.map((n) => (
           <motion.div

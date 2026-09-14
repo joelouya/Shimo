@@ -525,10 +525,10 @@ function DemoLiveScoring() {
   const hidden = useSim((s) => s.hideLeaderboard);
   const me = useUserLive();
 
-  const joeCard = scores[DEMO_USER_ID];
-  const joeMarkerView = markerScores[DEMO_USER_ID]; // what David has for Joe
-  const davidCard = markerScores[MARKER_ID]; // what Joe has for David
-  const davidOwn = scores[MARKER_ID];
+  const joeCard = (scores[DEMO_USER_ID] ?? EMPTY_CARD);
+  const joeMarkerView = (markerScores[DEMO_USER_ID] ?? EMPTY_CARD); // what David has for Joe
+  const davidCard = (markerScores[MARKER_ID] ?? EMPTY_CARD); // what Joe has for David
+  const davidOwn = (scores[MARKER_ID] ?? EMPTY_CARD);
 
   // first hole still needing an entry on this phone
   const currentIdx = useMemo(() => {
@@ -842,10 +842,10 @@ function PlayerEntry({
 
   return (
     <div className="rounded-2xl bg-card p-4 shadow-card">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
           <p className="smallcaps text-[9px] text-clay">{title}</p>
-          <p className="mt-0.5 text-[14px] font-medium text-foreground">
+          <p className="mt-0.5 truncate text-[14px] font-medium text-foreground">
             {name}
             <span className="ml-1.5 text-[11px] font-normal text-muted-foreground tnum">
               PH {ph}
@@ -853,7 +853,7 @@ function PlayerEntry({
           </p>
         </div>
         {strokes > 0 && (
-          <span className="rounded-full bg-clay-wash px-2 py-0.5 text-[10px] font-medium text-clay-deep">
+          <span className="shrink-0 rounded-full bg-clay-wash px-2 py-0.5 text-[10px] font-medium text-clay-deep">
             {strokes} stroke{strokes > 1 ? "s" : ""} here
           </span>
         )}

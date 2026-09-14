@@ -27,6 +27,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#F7F3EC",
+  // without this every env(safe-area-inset-*) resolves to 0 on iOS, and the
+  // bottom nav sits under the home indicator
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

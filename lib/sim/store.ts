@@ -330,6 +330,13 @@ export interface SimState {
   /** local-first sync queue */
   outbox: SyncOp[];
   /**
+   * When this device last heard back from the cloud (an open-tournament
+   * check completed), or null before the first answer. Home reads it to
+   * say "checking with the club" rather than "nothing running" while the
+   * first fetch is still in flight.
+   */
+  cloudCheckedAt: number | null;
+  /**
    * The newest `updated_at` this device has accepted for each synced row,
    * keyed `table:id`. Realtime does not promise order and a reconnect replays
    * whatever the query returns, so without this a stale row overwrites a
@@ -486,6 +493,7 @@ export function buildInitialState(): SimState {
     cardIn: {},
     integrityLog: [],
     outbox: [],
+    cloudCheckedAt: null,
     stamps: {},
     lastSyncedAt: null,
     certifications: {},
@@ -623,6 +631,7 @@ function normalize(saved: SimState): SimState {
   out.deskWelcomed ??= false;
   out.checkIns ??= {};
   out.liveRound ||= 1;
+  out.cloudCheckedAt ??= null;
   return out;
 }
 
@@ -2260,6 +2269,13 @@ export function groupsFromOrder(
     });
   }
   return groups;
+}
+
+/** The engine heard back from the cloud (or has no cloud to ask). */
+export function markCloudChecked() {
+  mutate((d) => {
+    d.cloudCheckedAt = Date.now();
+  });
 }
 
 export function retryFailedOps() {

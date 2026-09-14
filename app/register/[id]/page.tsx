@@ -17,6 +17,7 @@
  * of them are health data.
  */
 
+import Link from "next/link";
 import { use, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check, Copy } from "lucide-react";
@@ -196,15 +197,25 @@ function Done({
           </Button>
         </motion.div>
 
-        <motion.p
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="mt-6 text-[13px] leading-relaxed text-muted-foreground"
+          className="mt-6"
         >
-          The organiser has your details. If anything changes, tell them rather
-          than registering again.
-        </motion.p>
+          {!waitlisted && (
+            <Button variant="clay" size="lg" className="w-full" asChild>
+              <Link href={`/enter?code=${encodeURIComponent(code)}`}>
+                Set up this phone for the day
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          )}
+          <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
+            The organiser has your details. If anything changes, tell them rather
+            than registering again.
+          </p>
+        </motion.div>
       </div>
     </Frame>
   );

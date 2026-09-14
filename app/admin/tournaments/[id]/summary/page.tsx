@@ -1,5 +1,6 @@
 "use client";
 
+import { useReducedMotion } from "framer-motion";
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -46,14 +47,9 @@ function scoreLabel(r: CumulativeRow, mode: ViewMode) {
  */
 function CountUp({ value, className }: { value: number; className?: string }) {
   const [shown, setShown] = useState(0);
+  const still = useReducedMotion();
   useEffect(() => {
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      setShown(value);
-      return;
-    }
+    if (still) return; // the figure is rendered directly below
     let raf = 0;
     const start = performance.now();
     const dur = 1100;
@@ -65,8 +61,8 @@ function CountUp({ value, className }: { value: number; className?: string }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [value]);
-  return <span className={className}>{shown}</span>;
+  }, [value, still]);
+  return <span className={className}>{still ? value : shown}</span>;
 }
 
 function SharePublicBoard({ tournamentId }: { tournamentId: string }) {

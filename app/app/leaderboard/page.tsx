@@ -15,8 +15,9 @@ import { ClubCrest } from "@/components/club-brand";
 import { SponsorStrip } from "@/components/sponsor-strip";
 import { LiveBadge } from "@/components/live-dot";
 import { LastUpdatedNote, SyncStrip } from "@/components/sync-status";
-import { DEMO_USER_ID, GROUPS, clubById, playerById } from "@/lib/data";
+import { DEMO_USER_ID, GROUPS, clubById, findClub, playerById } from "@/lib/data";
 import { roundsOf } from "@/lib/rounds";
+import type { Course } from "@/lib/types";
 import {
   formatCutLine,
   playingHandicap,
@@ -24,23 +25,8 @@ import {
   type StandingRow,
   type ViewMode,
 } from "@/lib/scoring";
-import {
-  isTeamFormat,
-  useActiveTournament,
-  useCumulative,
-  useMeId,
-  useRoundScores,
-  useRyderCupBoard,
-  useStandings,
-  useTeamStandings,
-} from "@/lib/sim/hooks";
-import {
-  LIVE_COURSE,
-  LIVE_TOURNAMENT,
-  playerInField,
-  setHideLeaderboard,
-  useSim,
-} from "@/lib/sim/store";
+import { isTeamFormat, useActiveTournament, useCumulative, useMeId, useRoundScores, useRoundStandings, useRyderCupBoard, useStandings, useTeamStandings } from "@/lib/sim/hooks";
+import { LIVE_COURSE, LIVE_TOURNAMENT, meId, playerInField, roundCerts, setHideLeaderboard, useSim } from "@/lib/sim/store";
 import { IS_PILOT } from "@/lib/mode";
 import { cn, toPar } from "@/lib/utils";
 
@@ -108,7 +94,7 @@ function FeaturedGroups() {
     <div className="no-scrollbar -mx-5 mt-4 flex gap-3 overflow-x-auto px-5 pb-1">
       {featured.map((g) => {
         const thru = Math.min(
-          ...g.playerIds.map((pid) => scores[pid].filter((x) => x != null).length),
+          ...g.playerIds.map((pid) => (scores[pid] ?? []).filter((x) => x != null).length),
         );
         return (
           <div
@@ -127,7 +113,7 @@ function FeaturedGroups() {
               {g.playerIds.map((pid) => {
                 const p = playerById(pid);
                 const ph = playingHandicap(p.handicap, LIVE_TOURNAMENT.handicapAllowance);
-                const pts = scores[pid].reduce<number>(
+                const pts = (scores[pid] ?? []).reduce<number>(
                   (acc, gross, i) =>
                     gross == null
                       ? acc
@@ -164,17 +150,19 @@ function Nine({
   from,
   card,
   ph,
+  course,
 }: {
   from: number;
   card: (number | null)[];
   ph: number;
+  course: Course;
 }) {
   return (
     <div className="grid grid-cols-[3.4rem_repeat(9,minmax(0,1fr))] gap-y-1 text-center">
       <span className="smallcaps text-[8px] text-muted-foreground self-center text-left pl-1">
         {from === 0 ? "Out" : "In"}
       </span>
-      {LIVE_COURSE.holes.slice(from, from + 9).map((h) => (
+      {course.holes.slice(from, from + 9).map((h) => (
         <span key={h.hole} className="text-[9px] text-muted-foreground tnum">
           {h.hole}
         </span>
@@ -182,7 +170,7 @@ function Nine({
       <span className="smallcaps text-[8px] text-muted-foreground self-center text-left pl-1">
         Par
       </span>
-      {LIVE_COURSE.holes.slice(from, from + 9).map((h) => (
+      {course.holes.slice(from, from + 9).map((h) => (
         <span key={h.hole} className="text-[10px] text-muted-foreground tnum">
           {h.par}
         </span>
@@ -190,7 +178,7 @@ function Nine({
       <span className="smallcaps text-[8px] text-foreground self-center text-left pl-1">
         Score
       </span>
-      {LIVE_COURSE.holes.slice(from, from + 9).map((h, i) => {
+      {course.holes.slice(from, from + 9).map((h, i) => {
         const gross = card[from + i];
         const d = gross == null ? 0 : gross - h.par;
         return (
@@ -213,7 +201,7 @@ function Nine({
       <span className="smallcaps text-[8px] text-clay-deep self-center text-left pl-1">
         Pts
       </span>
-      {LIVE_COURSE.holes.slice(from, from + 9).map((h, i) => {
+      {course.holes.slice(from, from + 9).map((h, i) => {
         const gross = card[from + i];
         return (
           <span key={h.hole} className="text-[10px] text-clay-deep tnum">
@@ -227,14 +215,17 @@ function Nine({
 
 function ExpandedScorecard({ row }: { row: StandingRow }) {
   const scores = useRoundScores();
+  const active = useActiveTournament();
+  const course = active?.course ?? LIVE_COURSE;
+  const allowance = active?.tournament.handicapAllowance ?? LIVE_TOURNAMENT.handicapAllowance;
   const card = scores[row.player.id] ?? [];
-  const ph = playingHandicap(row.player.handicap, LIVE_TOURNAMENT.handicapAllowance);
+  const ph = playingHandicap(row.player.handicap, allowance);
 
   return (
     <div className="flex flex-col gap-2.5 rounded-xl bg-secondary/50 p-3">
-      <Nine from={0} card={card} ph={ph} />
+      <Nine from={0} card={card} ph={ph} course={course} />
       <div className="h-px bg-border/70" />
-      <Nine from={9} card={card} ph={ph} />
+      <Nine from={9} card={card} ph={ph} course={course} />
     </div>
   );
 }
@@ -428,7 +419,7 @@ function CumulativeRows({
               )}
             </span>
             <span className="block truncate text-[11px] text-muted-foreground">
-              {clubById(r.player.clubId).short} · HC {r.player.handicap}
+              {[findClub(r.player.clubId)?.short, `HC ${r.player.handicap}`].filter(Boolean).join(" · ")}
             </span>
           </span>
           {rounds.map((rn) => {
@@ -529,13 +520,28 @@ function SelfBar({
   );
 }
 
-function LeaderboardRows({ mode, division }: { mode: ViewMode; division: string }) {
+function LeaderboardRows({
+  mode,
+  division,
+  round,
+}: {
+  mode: ViewMode;
+  division: string;
+  /** a specific round of a multi-round event; the live round when absent */
+  round?: number;
+}) {
   const active = useActiveTournament();
-  // a Scramble or Better Ball is scored as teams; both hooks run every render
-  // (rules of hooks) and the format decides which board is shown
+  // a Scramble or Better Ball is scored as teams; all hooks run every render
+  // (rules of hooks) and the format and the round asked for decide the board
   const teamRows = useTeamStandings(mode, division);
   const individualRows = useStandings(mode, division);
-  const rows = isTeamFormat(active?.tournament) ? teamRows : individualRows;
+  const roundRows = useRoundStandings(mode, division, round ?? active?.round ?? 1);
+  const specificRound = round != null && round !== active?.round;
+  const rows = isTeamFormat(active?.tournament)
+    ? teamRows
+    : specificRound
+      ? roundRows
+      : individualRows;
   const me = useMeId();
   const still = useReducedMotion();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -706,17 +712,26 @@ function RyderCupBoardView() {
 
 export default function LeaderboardPage() {
   const hidden = useSim((s) => s.hideLeaderboard);
-  const attested = useSim((s) => s.attested);
+  // the card is signed: demo after the scripted attest, pilot once this
+  // player's own card is returned
+  const signed = useSim((s) => {
+    if (!IS_PILOT) return s.attested;
+    const c = roundCerts(s)[meId(s)];
+    return c?.stage === "certified" || c?.stage === "dq";
+  });
   const active = useActiveTournament();
-  const [mode, setMode] = useState<ViewMode>(
-    active?.tournament.format === "Stroke Play" ? "net" : "points",
-  );
+  // the natural view follows the format; a tap pins one. Derived rather than
+  // seeded into state, because in pilot the tournament arrives after mount.
+  const natural: ViewMode = active?.tournament.format === "Stroke Play" ? "net" : "points";
+  const [pinnedMode, setPinnedMode] = useState<ViewMode | null>(null);
+  const mode = pinnedMode ?? natural;
+  const setMode = setPinnedMode;
   const [division, setDivision] = useState("Overall");
   const [peeking, setPeeking] = useState(false);
   // "cumulative" or a round number, for multi-round events
   const [scope, setScope] = useState("cumulative");
 
-  const blind = !IS_PILOT && hidden && !attested && !peeking;
+  const blind = hidden && !signed && !peeking;
 
   if (!active) {
     return (
@@ -739,14 +754,14 @@ export default function LeaderboardPage() {
       .map((d) => d.name)
       .filter((n) => n !== "Overall"),
   ];
-  const club = clubById(active.tournament.clubId);
+  const clubShort = findClub(active.tournament.clubId)?.short;
 
   return (
     <div className="px-5 pt-5">
       <header>
         <div className="flex items-center justify-between">
           <p className="smallcaps text-muted-foreground">
-            {active.roundInfo.name} · {club.short} · Par {active.course.par}
+            {[active.roundInfo.name, clubShort, `Par ${active.course.par}`].filter(Boolean).join(" · ")}
           </p>
           <LiveBadge />
         </div>
@@ -793,6 +808,17 @@ export default function LeaderboardPage() {
       ) : (
         <>
           {!IS_PILOT && <FeaturedGroups />}
+
+          {hidden && peeking && !signed && (
+            <button
+              type="button"
+              onClick={() => setPeeking(false)}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/60 py-2.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+            >
+              <EyeOff className="size-3.5" />
+              Peeking. Hide the board again
+            </button>
+          )}
 
           <div className="mt-5 flex items-center justify-between gap-2">
             <Tabs value={mode} onValueChange={(v) => setMode(v as ViewMode)}>
@@ -853,7 +879,11 @@ export default function LeaderboardPage() {
               rounds={allRounds.map((r) => r.number)}
             />
           ) : (
-            <LeaderboardRows mode={mode} division={division} />
+            <LeaderboardRows
+              mode={mode}
+              division={division}
+              round={scope === "cumulative" ? undefined : Number(scope)}
+            />
           )}
           <p className="mt-3 text-center text-[12px] text-muted-foreground">
             Scores update live as cards are entered ·{" "}

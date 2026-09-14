@@ -25,6 +25,7 @@ import { SimGate } from "@/components/sim-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { normaliseGroupCode } from "@/lib/group-code";
 import { normaliseCode } from "@/lib/guests";
 import {
   enterResolvedGuest,
@@ -66,6 +67,16 @@ function Enter() {
        * locally first: it is instant and works with no signal, which is the
        * common case of a guest who registered on this very phone.
        */
+      /*
+       * A four-character code is a group code off the tee sheet, not a
+       * registration: hand it to the screen that resolves groups, so a guest
+       * holding the wrong kind of code is not told it "did not open anything".
+       */
+      const group = normaliseGroupCode(raw);
+      if (group && normaliseCode(raw).length !== 7) {
+        router.push(`/play?c=${encodeURIComponent(group)}`);
+        return;
+      }
       const local = guestForCode(simStore.getState(), raw);
       if (local) {
         setDeviceIdentity(local.player.id);
@@ -128,8 +139,8 @@ function Enter() {
             Open your scorecard
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
-            Use the code from your registration. Six characters, and it works on
-            any phone.
+            Use the code from your registration (like abc-123), or the short
+            group code printed on the tee sheet. It works on any phone.
           </p>
         </motion.div>
 
@@ -193,7 +204,7 @@ function Enter() {
             variant="clay"
             size="lg"
             className="w-full"
-            disabled={normaliseCode(code).length !== 7 || checking}
+            disabled={(normaliseCode(code).length !== 7 && !normaliseGroupCode(code)) || checking}
             onClick={() => submit(code)}
           >
             {checking ? "Opening" : "Open my card"}

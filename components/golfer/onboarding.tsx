@@ -38,7 +38,7 @@ import { EASE, Reveal, Shell, StepBody } from "@/components/golfer/onboarding-sh
 import { Walkthrough } from "@/components/golfer/walkthrough";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { clubById } from "@/lib/data";
+import { findClub } from "@/lib/data";
 import { AUTH_AVAILABLE, sendLoginCode, signOut, verifyLoginCode } from "@/lib/sync/auth";
 import { IS_PILOT } from "@/lib/mode";
 import { accessMessage, memberAccess } from "@/lib/membership";
@@ -441,7 +441,7 @@ function OnboardingFlow() {
  */
 function Greeting({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const active = useActiveTournament();
-  const club = active ? clubById(active.tournament.clubId) : null;
+  const club = active ? (findClub(active.tournament.clubId) ?? null) : null;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -455,10 +455,10 @@ function Greeting({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }
           <LogoMark className="size-8" />
         </motion.div>
       </Reveal>
-      {active && club ? (
+      {active ? (
         <>
           <Reveal i={1}>
-            <p className="mt-5 smallcaps text-muted-foreground">{club.name}</p>
+            <p className="mt-5 smallcaps text-muted-foreground">{club?.name ?? "Your club"}</p>
           </Reveal>
           <Reveal i={2}>
             <h1 className="mt-2 font-serif text-[30px] leading-tight text-foreground">
@@ -801,7 +801,7 @@ function ConfirmProfile({
   // Reached with an email that signed in but is not on the roster: name the
   // state and offer the paths the club, not the app, can actually resolve.
   if (!player) return <NoMembership />;
-  const club = clubById(player.clubId);
+  const clubName = findClub(player.clubId)?.name ?? "Your club";
 
   return (
     <StepBody icon={<Check className="size-6" />} title="Is this you?">
@@ -827,7 +827,7 @@ function ConfirmProfile({
               {player.name}
             </p>
             <p className="mt-0.5 text-[13px] text-muted-foreground">
-              {club.name} · HC {player.handicap}
+              {clubName} · HC {player.handicap}
             </p>
           </div>
         </motion.div>

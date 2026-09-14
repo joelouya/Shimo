@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { TournamentCard } from "@/components/golfer/tournament-card";
 import { CLUBS } from "@/lib/data";
 import { eligibilityFor } from "@/lib/eligibility";
+import { IS_PILOT } from "@/lib/mode";
 import { allTournaments, useSim } from "@/lib/sim/store";
 import type { Format } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const ym = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const TODAY_ISO = isoDay(NOW);
+const YESTERDAY_ISO = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 const WEEK_END_ISO = isoDay(new Date(NOW.getTime() + 7 * 86_400_000));
 const THIS_MONTH = ym(NOW);
 const NEXT_MONTH_DATE = new Date(NOW.getFullYear(), NOW.getMonth() + 1, 1);
@@ -76,6 +78,9 @@ export default function TournamentsPage() {
   const list = useMemo(() => {
     return allTournaments(created, dismissed)
       .filter((t) => t.status === "upcoming")
+      // an event the club never started or cancelled is not "upcoming" once
+      // its date has gone; the desk still sees it on its own list
+      .filter((t) => t.date >= YESTERDAY_ISO)
       .filter((t) => !format || t.format === format)
       .filter((t) => !clubId || t.clubId === clubId)
       .filter((t) => {
@@ -91,12 +96,14 @@ export default function TournamentsPage() {
   return (
     <div className="pt-5">
       <header className="px-5">
-        <p className="smallcaps text-clay">Discover</p>
+        <p className="smallcaps text-clay">{IS_PILOT ? "Tournaments" : "Discover"}</p>
         <h1 className="mt-1 font-serif text-[32px] font-medium leading-[1.04] tracking-[-0.012em] text-foreground">
-          Tournaments across Kenya
+          {IS_PILOT ? "Your club's tournaments" : "Tournaments across Kenya"}
         </h1>
         <p className="mt-1.5 text-[13px] text-muted-foreground">
-          {list.length} upcoming · every affiliated club, one entry list
+          {IS_PILOT
+            ? `${list.length} upcoming · published by the club`
+            : `${list.length} upcoming · every affiliated club, one entry list`}
         </p>
       </header>
 
@@ -125,6 +132,7 @@ export default function TournamentsPage() {
           </Chip>
         ))}
       </div>
+      {!IS_PILOT && (
       <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto px-5 pb-1">
         {CLUBS.map((c) => (
           <Chip
@@ -136,6 +144,7 @@ export default function TournamentsPage() {
           </Chip>
         ))}
       </div>
+      )}
 
       <div className="mt-5 flex flex-col gap-3 px-5">
         {list.map((t, i) => (

@@ -10,7 +10,7 @@ import { ClubCrest, useClubIdentity } from "@/components/club-brand";
 import { SponsorStrip } from "@/components/sponsor-strip";
 import { EligibilityTag } from "@/components/golfer/tournament-card";
 import { LiveBadge } from "@/components/live-dot";
-import { DEMO_USER_ID, clubById, courseById, playerById } from "@/lib/data";
+import { DEMO_USER_ID, clubById, courseById, findClub, findCourse, playerById } from "@/lib/data";
 import {
   eligibilityFor,
   eligibilitySummary,
@@ -18,6 +18,7 @@ import {
   registrationOpen,
 } from "@/lib/eligibility";
 import { IS_PILOT } from "@/lib/mode";
+import { useMe } from "@/lib/sim/hooks";
 import { isMultiRound, roundsOf } from "@/lib/rounds";
 import { availableTiers, isTiered, tierFor, tierPhrase } from "@/lib/pricing";
 import {
@@ -90,6 +91,7 @@ export default function TournamentDetailPage({
   const { id } = use(params);
   const created = useSim((s) => s.created);
   const registrations = useSim((s) => s.registrations);
+  const mePlayer = useMe();
   const t = allTournaments(created).find((x) => x.id === id);
 
   /* The tournament's own page, counted the same way as the board. */
@@ -108,14 +110,17 @@ export default function TournamentDetailPage({
     );
   }
 
-  const club = clubById(t.clubId);
-  const course = courseById(t.courseId);
+  const club = findClub(t.clubId) ?? clubById("muthaiga");
+  const course = findCourse(t.courseId) ?? courseById("muthaiga-main");
   const totalYards = course.holes.reduce((a, h) => a + h.yards, 0);
   const eligibility = eligibilityFor(t);
   const isRegistered = t.registered || registrations.includes(t.id);
   const open = registrationOpen(t);
-  const me = playerById(DEMO_USER_ID);
-  const myTier = tierFor(t, me);
+  // pilot: the player this phone stands for, if known; demo: Joel
+  const me = IS_PILOT ? mePlayer : playerById(DEMO_USER_ID);
+  // an unknown phone sees the standard member rate; the "you're getting"
+  // line below only appears once the phone knows who it is
+  const myTier = tierFor(t, me ?? playerById(DEMO_USER_ID));
   const tiers = availableTiers(t);
   const canRegister = eligibility.kind === "eligible" && open;
   const closesAt = regClosesAt(t);
@@ -168,7 +173,7 @@ export default function TournamentDetailPage({
               <p className="mt-0.5 font-serif text-2xl text-foreground tnum">
                 {formatKES(myTier.amount)}
               </p>
-              {isTiered(t) && (
+              {isTiered(t) && myTier && (
                 <p className="mt-0.5 text-[11px] text-clay-deep">
                   You&apos;re getting the {tierPhrase(myTier)}
                 </p>
