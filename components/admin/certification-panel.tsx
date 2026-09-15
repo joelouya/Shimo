@@ -31,13 +31,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { auditTrailCsv } from "@/lib/integrity";
-import { useActiveTournament,
-  useRoundScores,
-  useRoundMarkerScores,
-  useRoundCerts
-} from "@/lib/sim/hooks";
+import { useActiveTournament, useRoundCerts, useRoundScores } from "@/lib/sim/hooks";
 import {
   decideCorrection,
+  deskAttest,
   markCommitteeReview,
   resolveDispute,
   setAdminPin,
@@ -468,14 +465,30 @@ export function CertificationPanel() {
               <StageChip stage={stage} />
             </div>
             <div className="text-right">
-              <p className="text-[12px] text-muted-foreground tnum">
-                {cert?.playerCertifiedAt
-                  ? new Date(cert.playerCertifiedAt).toLocaleTimeString("en-KE", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "·"}
-              </p>
+              {stage === "awaiting-marker" && thru >= 18 ? (
+                /*
+                  The marker's phone died, or they left: the desk keeps the
+                  paper card and attests in their place, recorded as the desk.
+                */
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-[12px]"
+                  onClick={() => deskAttest(p.id)}
+                  title="Attest this card at the desk, in place of the marker"
+                >
+                  Attest at desk
+                </Button>
+              ) : (
+                <p className="text-[12px] text-muted-foreground tnum">
+                  {cert?.playerCertifiedAt
+                    ? new Date(cert.playerCertifiedAt).toLocaleTimeString("en-KE", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "·"}
+                </p>
+              )}
               {/*
                 The seal made visible. A certified card carries a SHA-256 lock;
                 showing its head, in the same monospaced form the returned-card

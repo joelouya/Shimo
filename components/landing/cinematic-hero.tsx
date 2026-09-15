@@ -20,6 +20,7 @@
  * land straight on the fast editorial page beneath this component.
  */
 
+import { useReducedMotion } from "framer-motion";
 import React, { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -118,13 +119,11 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const phoneRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-
   // Honour reduced motion: render nothing, and the editorial page below serves
-  // these visitors directly.
-  useEffect(() => {
-    setEnabled(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  }, []);
+  // these visitors directly. Read through the hook so it is known before the
+  // first paint rather than one frame after.
+  const still = useReducedMotion();
+  const enabled: boolean | null = still === null ? null : !still;
 
   // Mouse: light on the card, a gentle parallax tilt on the phone.
   useEffect(() => {

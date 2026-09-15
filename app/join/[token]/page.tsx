@@ -14,7 +14,7 @@
  * "already used" would tell a stranger the token was real.
  */
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
@@ -23,8 +23,9 @@ import { ArrowRight, Check } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { SimGate } from "@/components/sim-gate";
 import { Button } from "@/components/ui/button";
-import { clubById } from "@/lib/data";
-import { activateInvite, setDeviceIdentity, useSim } from "@/lib/sim/store";
+import { findClub } from "@/lib/data";
+import { activateInvite, applyRemoteEntity, setDeviceIdentity, useSim } from "@/lib/sim/store";
+import { REMOTE_CONFIGURED, supabase } from "@/lib/sync/client";
 import { initials } from "@/lib/utils";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
@@ -57,6 +58,49 @@ function Claim({ token }: { token: string }) {
   );
   const claimable = Boolean(member && !member.invite?.activatedAt && member.active !== false);
 
+  /*
+   * A fresh phone opening the link from WhatsApp holds no roster yet, so the
+   * first paint must not be the failure screen. Ask the cloud for the row
+   * this token names and wait for that answer before deciding.
+   */
+  const [looked, setLooked] = useState(!REMOTE_CONFIGURED);
+  useEffect(() => {
+    if (member || looked) return;
+    let live = true;
+    (async () => {
+      try {
+        const sb = await supabase();
+        const { data } = await sb
+          .from("players")
+          .select("*")
+          .eq("invite_token", token)
+          .maybeSingle();
+        if (live && data) applyRemoteEntity("players", data as Record<string, unknown>);
+      } catch {
+        /* offline or not found: the roster we hold decides */
+      } finally {
+        if (live) setLooked(true);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [member, looked, token]);
+
+  if (!member && !looked) {
+    return (
+      <Frame>
+        <p className="smallcaps text-muted-foreground">Your club</p>
+        <h1 className="mt-3 font-serif text-[30px] leading-tight text-foreground">
+          Checking your invitation
+        </h1>
+        <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
+          One moment while we find your place on the roster.
+        </p>
+      </Frame>
+    );
+  }
+
   if (!claimable && !claimed) {
     return (
       <Frame>
@@ -76,7 +120,7 @@ function Claim({ token }: { token: string }) {
     );
   }
 
-  const club = member ? clubById(member.clubId) : null;
+  const club = member ? (findClub(member.clubId) ?? null) : null;
 
   return (
     <Frame>

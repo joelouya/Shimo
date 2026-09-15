@@ -15,6 +15,7 @@
  * a tamper-evident integrity record is computed and appended.
  */
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -54,7 +55,6 @@ import {
   MARKER_ID,
   PLAYERS,
   clubById,
-  playerById,
 } from "@/lib/data";
 import { getGpsFix } from "@/lib/integrity";
 import { handicapSet } from "@/lib/scoring";
@@ -345,10 +345,12 @@ export function CertificationCeremony({
 }: {
   /** the player using this device */
   me?: string;
-  /** the player this device's user marks (whose card they attest) */
-  marks?: string;
-  /** the player who marks this device's user (who attests their card) */
-  markedBy?: string;
+  /** the player this device's user marks (whose card they attest); null when
+   *  they play alone and there is no card to keep */
+  marks?: string | null;
+  /** the player who marks this device's user (who attests their card); null
+   *  when the desk attests instead */
+  markedBy?: string | null;
   /** the course being played */
   course?: Course;
 } = {}) {
@@ -362,27 +364,29 @@ export function CertificationCeremony({
     roster.find((p) => p.id === id)?.name ??
     PLAYERS.find((p) => p.id === id)?.name ??
     "your partner";
-  const marksName = nameOf(marks);
-  const markedByName = nameOf(markedBy);
+  const marksName = marks ? nameOf(marks) : "";
+  const markedByName = markedBy ? nameOf(markedBy) : "the desk";
   const marksFirst = marksName.split(" ")[0];
-  const markedByFirst = markedByName.split(" ")[0];
+  const markedByFirst = markedBy ? markedByName.split(" ")[0] : "the desk";
   const [sheet, setSheet] = useState<null | "A" | "B">(null);
   const [dispute, setDispute] = useState<{ pid: string; hole: number } | null>(
     null,
   );
   const [certifying, setCertifying] = useState(false);
 
-  const davidCert = certs[marks];
+  const davidCert = marks ? certs[marks] : undefined;
   const joeCert = certs[me];
 
-  const stageADone = Boolean(davidCert?.markerAttestedAt);
+  // with nobody to mark there is nothing to attest, and Stage A is simply done
+  const stageADone = !marks || Boolean(davidCert?.markerAttestedAt);
   const stageBReady = joeCert?.stage === "awaiting-player";
 
   // discrepancies on David's card (Joel's record vs David's own)
   const davidDisc = useMemo(
     () =>
-      (scores[marks] ?? [])
+      (marks ? (scores[marks] ?? []) : [])
         .map((own, i) =>
+          marks &&
           own != null &&
           markerScores[marks]?.[i] != null &&
           markerScores[marks][i] !== own
@@ -457,10 +461,10 @@ export function CertificationCeremony({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-medium text-foreground">
-            Attest {marksFirst}&apos;s card
+            {marks ? <>Attest {marksFirst}&apos;s card</> : "No card to attest"}
           </span>
           <span className="block text-[13px] text-muted-foreground">
-            You are their marker
+            {marks ? "You are their marker" : "You played alone, so the desk attests yours"}
             {davidDisc.length > 0 && !stageADone && (
               <span className="ml-1.5 text-amber-flag">
                 · {davidDisc.length} hole{davidDisc.length > 1 ? "s" : ""} to
@@ -511,6 +515,18 @@ export function CertificationCeremony({
         </span>
         {stageBReady && <ChevronRight className="size-4 text-muted-foreground" />}
       </button>
+      {stageADone && !stageBReady && (
+        /*
+          The escape hatch. A marker whose phone has died, or who has already
+          left, must not hold a card hostage: the desk keeps every paper card
+          and can attest in their place from the Committee room.
+        */
+        <p className="border-t border-border/60 px-5 py-3 text-[12px] leading-relaxed text-muted-foreground">
+          {markedBy
+            ? `${markedByFirst} not around? Show your card at the desk: they can attest it for you.`
+            : "Show your card at the desk when you finish: they attest it, then you certify here."}
+        </p>
+      )}
 
       {/* Stage A sheet */}
       <Dialog open={sheet === "A"} onOpenChange={(o) => !o && setSheet(null)}>
@@ -525,33 +541,44 @@ export function CertificationCeremony({
             </DialogDescription>
           </DialogHeader>
           <ReviewGrid
-            ownScores={scores[marks] ?? []}
-            markerScores={markerScores[marks] ?? []}
+            ownScores={(marks && scores[marks]) || []}
+            markerScores={(marks && markerScores[marks]) || []}
             ownLabel="His entry"
             markerLabel="Your record"
             discrepancies={davidDisc}
-            onAgree={(i, v) => resolveDiscrepancy(marks, i, v)}
+            onAgree={(i, v) => marks && resolveDiscrepancy(marks, i, v)}
             onDispute={(i) => {
+              if (!marks) return;
               setSheet(null);
               setDispute({ pid: marks, hole: i });
             }}
             course={course}
           />
-          {davidDisc.length === 0 ? (
-            <SignatureCapture
-              actionLabel="attest as marker"
-              onSign={(artifact) => {
-                markerAttest(marks, me, artifact);
-                setSheet(null);
-              }}
-            />
-          ) : (
+          {/*
+            The pad stays mounted while a difference is open: a marker row
+            landing over the wire mid-entry blocks the signature rather than
+            swapping the pad out from under the thumb.
+          */}
+          {davidDisc.length > 0 && (
             <p className="flex items-center gap-2 rounded-xl bg-amber-wash px-4 py-3 text-[13px] text-amber-flag">
               <AlertTriangle className="size-4 shrink-0" />
               Agree the highlighted hole{davidDisc.length > 1 ? "s" : ""} with{" "}
               {marksFirst} before attesting.
             </p>
           )}
+          <div
+            className={cn(davidDisc.length > 0 && "pointer-events-none opacity-40")}
+            aria-disabled={davidDisc.length > 0}
+          >
+            <SignatureCapture
+              actionLabel="attest as marker"
+              onSign={(artifact) => {
+                if (!marks) return;
+                markerAttest(marks, me, artifact);
+                setSheet(null);
+              }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -578,13 +605,23 @@ export function CertificationCeremony({
             }}
             course={course}
           />
-          {joeDisc.length === 0 ? (
-            certifying ? (
-              <p className="flex items-center justify-center gap-2 py-4 text-[14px] text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Sealing the record…
-              </p>
-            ) : (
+          {joeDisc.length > 0 && (
+            <p className="flex items-center gap-2 rounded-xl bg-amber-wash px-4 py-3 text-[13px] text-amber-flag">
+              <AlertTriangle className="size-4 shrink-0" />
+              Agree the highlighted hole{joeDisc.length > 1 ? "s" : ""} with
+              your marker before certifying.
+            </p>
+          )}
+          {certifying ? (
+            <p className="flex items-center justify-center gap-2 py-4 text-[14px] text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Sealing the record…
+            </p>
+          ) : (
+            <div
+              className={cn(joeDisc.length > 0 && "pointer-events-none opacity-40")}
+              aria-disabled={joeDisc.length > 0}
+            >
               <SignatureCapture
                 actionLabel="certify your card"
                 onSign={async (artifact) => {
@@ -594,13 +631,7 @@ export function CertificationCeremony({
                   setSheet(null);
                 }}
               />
-            )
-          ) : (
-            <p className="flex items-center gap-2 rounded-xl bg-amber-wash px-4 py-3 text-[13px] text-amber-flag">
-              <AlertTriangle className="size-4 shrink-0" />
-              Agree the highlighted hole{joeDisc.length > 1 ? "s" : ""} with
-              your marker before certifying.
-            </p>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -771,12 +802,12 @@ export function CardReturnedView({
           )}
         </AnimatePresence>
       </div>
-      <a
+      <Link
         href="/app/leaderboard"
         className="block border-t border-cream/10 bg-clay py-3.5 text-center text-[15px] font-medium text-cream transition-colors hover:bg-clay-deep"
       >
         See where you finish
-      </a>
+      </Link>
 
       <CorrectionDialog
         open={corrOpen}

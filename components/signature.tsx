@@ -3,7 +3,8 @@
 /**
  * The signature artifact, three ways (all valid under Kenya's KICA and
  * R&A 3.3b's "means to certify"):
- *  - PIN (default): 4 digits, set on first use, no permissions needed
+ *  - PIN (default): 4 digits, chosen at first run (or in Profile), no
+ *    permissions needed; set on first use only as a last resort
  *  - finger-drawn signature: captured as SVG path, stored with the record
  *  - biometric: WebAuthn platform authenticator, entirely on-device
  */
@@ -13,6 +14,7 @@ import { Check, Delete, Fingerprint, PenLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
+  changeUserPin,
   setUserPin,
   useSim,
   type SignatureArtifact,
@@ -71,8 +73,8 @@ function PinPad({
   const settingUp = !storedPin;
   const prompt = settingUp
     ? firstPass
-      ? "Confirm your new PIN"
-      : "Set a 4-digit PIN for signing cards"
+      ? "Enter it again to confirm"
+      : "First, choose a 4-digit PIN. You'll sign every card with it"
     : `Enter your PIN to ${actionLabel}`;
 
   const press = (d: string) => {
@@ -105,38 +107,129 @@ function PinPad({
   return (
     <div>
       <p className="text-center text-[15px] text-ink-soft">{prompt}</p>
-      <div className="mt-4 flex justify-center gap-3">
-        {[0, 1, 2, 3].map((i) => (
-          <span
-            key={i}
-            className={cn(
-              "size-3.5 rounded-full border-2 transition-colors",
-              entry.length > i ? "border-clay bg-clay" : "border-border",
-            )}
-          />
-        ))}
-      </div>
+      <PinDots filled={entry.length} />
       {error && (
         <p className="mt-2 text-center text-[13px] text-red-flag">{error}</p>
       )}
-      <div className="mx-auto mt-5 grid w-56 grid-cols-3 gap-2">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"].map(
-          (k, i) =>
-            k === "" ? (
-              <span key={i} />
-            ) : (
-              <button
-                key={i}
-                onClick={() =>
-                  k === "⌫" ? setEntry((e) => e.slice(0, -1)) : press(k)
-                }
-                className="flex h-13 min-h-11 items-center justify-center rounded-xl bg-secondary/70 text-[19px] font-medium text-foreground tnum transition-colors hover:bg-secondary cursor-pointer"
-              >
-                {k === "⌫" ? <Delete className="size-5" /> : k}
-              </button>
-            ),
-        )}
-      </div>
+      <Keypad onPress={press} onDelete={() => setEntry((e) => e.slice(0, -1))} />
+    </div>
+  );
+}
+
+function PinDots({ filled }: { filled: number }) {
+  return (
+    <div className="mt-4 flex justify-center gap-3">
+      {[0, 1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className={cn(
+            "size-3.5 rounded-full border-2 transition-colors",
+            filled > i ? "border-clay bg-clay" : "border-border",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Keypad({ onPress, onDelete }: { onPress: (d: string) => void; onDelete: () => void }) {
+  return (
+    <div className="mx-auto mt-5 grid w-56 grid-cols-3 gap-2">
+      {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"].map((k, i) =>
+        k === "" ? (
+          <span key={i} />
+        ) : (
+          <button
+            key={i}
+            type="button"
+            aria-label={k === "⌫" ? "Delete" : k}
+            onClick={() => (k === "⌫" ? onDelete() : onPress(k))}
+            className="flex h-13 min-h-11 items-center justify-center rounded-xl bg-secondary/70 text-[19px] font-medium text-foreground tnum transition-colors hover:bg-secondary cursor-pointer"
+          >
+            {k === "⌫" ? <Delete className="size-5" /> : k}
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
+/**
+ * Set or change the signing PIN, away from the moment of signing. Asks for
+ * the current PIN first when there is one, then the new one twice. Nothing
+ * here navigates: a wrong entry clears the dots and says so.
+ */
+export function PinChange({
+  onDone,
+  onCancel,
+}: {
+  onDone: () => void;
+  onCancel?: () => void;
+}) {
+  const stored = useSim((s) => s.userPin);
+  const [phase, setPhase] = useState<"current" | "new" | "confirm">(stored ? "current" : "new");
+  const [entry, setEntry] = useState("");
+  const [current, setCurrent] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const prompt =
+    phase === "current"
+      ? "Enter your current PIN"
+      : phase === "new"
+        ? stored
+          ? "Choose a new 4-digit PIN"
+          : "Choose a 4-digit PIN. You'll sign every card with it"
+        : "Enter it again to confirm";
+
+  const press = (d: string) => {
+    setError(null);
+    const next = (entry + d).slice(0, 4);
+    setEntry(next);
+    if (next.length < 4) return;
+    setTimeout(() => {
+      if (phase === "current") {
+        if (next === stored) {
+          setCurrent(next);
+          setEntry("");
+          setPhase("new");
+        } else {
+          setError("Wrong PIN. Try again.");
+          setEntry("");
+        }
+      } else if (phase === "new") {
+        setFresh(next);
+        setEntry("");
+        setPhase("confirm");
+      } else if (next === fresh) {
+        if (changeUserPin(current, next)) {
+          onDone();
+        } else {
+          setError("That didn't save. Start again.");
+          setEntry("");
+          setFresh(null);
+          setPhase(stored ? "current" : "new");
+        }
+      } else {
+        setError("PINs didn't match. Start again.");
+        setEntry("");
+        setFresh(null);
+        setPhase("new");
+      }
+    }, 150);
+  };
+
+  return (
+    <div>
+      <p className="text-center text-[15px] text-ink-soft">{prompt}</p>
+      <PinDots filled={entry.length} />
+      {error && <p className="mt-2 text-center text-[13px] text-red-flag">{error}</p>}
+      <Keypad onPress={press} onDelete={() => setEntry((e) => e.slice(0, -1))} />
+      {onCancel && (
+        <Button variant="ghost" className="mt-4 w-full text-muted-foreground" onClick={onCancel}>
+          Cancel
+        </Button>
+      )}
     </div>
   );
 }

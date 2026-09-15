@@ -14,7 +14,7 @@
 // cache key, and `activate` deletes every cache that is not the current
 // VERSION, so bumping it purges a stale shell (e.g. a demo-mode bundle cached
 // before this deployment switched to pilot).
-const VERSION = "shimo-sw-v2";
+const VERSION = "shimo-sw-v3";
 const APP_SHELL = ["/app", "/app/leaderboard", "/app/live", "/app/tournaments", "/app/profile"];
 
 self.addEventListener("install", (event) => {

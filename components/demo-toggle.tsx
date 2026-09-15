@@ -22,7 +22,7 @@ export function DemoToggle({ corner = "br" }: { corner?: "br" | "phone" }) {
         "fixed z-40",
         corner === "phone"
           ? // clamp to the right edge of the centred 430px phone column
-            "bottom-24 left-[calc(50%+min(50%,215px)-56px)]"
+            "bottom-[136px] left-[calc(50%+min(50%,215px)-56px)]"
           : "bottom-6 right-6",
       )}
     >

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, ChevronRight } from "lucide-react";
@@ -10,7 +9,7 @@ import { LiveBadge } from "@/components/live-dot";
 import { InstallPrompt } from "@/components/pwa";
 import { IdentityGate } from "@/components/golfer/identity-pick";
 import { TournamentCard } from "@/components/golfer/tournament-card";
-import { DEMO_USER_ID, clubById, courseById, playerById } from "@/lib/data";
+import { DEMO_USER_ID, clubById, courseById, findClub, playerById } from "@/lib/data";
 import { handicapSet } from "@/lib/scoring";
 import { IS_PILOT } from "@/lib/mode";
 import { useActiveTournament, useSyncStatus, useUserLive } from "@/lib/sim/hooks";
@@ -30,7 +29,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function PilotLiveCard() {
   const active = useActiveTournament();
   if (!active) return null;
-  const club = clubById(active.tournament.clubId);
+  const clubName = findClub(active.tournament.clubId)?.name ?? "Your club";
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -44,7 +43,7 @@ function PilotLiveCard() {
           {active.tournament.name}
         </h2>
         <p className="mt-0.5 text-sm text-primary-foreground/55">
-          {club.name} · {active.tournament.format}
+          {clubName} · {active.tournament.format}
         </p>
         <p className="mt-4 text-sm leading-relaxed text-primary-foreground/70">
           Cards are being scored at the club desk as they come in. Follow the
@@ -65,7 +64,8 @@ function PilotLiveCard() {
 function LiveNowCard() {
   const me = useUserLive();
   const hidden = useSim((s) => s.hideLeaderboard);
-  const t = allTournaments([]).find((x) => x.status === "live")!;
+  const t = allTournaments([]).find((x) => x.status === "live");
+  if (!t) return null;
   const club = clubById(t.clubId);
 
   return (
@@ -145,13 +145,16 @@ export default function HomePage() {
   const dismissed = useSim((s) => s.dismissed);
   const tone = useSim((s) => s.tonePref);
   const roster = useSim((s) => s.roster);
+  const guests = useSim((s) => s.guests);
   const identity = useSim((s) => s.deviceIdentity);
-  const me =
-    IS_PILOT && identity
-      ? (roster.find((p) => p.id === identity) ?? playerById(DEMO_USER_ID))
-      : playerById(DEMO_USER_ID);
-  const user = me;
-  const firstName = IS_PILOT && !identity ? "there" : me.name.split(" ")[0];
+  // pilot: the real player this phone stands for, or nobody yet; demo: Joel
+  const me = IS_PILOT
+    ? identity
+      ? (roster.find((p) => p.id === identity) ?? guests.find((p) => p.id === identity) ?? null)
+      : null
+    : playerById(DEMO_USER_ID);
+  const firstName = me ? me.name.split(" ")[0] : "there";
+  const clubName = findClub(me?.clubId)?.name ?? "Your club";
 
   const hour = new Date().getHours();
   const greeting =
@@ -184,7 +187,7 @@ export default function HomePage() {
 
       <div className="mt-7 animate-enter-rise">
         <p className="smallcaps text-clay">
-          {tone === "classic" ? clubById(user.clubId).name : greeting}
+          {tone === "classic" ? clubName : greeting}
         </p>
         <h1 className="mt-1 font-serif text-[38px] font-medium leading-[1.0] tracking-[-0.018em] text-foreground">
           {tone === "classic" ? (
@@ -223,9 +226,8 @@ export default function HomePage() {
             <p className="text-sm text-muted-foreground">
               Nothing booked yet.{" "}
               <Link href="/app/tournaments" className="text-clay underline underline-offset-2">
-                Browse tournaments
+                {IS_PILOT ? "See what the club has published" : "Browse tournaments"}
               </Link>
-              .
             </p>
           )}
           {upcoming.map((t) => (
@@ -236,7 +238,7 @@ export default function HomePage() {
           href="/app/tournaments"
           className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-clay hover:text-clay-deep"
         >
-          Discover tournaments across Kenya
+          {IS_PILOT ? "All the club's tournaments" : "Discover tournaments across Kenya"}
           <ChevronRight className="size-3.5" />
         </Link>
       </section>
@@ -258,7 +260,7 @@ export default function HomePage() {
                   {t.name}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {clubById(t.clubId).short} · {formatDate(t.date)}
+                  {[findClub(t.clubId)?.short, formatDate(t.date)].filter(Boolean).join(" · ")}
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -283,15 +285,11 @@ function PilotHomeLive() {
   const identity = useSim((s) => s.deviceIdentity);
   const { online } = useSyncStatus();
   // A joining device takes a few seconds to reach the club and hydrate the live
-  // tournament from the cloud. Hold a brief "connecting" state so the page does
-  // not flash "no tournament running" before that first sync has landed, which
-  // reads as broken. If a live tournament arrives, the card takes over at once.
-  const [settling, setSettling] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setSettling(false), 4000);
-    return () => clearTimeout(t);
-  }, []);
-  const connecting = !active && online && settling;
+  // tournament from the cloud. Until the first answer lands the page says it
+  // is checking, not that nothing is running; offline, it says what it holds
+  // is what it has. If a live tournament arrives, the card takes over at once.
+  const checked = useSim((s) => s.cloudCheckedAt != null);
+  const connecting = !active && online && !checked;
   return (
     <>
       <IdentityGate />
@@ -312,11 +310,12 @@ function PilotHomeLive() {
       {!active && !connecting && (
         <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
           <p className="font-serif text-lg text-foreground">
-            No tournament running
+            {online ? "No tournament running" : "You're offline"}
           </p>
           <p className="mx-auto mt-2 max-w-[260px] text-[14px] leading-relaxed text-muted-foreground">
-            When your club starts a tournament day, it appears here with the
-            live leaderboard.
+            {online
+              ? "When your club starts a tournament day, it appears here with the live leaderboard."
+              : "Showing what this phone already has. The club's tournament appears as soon as you're back in range."}
           </p>
         </div>
       )}

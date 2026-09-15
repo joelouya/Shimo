@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { CloudOff, Flame } from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { LiveBadge } from "@/components/live-dot";
-import { clubById, courseById } from "@/lib/data";
+import { clubById, courseById, findClub, findCourse } from "@/lib/data";
 import type { StandingRow, ViewMode } from "@/lib/scoring";
 import { usePublicBoard, publicStandings } from "@/lib/sync/public-board";
 import { cn, toPar } from "@/lib/utils";
@@ -106,8 +107,8 @@ export default function PublicLeaderboard({
   }
 
   const t = board.tournament;
-  const club = clubById(t.clubId);
-  const course = courseById(t.courseId);
+  const club = findClub(t.clubId) ?? clubById("muthaiga");
+  const course = findCourse(t.courseId) ?? courseById("muthaiga-main");
   const isStableford = t.format === "Stableford";
 
   return (
@@ -227,7 +228,7 @@ export default function PublicLeaderboard({
                   )}
                 </span>
                 <span className="block truncate text-[12px] text-muted-foreground">
-                  {clubById(r.player.clubId).short} · HC {r.player.handicap}
+                  {[findClub(r.player.clubId)?.short, `HC ${r.player.handicap}`].filter(Boolean).join(" · ")}
                 </span>
               </span>
               <span className="text-center text-[13px] text-muted-foreground tnum">
@@ -264,6 +265,11 @@ export default function PublicLeaderboard({
 
       <p className="mt-4 text-center text-[12.5px] text-muted-foreground">
         {t.format} · {t.handicapAllowance}% allowance · live via Shimo
+      </p>
+      <p className="mt-3 text-center text-[13px]">
+        <Link href="/app" className="text-clay underline-offset-4 hover:underline">
+          Playing today? Open Shimo
+        </Link>
       </p>
     </div>
   );

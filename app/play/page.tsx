@@ -657,7 +657,7 @@ function Play() {
   // hydrate the event, then record it resolved; every setState is post-await, so
   // nothing fires synchronously inside an effect
   const applyResolved = useCallback(async (r: Resolved) => {
-    const ok = await hydrateForGroup(r.tournamentId);
+    const ok = await hydrateForGroup(r.tournamentId, r.round);
     if (!ok) {
       setOverride({ kind: "error", message: "We couldn't reach this event. Check your signal, or ask the starter." });
       return;
@@ -683,7 +683,7 @@ function Play() {
       started.current = true;
       // resolved is already set from initial state, so this only has to bring the
       // event into the store; a failure is noted from the callback, never inline
-      hydrateForGroup(paramTid).then((ok) => {
+      hydrateForGroup(paramTid, paramRound).then((ok) => {
         if (!ok)
           setOverride({
             kind: "error",
@@ -691,7 +691,7 @@ function Play() {
           });
       });
     }
-  }, [paramCode, paramTid, applyResolved]);
+  }, [paramCode, paramTid, paramRound, applyResolved]);
 
   /*
    * The base screen, derived rather than stored: while resolving or hydrating it

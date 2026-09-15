@@ -139,6 +139,7 @@ export function pairingToRow(tournamentId: string, round: number, g: SavedGroup)
     tee_time: g.teeTime,
     player_ids: g.playerIds,
     code: g.code ?? null,
+    markers: g.markers ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -150,6 +151,7 @@ export function rowToPairing(r: Record<string, unknown>): SavedGroup {
     teeTime: (r.tee_time as string) ?? "",
     playerIds: (r.player_ids as string[]) ?? [],
     code: (r.code as string) ?? undefined,
+    markers: (r.markers as Record<string, string> | null) ?? undefined,
   };
 }
 

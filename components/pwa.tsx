@@ -77,7 +77,9 @@ export function useGolferRouteMemory() {
       const last = localStorage.getItem(LAST_ROUTE_KEY);
       if (standalone && !restored) {
         sessionStorage.setItem("shimo-route-restored", "1");
-        if (last && last !== pathname && last.startsWith("/app")) {
+        // the Live tab is only worth restoring during a round; on a cold open
+        // the next morning it reads "No round today", so Home is the better start
+        if (last && last !== pathname && last.startsWith("/app") && last !== "/app/live") {
           router.replace(last);
         }
       }

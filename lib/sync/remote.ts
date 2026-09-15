@@ -78,7 +78,9 @@ async function pushOps(sb: SupabaseClient, ops: SyncOp[], tournamentId: string) 
       const round = Number(o.payload.round ?? 1);
       const key = `${o.payload.playerId}:${round}:${o.payload.hole}:${source}`;
       byCell.set(key, {
-        tournament_id: tournamentId,
+        // the op names its own tournament; the live id is only a fallback for
+        // ops queued before that was recorded
+        tournament_id: String(o.payload.tournamentId ?? tournamentId),
         round,
         player_id: String(o.payload.playerId),
         hole: Number(o.payload.hole),

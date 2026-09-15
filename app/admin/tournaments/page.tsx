@@ -339,14 +339,14 @@ export default function AdminTournamentsPage() {
   // A tournament just published from the wizard arrives with ?created=<id>. Flag
   // it so the go-live step is unmissable: publishing only opens registration,
   // and nothing reaches players' phones until the day is started.
-  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("created"),
+  );
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("created");
-    if (id) {
-      setJustCreatedId(id);
-      window.history.replaceState(null, "", "/admin/tournaments");
-    }
-  }, []);
+    if (justCreatedId) window.history.replaceState(null, "", "/admin/tournaments");
+  }, [justCreatedId]);
   const justCreated =
     justCreatedId && IS_PILOT
       ? all.find((t) => t.id === justCreatedId && t.status === "upcoming")

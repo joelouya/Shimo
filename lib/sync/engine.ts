@@ -25,6 +25,7 @@ import {
   applyRemoteEntity,
   applyRemoteScore,
   hydrateFromSnapshot,
+  markCloudChecked,
   mergeCloudTournaments,
   registerDrainSignal,
   type SimState,
@@ -62,6 +63,7 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
       // discover every published event, so an upcoming one a golfer never
       // created still appears on their phone to register for
       mergeCloudTournaments(await remote.findOpenTournaments());
+      markCloudChecked();
       const liveId =
         store.getState().liveTournamentId ??
         (await remote.findLiveTournamentId());
@@ -71,6 +73,10 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
     }
   };
 
+  if (remote.kind !== "supabase") {
+    // nothing to ask: Home must not wait for an answer that never comes
+    markCloudChecked();
+  }
   if (remote.kind === "supabase") {
     hydrate();
     // periodic reconcile catches anything realtime missed (dropped socket)
@@ -87,6 +93,7 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
           row.source as string | undefined,
           (row.round as number) ?? 1,
           row.tournament_id as string | undefined,
+          row.updated_at as string | undefined,
         );
       } else {
         applyRemoteEntity(table, row);

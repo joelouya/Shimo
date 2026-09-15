@@ -3190,6 +3190,163 @@ section("Richer registration");
 }
 
 /* ------------------------------------------------------------------ */
+section("Who marks whom: pairs, saved with the tee sheet");
+const MK = await jiti.import("../lib/markers.ts");
+{
+  const ids = (n) => Array.from({ length: n }, (_, i) => `m${i + 1}`);
+  const four = MK.defaultMarkers(ids(4));
+  check("a fourball pairs off: A and B swap cards, C and D swap cards",
+    four.m1 === "m2" && four.m2 === "m1" && four.m3 === "m4" && four.m4 === "m3");
+  const three = MK.defaultMarkers(ids(3));
+  check("a three ends in a triangle",
+    three.m1 === "m2" && three.m2 === "m3" && three.m3 === "m1");
+  const two = MK.defaultMarkers(ids(2));
+  check("a two swaps cards", two.m1 === "m2" && two.m2 === "m1");
+  check("a single has no marker: the desk attests",
+    Object.keys(MK.defaultMarkers(ids(1))).length === 0);
+  check("every group size gives every player one marker and one card to keep",
+    [2, 3, 4, 5, 6, 7, 8].every((n) => MK.validMarkers(ids(n), MK.defaultMarkers(ids(n)))));
+  check("marks and marked-by are inverses", [2, 3, 4, 5].every((n) => {
+    const g = { id: "g", number: 1, teeTime: "", playerIds: ids(n) };
+    return ids(n).every((x) => MK.markerOf(g, MK.markedByMe(g, x)) === x);
+  }));
+  check("a saved group without markers still reads as pairs, on every device", (() => {
+    const g = { id: "g", number: 1, teeTime: "", playerIds: ids(4) };
+    return MK.markerOf(g, "m1") === "m2" && MK.markedByMe(g, "m1") === "m2" &&
+      MK.markerOf(g, "m4") === "m3";
+  })());
+  check("a saved swap is honoured over the default", (() => {
+    const g = { id: "g", number: 1, teeTime: "", playerIds: ids(4),
+      markers: MK.pairingOptions(ids(4))[1] };
+    return MK.markerOf(g, "m1") === "m3" && MK.markedByMe(g, "m3") === "m1";
+  })());
+  check("a broken saved assignment falls back to the default rather than trusting it", (() => {
+    const g = { id: "g", number: 1, teeTime: "", playerIds: ids(4),
+      markers: { m1: "m1", m2: "m1", m3: "m4", m4: "m3" } };
+    return MK.markerOf(g, "m1") === "m2";
+  })());
+  check("a fourball has three ways to pair off, all valid",
+    MK.pairingOptions(ids(4)).length === 3 &&
+      MK.pairingOptions(ids(4)).every((o) => MK.validMarkers(ids(4), o)));
+  check("a player who left the group is never anyone's marker",
+    !MK.validMarkers(ids(3), { m1: "m2", m2: "m9", m3: "m1" }));
+  check("the desk's line reads as pairs", (() => {
+    const g = { id: "g", number: 1, teeTime: "", playerIds: ids(4) };
+    return MK.describeMarkers(g, (x) => x.toUpperCase()).join(" · ") === "M1 ⇄ M2 · M3 ⇄ M4";
+  })());
+  check("and as a triangle for a three", (() => {
+    const g = { id: "g", number: 1, teeTime: "", playerIds: ids(3) };
+    return MK.describeMarkers(g, (x) => x)[0] === "m1 → m2 → m3 → m1";
+  })());
+}
+
+// through the store: saved, swapped, published, round-tripped
+const FM = st().roster.slice(0, 4).map((p) => p.id);
+S.createTournament({ ...T, id: "t-marks", name: "Marks", rounds: [T.rounds[0]] });
+S.savePairings("t-marks", [{ id: "g1", number: 1, teeTime: "07:00", playerIds: FM }], 1);
+check("saving pairings fills who marks whom", (() => {
+  const g = st().pairings[roundKey("t-marks", 1)][0];
+  return MK.validMarkers(FM, g.markers) && g.markers[FM[0]] === FM[1];
+})());
+check("the pairings row carries the markers and reads them back", (() => {
+  const row = MAP.pairingToRow("t-marks", 1, st().pairings[roundKey("t-marks", 1)][0]);
+  return row.markers?.[FM[2]] === FM[3] && MAP.rowToPairing(row).markers?.[FM[3]] === FM[2];
+})());
+check("the desk can swap pairs",
+  S.setGroupMarkers("t-marks", 1, "g1", MK.pairingOptions(FM)[2]) &&
+    st().pairings[roundKey("t-marks", 1)][0].markers[FM[0]] === FM[3]);
+check("a swap survives an autosave that only moved the tee time", (() => {
+  S.savePairings("t-marks", [{ id: "g1", number: 1, teeTime: "07:10", playerIds: FM }], 1);
+  return st().pairings[roundKey("t-marks", 1)][0].markers[FM[0]] === FM[3];
+})());
+check("a change of membership recomputes the pairs", (() => {
+  const G = FM.slice(0, 3);
+  S.savePairings("t-marks", [{ id: "g1", number: 1, teeTime: "07:10", playerIds: G }], 1);
+  const m = st().pairings[roundKey("t-marks", 1)][0].markers;
+  return MK.validMarkers(G, m) && m[FM[0]] === FM[1];
+})());
+check("self-marking is refused",
+  !S.setGroupMarkers("t-marks", 1, "g1", { [FM[0]]: FM[0], [FM[1]]: FM[2], [FM[2]]: FM[1] }));
+check("a partial assignment is refused",
+  !S.setGroupMarkers("t-marks", 1, "g1", { [FM[0]]: FM[1] }));
+check("starting the day publishes the markers with the tee sheet", (() => {
+  // a row saved by an older build carries none; the start fills it in
+  S.simStore.setState({ ...st(), pairings: { ...st().pairings,
+    [roundKey("t-marks", 1)]: [{ id: "g1", number: 1, teeTime: "07:00", playerIds: FM }] } }, true);
+  S.startTournamentDay("t-marks", 1);
+  const op = [...st().outbox].reverse().find((o) => o.kind === "entity" &&
+    o.payload.table === "pairings" && o.payload.row.tournament_id === "t-marks");
+  return Boolean(op) && MK.validMarkers(FM, op.payload.row.markers) &&
+    MK.validMarkers(FM, st().pairings[roundKey("t-marks", 1)][0].markers);
+})());
+check("a group the desk removed is published emptied, so it cannot come back", (() => {
+  S.savePairings("t-marks", [
+    { id: "g1", number: 1, teeTime: "07:00", playerIds: FM.slice(0, 2) },
+    { id: "g2", number: 2, teeTime: "07:10", playerIds: FM.slice(2) },
+  ], 1);
+  S.savePairings("t-marks", [{ id: "g1", number: 1, teeTime: "07:00", playerIds: FM }], 1);
+  const tomb = [...st().outbox].reverse().find((o) => o.kind === "entity" &&
+    o.payload.table === "pairings" && o.payload.row.group_id === "g2");
+  return Boolean(tomb) && tomb.payload.row.player_ids.length === 0;
+})());
+
+/* ------------------------------------------------------------------ */
+section("The reconcile never reverts a local write");
+{
+  const key = roundKey("t-marks", 1);
+  const pid = FM[0];
+  check("the marker tournament is on the course", st().liveTournamentId === "t-marks");
+  S.setBulkScore(pid, 3, 5);
+  const op = [...st().outbox].reverse().find((o) => o.kind === "score" &&
+    o.payload.playerId === pid && o.payload.hole === 3);
+  check("a score op names its tournament", op?.payload.tournamentId === "t-marks");
+  const stampKey = `scores:t-marks:1:${pid}:3:desk`;
+  const held = st().stamps[stampKey];
+  check("the cell is stamped as this device's newest version", typeof held === "string");
+  const older = new Date(Date.parse(held) - 5_000).toISOString();
+  const newer = new Date(Date.parse(held) + 5_000).toISOString();
+  const snap = (scores, pairings = []) => ({
+    tournament: MAP.tournamentToRow(st().created.find((t) => t.id === "t-marks")),
+    pairings, teams: [], players: [], scores, cardIn: [], certifications: [],
+    disputes: [], corrections: [], audit: [],
+  });
+  const cell = (gross, updated_at, hole = 3) =>
+    ({ tournament_id: "t-marks", round: 1, player_id: pid, hole, gross, source: "desk", updated_at });
+
+  S.hydrateFromSnapshot(snap([cell(null, older)]));
+  check("a snapshot carrying an older copy of the cell leaves the local figure alone",
+    S.roundScores(st(), key)[pid][3] === 5);
+  S.applyRemoteScore(pid, 3, 4, "desk", 1, "t-marks", older);
+  check("an older row arriving over realtime is ignored too",
+    S.roundScores(st(), key)[pid][3] === 5);
+  S.applyRemoteScore(pid, 3, 4, "desk", 1, "t-marks", newer);
+  check("a newer figure from another device still lands",
+    S.roundScores(st(), key)[pid][3] === 4);
+  S.hydrateFromSnapshot(snap([cell(6, new Date(Date.parse(newer) + 5_000).toISOString())]));
+  check("and so does a newer snapshot", S.roundScores(st(), key)[pid][3] === 6);
+  S.hydrateFromSnapshot(snap([cell(99, new Date(Date.parse(newer) + 9_000).toISOString(), 4)]));
+  check("a snapshot figure outside the sane range is refused",
+    S.roundScores(st(), key)[pid][4] == null);
+
+  // the tee sheet: merged by group, guarded the same way
+  const g = st().pairings[key][0];
+  const first = g.playerIds[0];
+  const last = g.playerIds[g.playerIds.length - 1];
+  const row = MAP.pairingToRow("t-marks", 1, g);
+  S.hydrateFromSnapshot(snap([], [{ ...row, player_ids: [...g.playerIds].reverse(), updated_at: older }]));
+  check("an older tee sheet in a snapshot does not reorder the group",
+    st().pairings[key][0].playerIds[0] === first);
+  S.applyRemoteEntity("pairings", { ...row, player_ids: [...g.playerIds].reverse(), updated_at: newer });
+  check("a newer tee sheet from the desk replaces it",
+    st().pairings[key][0].playerIds[0] === last);
+  S.hydrateFromSnapshot(snap([], [{ ...row, player_ids: [...g.playerIds].reverse(), updated_at: newer }]));
+  check("a second hydrate never duplicates a group", st().pairings[key].length === 1);
+  S.applyRemoteEntity("pairings", { ...row, player_ids: [],
+    updated_at: new Date(Date.parse(newer) + 1_000).toISOString() });
+  check("an emptied group is a removed group", st().pairings[key].length === 0);
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

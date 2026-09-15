@@ -638,20 +638,16 @@ function CreateTournamentInner() {
   // Editing has its own source, so it is left alone. `hydrated` gates the save
   // effect below so the just-loaded draft is never clobbered by INITIAL first.
   const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    if (editId) {
-      setHydrated(true);
-      return;
-    }
-    const saved = loadWizardDraft();
-    if (saved) {
-      setDraft(saved.draft);
-      setStep(saved.step);
-    }
+  if (!hydrated) {
     setHydrated(true);
-    // editId is stable for the life of this screen
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!editId) {
+      const saved = loadWizardDraft();
+      if (saved) {
+        setDraft(saved.draft);
+        setStep(saved.step);
+      }
+    }
+  }
 
   // Persist as the club fills it in, so clicking away keeps their progress.
   useEffect(() => {

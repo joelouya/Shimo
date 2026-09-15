@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Lightweight "who are you" for pilot devices. Until real magic-link auth
- * lands (Milestone 2), a golfer's phone identifies itself by picking their
- * name from the tournament field. Stored device-locally; personalises the
- * home greeting and the "you" row on the leaderboard.
+ * Lightweight "who are you" for pilot devices: a golfer's phone identifies
+ * itself by picking their name from the field, or from the club roster when
+ * no round is on. Stored device-locally; a member who signs in from Profile
+ * is matched by email instead. Personalises the home greeting and the "you"
+ * row on the leaderboard, and is what lets the phone register for an event.
  */
 
 import { useMemo, useState } from "react";
@@ -13,7 +14,7 @@ import { UserRound, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { clubById } from "@/lib/data";
+import { findClub } from "@/lib/data";
 import { useActiveTournament } from "@/lib/sim/hooks";
 import { setDeviceIdentity, useSim } from "@/lib/sim/store";
 import { initials } from "@/lib/utils";
@@ -24,14 +25,16 @@ export function useDeviceIdentity() {
 
 function PickList({ onDone }: { onDone: () => void }) {
   const active = useActiveTournament();
+  const roster = useSim((s) => s.roster);
   const [q, setQ] = useState("");
   const players = useMemo(() => {
-    const list = active?.players ?? [];
+    // today's field when a round is on, otherwise the whole roster
+    const list = active?.players ?? roster.filter((p) => p.active !== false);
     const needle = q.trim().toLowerCase();
     return (needle ? list.filter((p) => p.name.toLowerCase().includes(needle)) : list)
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [active, q]);
+  }, [active, roster, q]);
 
   return (
     <div>
@@ -65,7 +68,7 @@ function PickList({ onDone }: { onDone: () => void }) {
                 {p.name}
               </span>
               <span className="block text-[12px] text-muted-foreground">
-                {clubById(p.clubId).short} · HC {p.handicap}
+                {[findClub(p.clubId)?.short, `HC ${p.handicap}`].filter(Boolean).join(" · ")}
               </span>
             </span>
           </button>
@@ -79,9 +82,12 @@ function PickList({ onDone }: { onDone: () => void }) {
 export function IdentityGate() {
   const active = useActiveTournament();
   const identity = useDeviceIdentity();
+  const rosterSize = useSim((s) => s.roster.length);
   const [open, setOpen] = useState(false);
 
-  if (!active || identity) return null;
+  // nothing to pick from yet: the roster arrives with the first cloud answer
+  if (identity || (!active && rosterSize === 0)) return null;
+  const clubShort = findClub(active?.tournament.clubId)?.short ?? "the club";
 
   return (
     <div className="mt-6 overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-lift">
@@ -106,11 +112,12 @@ export function IdentityGate() {
             <UserRound className="size-5 text-clay-wash" />
           </div>
           <p className="mt-3 font-serif text-[19px] leading-tight">
-            Follow your round
+            {active ? "Follow your round" : "Tell us who you are"}
           </p>
           <p className="mt-1.5 text-[14px] leading-relaxed text-primary-foreground/65">
-            Tell {clubById(active.tournament.clubId).short} who you are and your
-            place on the live board is highlighted just for you.
+            {active
+              ? `Tell ${clubShort} who you are and your place on the live board is highlighted just for you.`
+              : "Pick your name off the roster and this phone can register you for events and open your card on the day."}
           </p>
           <Button
             variant="clay"
@@ -118,7 +125,7 @@ export function IdentityGate() {
             className="mt-4 w-full"
             onClick={() => setOpen(true)}
           >
-            I&apos;m in this tournament
+            {active ? "I'm in this tournament" : "That's me"}
           </Button>
           {/*
             A guest has no roster row to pick from, so the list above is empty

@@ -74,6 +74,20 @@ a result, it was a warning: it only exercised the score path and never touched
 `applyRemoteEntity`, where the bug lived. A green run from a harness that has
 not yet reached the interesting states means nothing.
 
+### The reconcile guards
+
+Two regression sections added in September cover the class of bug the swarm
+first found, now for scores and the tee sheet as well: "The reconcile never
+reverts a local write" (a snapshot or realtime row older than what the device
+wrote is ignored, a newer one lands, a second hydrate never duplicates a group,
+an emptied group is a removed group) and "Who marks whom: pairs, saved with
+the tee sheet" (the pairing model, its bijection property, the desk swap, and
+the round trip through the pairings row). If a new table is ever written per
+device and merged from the cloud, add it to `rowKey` in `lib/sim/store.ts` and
+guard it in both `applyRemoteEntity` and `hydrateFromSnapshot`, then add a
+check here; without the guard a reconcile that runs seconds after a push will
+revert the write until it echoes.
+
 ### What it does not test
 
 Real network latency, real Postgres concurrency under real RLS, real Realtime

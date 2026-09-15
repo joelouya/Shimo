@@ -104,14 +104,16 @@ Create it on the desk device:
 
 | Device | Player | Marks | Is marked by |
 |---|---|---|---|
-| Phone 1 | A | B | D |
-| Phone 2 | B | C | A |
-| Phone 3 | C | D | B |
-| Phone 4 | D | A | C |
+| Phone 1 | A | B | B |
+| Phone 2 | B | A | A |
+| Phone 3 | C | D | D |
+| Phone 4 | D | C | C |
 
-Marker assignment is round-robin in pairings order, so each player marks the
-next and is marked by the previous. One group of four means every card gets
-both entries.
+Players pair off in tee-sheet order: A and B keep each other's cards, C and D
+keep each other's. The pairing is saved with the tee sheet (the pairings page
+shows it under each group, with **Swap pairs** on a fourball) and printed on
+the sheet as "marks", so every phone reads the same one. A group of three ends
+in a triangle. One group of four means every card gets both entries.
 
 - [ ] **Start tournament day**
 
