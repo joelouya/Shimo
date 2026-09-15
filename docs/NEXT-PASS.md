@@ -49,6 +49,22 @@ when it is done.
 - Members page has no pagination or virtualisation for a 400-row roster, and
   search matches names only.
 
+## Admin desk visual (after the Pass 4 refresh)
+
+- `components/admin/ledger.tsx` exists as the pattern; Members, the Committee
+  room and the results table use its rules inline. Move them onto the
+  component in the next visual pass.
+- The wizard's step cards vary in width; the Review step should read like a
+  printed fixture card (rules, tabular figures, a crest).
+- Form labels: `htmlFor`/`id` are wired on the desk card and Settings; the
+  wizard's generic `Field` wrapper and the club identity card still pass
+  labels as siblings.
+- The scoring grid at 1024px still scrolls to reach holes 14 to 18; a
+  collapsible totals column would let 18 holes fit on a 13-inch laptop.
+- Photographic club hero in the rail, a course map on Live Ops, and the
+  printed-fixture treatment on the tournaments list remain for the deeper
+  visual round.
+
 ## Landing
 
 - See Pass 5 of the plan (CTA architecture, copy against COMMITMENTS.md,

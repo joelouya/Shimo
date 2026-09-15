@@ -17,7 +17,11 @@
  * on real paper.
  *
  * Reduced motion is honoured by rendering nothing at all, so those visitors
- * land straight on the fast editorial page beneath this component.
+ * land straight on the fast editorial page beneath this component. So are
+ * phones and tablets: 1900px of pinned scroll on a small touch screen is a
+ * long time with nothing happening, and the mobile address bar resizing
+ * under a pinned trigger is the classic jank case. The overture runs on a
+ * wide screen with a fine pointer; everyone else gets the hero at once.
  */
 
 import { useReducedMotion } from "framer-motion";
@@ -27,6 +31,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/use-media-query";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -123,7 +128,8 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
   // these visitors directly. Read through the hook so it is known before the
   // first paint rather than one frame after.
   const still = useReducedMotion();
-  const enabled: boolean | null = still === null ? null : !still;
+  const wide = useMediaQuery("(min-width: 1024px) and (pointer: fine)");
+  const enabled: boolean | null = still === null ? null : !still && wide;
 
   // Mouse: light on the card, a gentle parallax tilt on the phone.
   useEffect(() => {
@@ -182,7 +188,7 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
       });
 
       tl
-        .to(".cin-hero-text", { scale: 1.14, filter: "blur(18px)", opacity: 0.18, ease: "power2.inOut", duration: 2 }, 0)
+        .to(".cin-hero-text", { scale: 1.14, opacity: 0.12, ease: "power2.inOut", duration: 2 }, 0)
         .to(".cin-main-card", { yPercent: 0, ease: "power3.inOut", duration: 2 }, 0)
         .to(".cin-main-card", { width: "100%", height: "100%", borderRadius: "0px", ease: "power3.inOut", duration: 1.5 })
         .fromTo(".cin-phone-wrap",

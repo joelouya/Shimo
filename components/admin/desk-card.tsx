@@ -47,8 +47,9 @@ export function DeskCard() {
 
       <div className="mt-5 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <Label>Name on the desk</Label>
+          <Label htmlFor="desk-name">Name on the desk</Label>
           <Input
+            id="desk-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Peter Kamau"
@@ -64,8 +65,9 @@ export function DeskCard() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label>Desk PIN</Label>
+          <Label htmlFor="desk-pin">Desk PIN</Label>
           <Input
+            id="desk-pin"
             type="password"
             inputMode="numeric"
             maxLength={4}

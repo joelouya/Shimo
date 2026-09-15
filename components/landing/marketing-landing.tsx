@@ -30,6 +30,8 @@ import { FinalCta } from "@/components/landing/final-cta";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { routeForDevice } from "@/lib/device";
+import { contactHref } from "@/lib/contact";
+import Link from "next/link";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
@@ -89,9 +91,14 @@ export function MarketingLanding() {
             transition={{ duration: 0.75, ease: EASE, delay: 0.22 }}
             className="mt-8 flex flex-wrap items-center gap-3"
           >
+            <Button variant="clay" size="lg" onClick={() => router.push(routeForDevice())}>
+              Try the demo
+              <ArrowRight className="size-4" />
+            </Button>
             <Button
-              variant="clay"
+              variant="ghost"
               size="lg"
+              className="text-ink-soft"
               onClick={() =>
                 document
                   .getElementById("how-it-works")
@@ -99,7 +106,6 @@ export function MarketingLanding() {
               }
             >
               See how it works
-              <ArrowRight className="size-4" />
             </Button>
           </motion.div>
 
@@ -109,7 +115,7 @@ export function MarketingLanding() {
             transition={{ duration: 0.8, ease: EASE, delay: 0.34 }}
             className="mt-6 text-[13px] leading-relaxed text-muted-foreground"
           >
-            Built for the clubs of Kenya, and every course after that.
+            No sign-up. The demo opens on a seeded club day, ready to explore.
           </motion.p>
         </div>
 
@@ -137,14 +143,27 @@ export function MarketingLanding() {
       <Faq />
 
       {/* ---- §8 pricing + §10 the final ask ---- */}
-      <FinalCta onStart={() => router.push(routeForDevice())} />
+      <FinalCta />
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-8 gap-y-4 px-6 py-8">
           <Logo className="text-[15px]" />
-          <p className="text-[13px] text-muted-foreground">
-            A working prototype. The names, clubs and figures throughout are
-            demo data.
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]">
+            <Link href="/admin" className="focus-ring rounded-md text-foreground/70 hover:text-foreground">
+              The club desk
+            </Link>
+            <Link href="/app" className="focus-ring rounded-md text-foreground/70 hover:text-foreground">
+              The golfer app
+            </Link>
+            {contactHref("Shimo") && (
+              <a href={contactHref("Shimo")!} className="focus-ring rounded-md text-foreground/70 hover:text-foreground">
+                Talk to us
+              </a>
+            )}
+          </nav>
+          <p className="basis-full text-[13px] text-muted-foreground">
+            A working prototype, built in Kenya. The names, clubs and figures
+            throughout are demo data.
           </p>
         </div>
       </footer>

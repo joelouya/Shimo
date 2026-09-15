@@ -133,7 +133,7 @@ const Cell = memo(function Cell({
         }
       }}
       className={cn(
-        "h-11 w-11 rounded-lg border border-border bg-card text-center text-[17px] font-medium tnum outline-none transition-colors",
+        "h-10 w-10 rounded-lg border border-border bg-card text-center text-[16px] font-medium tnum outline-none transition-colors xl:h-11 xl:w-11 xl:text-[17px]",
         "focus:border-clay focus:ring-2 focus:ring-clay/25",
         refused && "border-red-flag ring-2 ring-red-flag/30",
         value != null && d < 0 && "text-clay-deep",
@@ -205,7 +205,7 @@ const PlayerRow = memo(
         <td
           onClick={() => onSelect(focused ? null : player.id)}
           className={cn(
-            "sticky left-0 z-10 min-w-[168px] cursor-pointer px-3 py-1.5",
+            "sticky left-0 z-10 min-w-[140px] cursor-pointer px-3 py-1.5 xl:min-w-[168px]",
             focused ? "bg-accent shadow-[inset_3px_0_0_var(--clay)]" : "bg-background",
           )}
         >
@@ -232,7 +232,7 @@ const PlayerRow = memo(
           </td>
         ))}
         <td
-          className="sticky right-16 z-10 min-w-[132px] border-l border-border/60 px-3 py-1.5 text-right"
+          className="sticky right-16 z-10 min-w-[108px] border-l border-border/60 px-3 py-1.5 text-right xl:min-w-[132px]"
           style={{ background: cardIn ? "#F5ECE3" : "var(--background)" }}
         >
           <p className="leading-tight">
@@ -607,7 +607,7 @@ export default function BulkScoresPage() {
         <table className="w-full border-separate border-spacing-0">
           <thead className="sticky top-0 z-20">
             <tr className="bg-secondary/95 backdrop-blur">
-              <th className="sticky left-0 z-30 min-w-[168px] bg-secondary px-3 py-2 text-left">
+              <th className="sticky left-0 z-30 min-w-[140px] bg-secondary px-3 py-2 text-left xl:min-w-[168px]">
                 <span className="smallcaps text-[9px] text-muted-foreground">
                   Player
                 </span>
@@ -629,7 +629,7 @@ export default function BulkScoresPage() {
                   </p>
                 </th>
               ))}
-              <th className="sticky right-16 z-30 min-w-[132px] border-l border-border/60 bg-secondary px-3 text-right smallcaps text-[9px] text-muted-foreground">
+              <th className="sticky right-16 z-30 min-w-[108px] border-l border-border/60 bg-secondary px-3 text-right smallcaps text-[9px] text-muted-foreground xl:min-w-[132px]">
                 Running totals
               </th>
               <th className="sticky right-0 z-30 w-16 bg-secondary px-3 text-center smallcaps text-[9px] text-muted-foreground">

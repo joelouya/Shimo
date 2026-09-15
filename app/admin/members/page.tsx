@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/admin/page-header";
 import { useMemo, useState } from "react";
 import {
   Check,
@@ -260,17 +261,12 @@ export default function MembersPage() {
 
   return (
     <div>
-      <header className="flex items-end justify-between">
-        <div>
-          <p className="smallcaps text-muted-foreground">Members</p>
-          <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
-            The {clubName} roster
-          </h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {members.length} playing members on Shimo · handicaps from the club
-            roster
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="Members"
+        title={`The ${clubName} roster`}
+        meta={`${members.length} playing members on Shimo · handicaps from the club roster`}
+        actions={
+          <>
         {IS_PILOT && (
           <Button
             variant="outline"
@@ -284,7 +280,9 @@ export default function MembersPage() {
           <Plus className="size-4" />
           Add member
         </Button>
-      </header>
+                </>
+        }
+      />
 
       <div className="relative mt-7 max-w-sm">
         <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -296,8 +294,8 @@ export default function MembersPage() {
         />
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-2xl bg-card shadow-card">
-        <div className="grid grid-cols-[2fr_5rem_1.6fr_6rem_6rem_3rem] items-center gap-3 border-b border-border bg-secondary/40 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="mt-4 overflow-x-auto rounded-2xl bg-card shadow-card">
+        <div className="grid min-w-[720px] grid-cols-[2fr_5rem_1.6fr_6rem_6rem_3rem] items-center gap-3 border-b border-border bg-secondary/40 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           <span>Member</span>
           <span className="text-center">HC</span>
           <span>Contact</span>
@@ -310,7 +308,7 @@ export default function MembersPage() {
         {filtered.map((m) => (
           <div
             key={m.id}
-            className="grid grid-cols-[2fr_5rem_1.6fr_6rem_6rem_3rem] items-center gap-3 border-b border-border/50 px-5 py-3 last:border-b-0 transition-colors hover:bg-accent/40"
+            className="grid min-w-[720px] grid-cols-[2fr_5rem_1.6fr_6rem_6rem_3rem] items-center gap-3 border-b border-border/50 px-5 py-3 last:border-b-0 transition-colors hover:bg-accent/40"
           >
             <div className="flex items-center gap-3">
               <PlayerAvatar player={m} size="lg" />

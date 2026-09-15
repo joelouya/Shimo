@@ -467,8 +467,8 @@ export function CertificationPanel({
         </div>
       )}
 
-      <div className="mt-5 overflow-hidden rounded-2xl bg-card shadow-card">
-        <div className="grid grid-cols-[1.6fr_5rem_5rem_1.4fr_1fr] items-center gap-3 border-b border-border bg-secondary/40 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="mt-5 overflow-x-auto rounded-2xl bg-card shadow-card">
+        <div className="grid min-w-[640px] grid-cols-[1.6fr_5rem_5rem_1.4fr_1fr] items-center gap-3 border-b border-border bg-secondary/40 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           <span>Player</span>
           <span className="text-center">Group</span>
           <span className="text-center">Thru</span>
@@ -478,7 +478,7 @@ export function CertificationPanel({
         {rows.map(({ p, g, thru, cert, stage }) => (
           <div
             key={p.id}
-            className="grid grid-cols-[1.6fr_5rem_5rem_1.4fr_1fr] items-center gap-3 border-b border-border/50 px-5 py-2.5 last:border-b-0"
+            className="grid min-w-[640px] grid-cols-[1.6fr_5rem_5rem_1.4fr_1fr] items-center gap-3 border-b border-border/50 px-5 py-2.5 last:border-b-0"
           >
             <p className="truncate text-[14px] font-medium text-foreground">
               {p.name}

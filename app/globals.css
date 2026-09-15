@@ -285,6 +285,18 @@ body::before {
 }
 
 /* editorial helpers */
+/* Keyboard focus, for every control drawn outside components/ui. The ring
+   is the accent at half strength, offset so it never touches the control's
+   own edge. Mouse clicks do not show it. */
+.focus-ring:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--clay) 60%, transparent);
+  outline-offset: 2px;
+}
+:where(button, a, [role="button"], summary):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--clay) 60%, transparent);
+  outline-offset: 2px;
+}
+
 .smallcaps {
   font-size: 0.6875rem;
   letter-spacing: 0.14em;
