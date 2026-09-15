@@ -134,6 +134,9 @@ function MemberMenu({
   onEdit: (m: Player) => void;
 }) {
   const state = accessOf(m);
+  // the link can only be copied where its token was minted; another desk
+  // sees the cloud's hash and has to issue a fresh one
+  const canCopy = Boolean(m.invite?.token && !m.invite.activatedAt);
   const copyLink = async () => {
     const token = ensureInviteToken(m.id);
     if (!token) return;
@@ -171,7 +174,7 @@ function MemberMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={copyLink}>
           <Copy />
-          Copy invitation link
+          {canCopy ? "Copy invitation link" : "Issue and copy a new link"}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onLink(m)}>
           <Link2 />

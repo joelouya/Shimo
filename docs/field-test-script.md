@@ -23,8 +23,8 @@ Do all of this on wifi, the day before.
 ### 1.1 Database
 
 - [ ] Migrations run in order in the Supabase SQL editor:
-      `schema.sql` → `schema-pilot.sql` → `schema-m2.sql` → `schema-m2c.sql` → `schema-m3.sql` → … → `schema-m21.sql` → `schema-m22.sql` → `schema-m23.sql`
-      (every file in `supabase/`, in number order; m22 adds the entries table, m23 the marker pairs)
+      `schema.sql` → `schema-pilot.sql` → `schema-m2.sql` → `schema-m2c.sql` → `schema-m3.sql` → … → `schema-m21.sql` → `schema-m22.sql` → `schema-m23.sql` → `schema-m24.sql` → `schema-m25.sql`
+      (every file in `supabase/`, in number order; m22 adds the entries table, m23 the marker pairs, m24 the wizard's saved settings, m25 hashes invitation tokens and closes the desk-source bypass)
 - [ ] Clean slate:
       ```sql
       truncate table tournaments, pairings, players, scores, card_in,
@@ -42,6 +42,17 @@ Do all of this on wifi, the day before.
       port fails **silently**: the email arrives, the link does nothing.
 
 **PASS:** signing in on one phone lands back in the app already signed in.
+
+### 1.2a Invitations
+
+- [ ] Invitation links are copied from the desk that issued them (Members →
+      the member's menu). A second laptop sees "Issue and copy a new link"
+      instead, and issuing retires the earlier link.
+- [ ] Open one link on a phone with nothing installed: "Claim your place"
+      names the member, **Yes, this is me** lands in the app as them.
+
+**PASS:** the desk's Members list shows the member as Active within ten
+seconds of the claim.
 
 ### 1.3 Roster and course
 

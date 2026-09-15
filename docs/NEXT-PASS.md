@@ -17,6 +17,19 @@ when it is done.
 - Demo-only Profile stats ("Rounds '26", "Best finish") are still fiction in
   demo mode; fine for a demo, but keep them out of any pilot surface.
 
+## Needs the desk to sign in (the auth pass)
+
+- `card-evidence`: minting a signed link needs `select` on the object, so anon
+  keeps `select` on the private bucket. Close it once admin screens carry a
+  session, or move signing behind an edge function with the service key.
+- `club-assets`: the update policy checks only the bucket, so a crest can be
+  replaced by anyone; and `clubs` rows are anon-updatable regardless.
+- `players` exposes email addresses and member numbers to anon reads; a
+  public view without them is the fix once the desk reads through a session.
+- `entries` lets anon list who registered for an open event (player ids).
+- The sealed-card guard trusts the `source` label: 'committee' writes pass.
+  A real gate needs the writer to be authenticated as the Committee.
+
 ## Sync
 
 - Until `schema-m22.sql` is applied, the pilot cloud answers 404 for

@@ -26,9 +26,11 @@ export interface PublishedPack {
 /**
  * Put a pack where a sponsor can reach it.
  *
- * Upserted on (tournament, sponsor), so a club that spots a typo and publishes
+ * One pack per (tournament, sponsor). A club that spots a typo and publishes
  * again replaces the pack rather than leaving two links alive, one of them
- * wrong.
+ * wrong; the replacement goes through republish_recap_pack, which needs the
+ * pack's own token, so nobody holding only the public key can rewrite a
+ * document a sponsor was handed.
  */
 export async function publishPack(args: {
   token: string;
@@ -43,17 +45,30 @@ export async function publishPack(args: {
     );
   }
   const sb = await supabase();
-  const { error } = await sb.from("recap_packs").upsert(
-    {
-      token: args.token,
-      tournament_id: args.tournamentId,
-      sponsor_id: args.sponsorId,
-      spec: args.spec,
-      actor: args.actor ?? "",
-    },
-    { onConflict: "tournament_id,sponsor_id" },
-  );
-  if (error) throw error;
+  const { error } = await sb.from("recap_packs").insert({
+    token: args.token,
+    tournament_id: args.tournamentId,
+    sponsor_id: args.sponsorId,
+    spec: args.spec,
+    actor: args.actor ?? "",
+  });
+  if (!error) return;
+  // already published for this sponsor: replace it, proving the token
+  if (error.code === "23505") {
+    const { data, error: rpcError } = await sb.rpc("republish_recap_pack", {
+      p_token: args.token,
+      p_spec: args.spec,
+      p_actor: args.actor ?? "",
+    });
+    if (rpcError) throw rpcError;
+    if (!data) {
+      throw new Error(
+        "This pack was published with a different link. Withdraw it from the club's records before publishing again.",
+      );
+    }
+    return;
+  }
+  throw error;
 }
 
 /**
