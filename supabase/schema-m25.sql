@@ -22,7 +22,17 @@
 -- docs/NEXT-PASS.md: card photographs need select on the private bucket
 -- to mint a signed link, and the crest bucket has no owner to check.
 
-create extension if not exists pgcrypto;
+/* SHA-256 from Postgres itself (pg_catalog.sha256, since 11), so this does
+   not depend on where a host installs pgcrypto: Supabase keeps it in the
+   `extensions` schema, out of reach of a function pinned to `public`. */
+create or replace function shimo_sha256(p_text text)
+returns text
+language sql
+immutable
+strict
+as $$
+  select encode(sha256(convert_to(p_text, 'UTF8')), 'hex');
+$$;
 
 /* ------------------------------------------------------------------ */
 /* 1. Invitations: hashed at rest                                      */
@@ -43,7 +53,7 @@ language plpgsql
 as $$
 begin
   if new.invite_token is not null then
-    new.invite_token_hash := encode(digest(new.invite_token, 'sha256'), 'hex');
+    new.invite_token_hash := shimo_sha256(new.invite_token);
     new.invite_token := null;
   elsif tg_op = 'UPDATE' and new.invite_token_hash is null then
     new.invite_token_hash := old.invite_token_hash;
@@ -60,7 +70,7 @@ create trigger hash_invite
 /* Tokens already at rest are hashed once and the plaintext cleared. A club
    that sent links before this ran keeps them working: the hash matches. */
 update players
-   set invite_token_hash = encode(digest(invite_token, 'sha256'), 'hex'),
+   set invite_token_hash = shimo_sha256(invite_token),
        invite_token = null
  where invite_token is not null;
 
@@ -78,7 +88,7 @@ as $$
   select p.id, p.name, p.club_id, p.handicap, p.member_no,
          p.invite_activated_at is not null, p.active
     from players p
-   where p.invite_token_hash = encode(digest(btrim(p_token), 'sha256'), 'hex')
+   where p.invite_token_hash = shimo_sha256(btrim(p_token))
    limit 1;
 $$;
 
@@ -97,7 +107,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_hash text := encode(digest(btrim(p_token), 'sha256'), 'hex');
+  v_hash text := shimo_sha256(btrim(p_token));
   v_row  players%rowtype;
 begin
   select * into v_row from players p
