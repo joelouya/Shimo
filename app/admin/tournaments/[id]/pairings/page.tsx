@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/admin/page-header";
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -478,25 +479,13 @@ export default function PairingsPage({
 
   return (
     <div>
-      <Link
-        href="/admin/tournaments"
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Tournaments
-      </Link>
-      <header className="mt-3 flex items-end justify-between">
-        <div>
-          <p className="smallcaps text-muted-foreground">Pairings & tee times</p>
-          <h1 className="mt-1 font-serif text-[clamp(30px,3.6vw,40px)] font-medium leading-[1.03] tracking-[-0.012em] text-foreground">
-            {t.name}
-          </h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {formatDateLong(roundInfo?.date ?? t.date)} · {clubById(t.clubId).name}{" "}
-            · {interval}-minute intervals
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <PageHeader
+        back={{ href: "/admin/tournaments", label: "Tournaments" }}
+        eyebrow="Pairings & tee times"
+        title={t.name}
+        meta={`${formatDateLong(roundInfo?.date ?? t.date)} · ${clubById(t.clubId).name} · ${interval}-minute intervals`}
+        actions={
+          <>
           {round > 1 && (
             <Button variant="outline" onClick={repairFromLeaderboard}>
               <Users className="size-4" />
@@ -519,8 +508,9 @@ export default function PairingsPage({
             <FileDown className="size-4" />
             {teeSheetBusy ? "Preparing…" : "Print tee sheet"}
           </Button>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <TournamentNav id={t.id} />
 
@@ -570,7 +560,7 @@ export default function PairingsPage({
         )}
       </AnimatePresence>
 
-      <div className="mt-7 grid grid-cols-[280px_1fr] gap-6">
+      <div className="mt-7 grid grid-cols-1 gap-6 md:grid-cols-[260px_1fr]">
         {/* registered pool */}
         <div>
           <p className="smallcaps mb-2.5 text-muted-foreground">
@@ -686,7 +676,7 @@ export default function PairingsPage({
           {notice && (
             <p className="mb-2 rounded-lg bg-amber-wash px-3 py-2 text-[12px] text-amber-flag">{notice}</p>
           )}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {groups.map((g, i) => (
               <div
                 key={g.id}

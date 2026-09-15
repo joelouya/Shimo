@@ -10,9 +10,10 @@
  * code: that stays with the guest and is verified at the desk on the day.
  */
 
+import { PageHeader } from "@/components/admin/page-header";
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Clock, Plus, UserRound } from "lucide-react";
+import { Check, Clock, Plus, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,36 +155,25 @@ export default function RegistrationsPage({
 
   return (
     <div>
-      <Link
-        href="/admin/tournaments"
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Tournaments
-      </Link>
-      <header className="mt-4 flex items-end justify-between gap-6">
-        <div>
-          <p className="smallcaps text-muted-foreground">Registrations</p>
-          <h1 className="mt-2 font-serif text-[clamp(30px,4vw,42px)] font-medium leading-[1.04] tracking-[-0.014em] text-foreground">
-            {t.name}
-          </h1>
-          <p className="mt-2 text-[14px] text-muted-foreground">
-            {clubName} · {formatDate(t.date)} ·{" "}
-            {open ? "entries open" : "entries closed"}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="font-serif text-[34px] leading-none text-foreground tnum">
-            {registered.length}
-            {t.maxPlayers ? (
-              <span className="text-[17px] text-muted-foreground"> / {t.maxPlayers}</span>
-            ) : null}
-          </p>
-          <p className="smallcaps mt-1 text-muted-foreground">
-            registered{waitlisted.length ? ` · ${waitlisted.length} waiting` : ""}
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        back={{ href: "/admin/tournaments", label: "Tournaments" }}
+        eyebrow="Registrations"
+        title={t.name}
+        meta={`${clubName} · ${formatDate(t.date)} · ${open ? "entries open" : "entries closed"}`}
+        actions={
+          <div className="rounded-xl bg-card px-4 py-2 text-right shadow-card">
+            <p className="font-serif text-[30px] leading-none text-foreground tnum">
+              {registered.length}
+              {t.maxPlayers ? (
+                <span className="text-[17px] text-muted-foreground"> / {t.maxPlayers}</span>
+              ) : null}
+            </p>
+            <p className="smallcaps mt-1 text-muted-foreground">
+              registered{waitlisted.length ? ` · ${waitlisted.length} waiting` : ""}
+            </p>
+          </div>
+        }
+      />
       <TournamentNav id={t.id} />
 
       {/* add someone the desk took by phone or in person */}

@@ -502,8 +502,8 @@ export default function LiveOpsPage() {
 
   return (
     <div>
-      <header className="flex items-end justify-between">
-        <div>
+      <header className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between 2xl:gap-8">
+        <div className="min-w-0">
           <div className="flex items-center gap-3">
             <LiveBadge />
             <p className="smallcaps text-muted-foreground">
@@ -516,19 +516,22 @@ export default function LiveOpsPage() {
             {active.tournament.name}
           </h1>
         </div>
-        <div className="flex items-end gap-8 pb-1 text-right">
-          {[
-            { l: "Groups out", v: groupsOut },
-            { l: "Scores in", v: scoresIn },
-            { l: "Open flags", v: openFlags.length },
-          ].map((s) => (
-            <div key={s.l}>
-              <p className="font-serif text-[26px] leading-none text-foreground tnum">
-                {s.v}
-              </p>
-              <p className="smallcaps mt-1 text-[9px] text-muted-foreground">{s.l}</p>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-3 2xl:justify-end 2xl:pb-1">
+          {/* the day's three figures as one ruled line, like the dashboard */}
+          <div className="flex divide-x divide-border/70 rounded-xl bg-card shadow-card">
+            {[
+              { l: "Groups out", v: groupsOut },
+              { l: "Scores in", v: scoresIn },
+              { l: "Open flags", v: openFlags.length },
+            ].map((s) => (
+              <div key={s.l} className="px-4 py-2 text-center">
+                <p className="font-serif text-[22px] leading-none text-foreground tnum">
+                  {s.v}
+                </p>
+                <p className="smallcaps mt-1 text-[9px] text-muted-foreground">{s.l}</p>
+              </div>
+            ))}
+          </div>
           <SharePublicBoard tournamentId={active.tournament.id} />
           <Button variant="outline" asChild>
             <Link href="/admin/scores">
@@ -583,8 +586,8 @@ export default function LiveOpsPage() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-[1fr_300px] gap-6">
-        <div className="grid grid-cols-3 gap-3">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {active.groups.map((g) => (
             <GroupCard
               key={g.id}

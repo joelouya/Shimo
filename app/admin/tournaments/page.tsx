@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/admin/page-header";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -490,28 +491,27 @@ export default function AdminTournamentsPage() {
           </div>
         </div>
       )}
-      <header className="flex items-end justify-between">
-        <div>
-          <p className="smallcaps text-muted-foreground">Tournaments</p>
-          <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
-            The season, in one place
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="lg" asChild>
-            <Link href="/admin/tournaments/ryder">
-              <Trophy className="size-4" />
-              Ryder Cup
-            </Link>
-          </Button>
-          <Button variant="clay" size="lg" asChild>
-            <Link href="/admin/tournaments/new">
-              <Plus className="size-4" />
-              Create tournament
-            </Link>
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Tournaments"
+        title="The season, in one place"
+        meta={`${live.length} on the course · ${upcoming.length} upcoming · ${completed.length} completed`}
+        actions={
+          <>
+            <Button variant="outline" size="lg" asChild>
+              <Link href="/admin/tournaments/ryder">
+                <Trophy className="size-4" />
+                Ryder Cup
+              </Link>
+            </Button>
+            <Button variant="clay" size="lg" asChild>
+              <Link href="/admin/tournaments/new">
+                <Plus className="size-4" />
+                Create tournament
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       {[
         { label: "Live now", items: live },

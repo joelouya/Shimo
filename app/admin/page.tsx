@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/admin/page-header";
 import { useMemo } from "react";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, ClipboardList, Plus } from "lucide-react";
@@ -8,9 +9,13 @@ import { Button } from "@/components/ui/button";
 import { LiveBadge } from "@/components/live-dot";
 import { clubById } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
-import { useActiveTournament, useStandings,
+import {
+  useActiveTournament,
+  useRoundCardIn,
+  useRoundCerts,
   useRoundScores,
-  useSlowClock
+  useSlowClock,
+  useStandings,
 } from "@/lib/sim/hooks";
 import { viewModeFor } from "@/lib/scoring";
 import { allTournaments, clubNameOf, groupHolesPlayed, useSim } from "@/lib/sim/store";
@@ -134,7 +139,7 @@ function LivePanel() {
           </span>
         )}
       </div>
-      <div className="flex items-end justify-between gap-8 p-6">
+      <div className="flex flex-col gap-6 p-6 md:flex-row md:items-end md:justify-between md:gap-8">
         <div>
           <h2 className="font-serif text-[26px] leading-tight">
             {active.tournament.name}
@@ -144,7 +149,7 @@ function LivePanel() {
             {active.tournament.firstTee}
           </p>
         </div>
-        <div className="flex gap-10">
+        <div className="flex flex-wrap gap-x-10 gap-y-4">
           <div>
             <p className="smallcaps text-primary-foreground/60">Groups out</p>
             <p className="mt-1 font-serif text-3xl tnum">{groupsOut}</p>
@@ -228,6 +233,84 @@ function usePilotMetrics(): Metric[] {
   ];
 }
 
+/**
+ * What is waiting on the desk, as a short list with a way to each item.
+ * Derived from state the desk already holds; empty when nothing is, which
+ * on a quiet morning is the right thing for it to say.
+ */
+function NeedsYou() {
+  const active = useActiveTournament();
+  const liveId = active?.tournament.id ?? null;
+  const flags = useSim(
+    (s) => s.flags.filter((f) => f.status === "open" && (!IS_PILOT || f.kind !== "red")).length,
+  );
+  const disputes = useSim(
+    (s) => s.disputes.filter((d) => d.status === "open" && d.tournamentId === liveId).length,
+  );
+  const corrections = useSim(
+    (s) => s.corrections.filter((c) => c.status === "pending" && c.tournamentId === liveId).length,
+  );
+  const certs = useRoundCerts();
+  const scores = useRoundScores();
+  const cardIn = useRoundCardIn();
+  const created = useSim((s) => s.created);
+  const entries = useSim((s) => s.entries);
+  const fieldIds = active ? active.groups.flatMap((g) => g.playerIds) : [];
+  const awaitingDesk = fieldIds.filter((pid) => {
+    const thru = (scores[pid] ?? []).filter((x) => x != null).length;
+    const c = certs[pid];
+    return thru >= 18 && !cardIn[pid] && (!c || c.stage === "awaiting-marker");
+  }).length;
+  // the page's slow clock, so the list is pure in render and still moves
+  const now = useSlowClock();
+  const today = new Date(now).toISOString().slice(0, 10);
+  const startToday = created.filter((t) => t.status === "upcoming" && t.date === today && !active);
+  const sinceYesterday = new Date(now - 86_400_000).toISOString();
+  const newEntries = entries.filter(
+    (e) => e.status !== "withdrawn" && e.registeredAt >= sinceYesterday,
+  ).length;
+
+  const items: { text: string; href: string }[] = [];
+  for (const t of startToday) {
+    items.push({ text: `${t.name} is today and has not been started`, href: "/admin/tournaments" });
+  }
+  if (disputes) items.push({ text: `${disputes} dispute${disputes > 1 ? "s" : ""} waiting for the Committee`, href: "/admin/live#certification" });
+  if (corrections) items.push({ text: `${corrections} correction request${corrections > 1 ? "s" : ""} to decide`, href: "/admin/live#certification" });
+  if (awaitingDesk) items.push({ text: `${awaitingDesk} finished card${awaitingDesk > 1 ? "s" : ""} not yet attested or in`, href: "/admin/scores" });
+  if (flags) items.push({ text: `${flags} flag${flags > 1 ? "s" : ""} open in Live Ops`, href: "/admin/live" });
+  if (newEntries) items.push({ text: `${newEntries} new registration${newEntries > 1 ? "s" : ""} since yesterday`, href: "/admin/tournaments" });
+
+  return (
+    <section className="animate-enter-rise mt-6 [animation-delay:160ms]">
+      <p className="smallcaps mb-3 text-muted-foreground">Needs you</p>
+      <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+        {items.length === 0 ? (
+          <p className="px-5 py-4 text-[13.5px] text-muted-foreground">
+            Nothing waiting on the desk.
+          </p>
+        ) : (
+          items.map((it, i) => (
+            <Link
+              key={it.text}
+              href={it.href}
+              className={cn(
+                "focus-ring flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-accent/50",
+                i > 0 && "border-t border-border/60",
+              )}
+            >
+              <span className="flex items-center gap-3 text-[14px] text-foreground">
+                <span className="size-1.5 shrink-0 rounded-full bg-clay" />
+                {it.text}
+              </span>
+              <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+            </Link>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 const DEMO_METRICS: Metric[] = [
   { label: "Members", value: "486", sub: "12 joined this quarter" },
   { label: "Tournaments · July", value: "4", sub: "2 open for entries" },
@@ -258,35 +341,26 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <header className="animate-enter-rise flex items-end justify-between">
-        <div>
-          <p className="smallcaps text-muted-foreground">
-            {new Date().toLocaleDateString("en-KE", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}{" "}
-            · {clubName}
-          </p>
-          <h1 className="mt-2 font-serif text-[clamp(36px,4.8vw,50px)] font-medium leading-[1.0] tracking-[-0.018em] text-foreground">
-            {greeting}{deskFirst ? `, ${deskFirst}` : ""}.
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="lg" asChild>
-            <Link href="/admin/scores">
-              <ClipboardList className="size-4" />
-              Enter scores from cards
-            </Link>
-          </Button>
-          <Button variant="clay" size="lg" asChild>
-            <Link href="/admin/tournaments/new">
-              <Plus className="size-4" />
-              Create tournament
-            </Link>
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow={`${new Date().toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long" })} · ${clubName}`}
+        title={`${greeting}${deskFirst ? `, ${deskFirst}` : ""}.`}
+        actions={
+          <>
+            <Button variant="outline" size="lg" asChild>
+              <Link href="/admin/scores">
+                <ClipboardList className="size-4" />
+                Enter scores from cards
+              </Link>
+            </Button>
+            <Button variant="clay" size="lg" asChild>
+              <Link href="/admin/tournaments/new">
+                <Plus className="size-4" />
+                Create tournament
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <div className="mt-8">
         <LivePanel />
@@ -296,7 +370,9 @@ export default function AdminDashboard() {
         <DayLedger items={IS_PILOT ? pilotMetrics : DEMO_METRICS} />
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-6 animate-enter-rise [animation-delay:200ms]">
+      <NeedsYou />
+
+      <div className="mt-8 grid grid-cols-1 gap-6 animate-enter-rise [animation-delay:200ms] md:grid-cols-2">
         <section>
           <div className="mb-3 flex items-center justify-between">
             <p className="smallcaps text-muted-foreground">Upcoming</p>

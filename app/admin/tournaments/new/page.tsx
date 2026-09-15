@@ -1058,7 +1058,7 @@ function CreateTournamentInner() {
           "mt-8 grid gap-10",
           showSummary
             ? "grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_300px]"
-            : "grid-cols-[220px_1fr]",
+            : "grid-cols-1 lg:grid-cols-[220px_1fr]",
         )}
       >
         {/* step rail */}

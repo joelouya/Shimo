@@ -15,9 +15,10 @@
  * no code, so the desk sees who registered and checks them in by name.
  */
 
+import { PageHeader } from "@/components/admin/page-header";
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Loader2, UserRound } from "lucide-react";
+import { Check, Loader2, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,22 +137,12 @@ export default function DeskPage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        href="/admin/tournaments"
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Tournaments
-      </Link>
-      <header className="mt-4">
-        <p className="smallcaps text-muted-foreground">Registration desk</p>
-        <h1 className="mt-2 font-serif text-[clamp(30px,4vw,42px)] font-medium leading-[1.04] tracking-[-0.014em] text-foreground">
-          {t.name}
-        </h1>
-        <p className="mt-2 text-[14px] text-muted-foreground">
-          {club.name} · {formatDate(t.date)}
-        </p>
-      </header>
+      <PageHeader
+        back={{ href: "/admin/tournaments", label: "Tournaments" }}
+        eyebrow="Registration desk"
+        title={t.name}
+        meta={`${club.name} · ${formatDate(t.date)} · ${checkedIn.length} checked in`}
+      />
 
       {/* the code box */}
       <section className="mt-8 rounded-2xl bg-card p-6 shadow-card">

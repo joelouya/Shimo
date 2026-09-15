@@ -106,6 +106,15 @@ export function DeskWelcome() {
                   transition={{ duration: 0.5, ease: EASE }}
                 />
               </span>
+              {/* the desk may be needed before the club is fully set up;
+                  everything here is reachable again from Settings */}
+              <button
+                type="button"
+                onClick={finish}
+                className="focus-ring ml-2 rounded-md px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                Set up later
+              </button>
             </div>
 
             <div className="relative flex-1 overflow-y-auto px-8 py-7">

@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/admin/page-header";
 import { useEffect, useState } from "react";
 import { Flag, RotateCcw, ShieldAlert } from "lucide-react";
 
@@ -209,12 +210,11 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <header>
-        <p className="smallcaps text-muted-foreground">Settings</p>
-        <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
-          Club settings
-        </h1>
-      </header>
+      <PageHeader
+        eyebrow="Settings"
+        title="Club settings"
+        meta="The club, its defaults, the clubhouse screen and the desk"
+      />
 
       <Tabs value={tab} onValueChange={setTab} className="mt-8 max-w-4xl">
         <TabsList className="h-10">
