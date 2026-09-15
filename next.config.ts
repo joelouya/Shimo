@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // the landing's screenshots are served resized and in modern formats
+  images: {
+    formats: ["image/avif", "image/webp"],
+  },
   /*
    * The poster renderer reads its two typefaces off disk when it starts.
    * Nothing imports them, so the build's file tracer has no reason to ship

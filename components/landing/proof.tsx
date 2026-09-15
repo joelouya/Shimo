@@ -146,7 +146,7 @@ export function Proof() {
             Why it holds up
           </p>
           <h2 className="mt-5 max-w-2xl font-serif text-[clamp(32px,5vw,54px)] font-medium leading-[1.04] tracking-[-0.02em] text-foreground text-balance">
-            Built in Kenya. Tested on real tournament-day work.
+            Built in Kenya, for the way a tournament day actually runs.
           </h2>
         </Reveal>
 
@@ -181,9 +181,9 @@ export function Proof() {
           <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-border pt-8 text-[14px] text-muted-foreground">
             <span>Built in Kenya</span>
             <span className="hidden size-1 rounded-full bg-border sm:block" />
-            <span>Tested on tournament-day workflows</span>
+            <span>Rehearsed with a full field on simulated devices</span>
             <span className="hidden size-1 rounded-full bg-border sm:block" />
-            <span>Currently in pilot</span>
+            <span>Preparing for a first club pilot</span>
           </div>
         </Reveal>
       </div>

@@ -5,29 +5,27 @@
  *
  * A single translucent pill, fixed at the top, so scrolling is never the only
  * way to move around the page. Its own cream backdrop keeps it legible over
- * both the navy cinematic and the paper page beneath. "How it works" jumps past
- * the pinned opening to the section below; the routes go straight into the two
- * halves of the product.
+ * both the navy cinematic and the paper page beneath. The two text links go
+ * straight into the halves of the product; the pill opens the demo on
+ * whichever half suits the device. Nothing here scrolls to another ask.
  */
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
 import { Logo } from "@/components/logo";
+import { routeForDevice } from "@/lib/device";
 
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function scrollToId(id: string) {
-  const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 const linkClass =
   "rounded-full px-3.5 py-2 text-[13px] font-medium text-foreground/70 transition-colors hover:bg-foreground/[0.06] hover:text-foreground";
 
 export function TopNav() {
+  const router = useRouter();
   return (
     <nav className="pointer-events-none fixed inset-x-0 top-4 z-[70] flex justify-center px-4">
       <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-[color-mix(in_srgb,var(--color-foreground)_10%,transparent)] bg-[color-mix(in_srgb,var(--color-cream)_82%,transparent)] py-1.5 pr-1.5 pl-4 shadow-lift backdrop-blur-md">
@@ -53,10 +51,10 @@ export function TopNav() {
 
         <button
           type="button"
-          onClick={() => scrollToId("how-it-works")}
-          className="ml-1 inline-flex items-center gap-1.5 rounded-full bg-clay px-4 py-2 text-[13px] font-medium text-cream shadow-xs transition-[background-color,transform] duration-200 hover:bg-clay-deep active:scale-[0.98]"
+          onClick={() => router.push(routeForDevice())}
+          className="focus-ring ml-1 inline-flex items-center gap-1.5 rounded-full bg-clay px-4 py-2 text-[13px] font-medium text-cream shadow-xs transition-[background-color,transform] duration-200 hover:bg-clay-deep active:scale-[0.98]"
         >
-          See how it works
+          Try the demo
           <ArrowRight className="size-3.5" />
         </button>
       </div>

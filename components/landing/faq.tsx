@@ -33,11 +33,11 @@ const FAQS = [
   },
   {
     q: "Which formats are supported?",
-    a: "Stableford and Stroke Play are fully supported today, across single or multi-round events with cuts. Match Play, Better Ball and Scramble are on the roadmap but not yet scored.",
+    a: "Stableford and Stroke Play, across single or multi-round events with cuts, plus Scramble and Better Ball scored as teams. Match Play is on the roadmap.",
   },
   {
     q: "Can members pay entry fees in Shimo?",
-    a: "Entry fees and tiers are built, and the payment flow can be demonstrated end to end. The live M-PESA integration isn't connected yet, so treat payment as a preview of the flow rather than something you can collect real money through today.",
+    a: "Entry fees and tiers are part of registration, and the desk records payment the way the club already takes it. Shimo does not collect money today: whether M-PESA settlement ships, and how, is still an open decision.",
   },
   {
     q: "What does the clubhouse screen need?",

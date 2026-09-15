@@ -6,8 +6,12 @@
  * Proof the software exists and works, shown unframed: these are actual captures
  * of the running app (Live Ops, tournament setup, on-course scoring), not
  * illustrative fragments inside mock device chrome. The interface is the
- * evidence here, so there is no golf photography and no CTA.
+ * evidence here, so there is no golf photography and no CTA. Served through
+ * next/image with their real dimensions, so nothing shifts as they load and a
+ * phone is not handed a desktop-sized JPEG.
  */
+
+import Image from "next/image";
 
 import { Reveal } from "@/components/landing/reveal";
 
@@ -42,11 +46,13 @@ export function ProductShots() {
         <Reveal className="mt-14">
           <figure>
             <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lift">
-              <img
+              <Image
                 src="/shots/live-ops.jpg"
+                width={1760}
+                height={1100}
+                sizes="(min-width: 1152px) 1104px, 100vw"
                 alt="The club's Live Ops screen: every group on the course, a live leaderboard and a running score feed."
-                loading="lazy"
-                className="block w-full"
+                className="block h-auto w-full"
               />
             </div>
             <Caption title="Live Ops, the club's command desk">
@@ -59,12 +65,13 @@ export function ProductShots() {
         <div className="mt-10 grid items-start gap-6 lg:grid-cols-[1.35fr_1fr]">
           <Reveal>
             <figure>
-              <div className="aspect-[16/10] overflow-hidden rounded-2xl border border-border bg-card shadow-card">
-                <img
+              <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+                <Image
                   src="/shots/setup.jpg"
+                  fill
+                  sizes="(min-width: 1024px) 620px, 100vw"
                   alt="The tournament setup wizard: kind of day, name, date, course and format."
-                  loading="lazy"
-                  className="block w-full object-cover object-top"
+                  className="object-cover object-top"
                 />
               </div>
               <Caption title="Set up a tournament in minutes">
@@ -75,12 +82,13 @@ export function ProductShots() {
 
           <Reveal delay={0.08}>
             <figure>
-              <div className="aspect-[4/5] overflow-hidden rounded-2xl border border-border bg-card shadow-card">
-                <img
+              <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+                <Image
                   src="/shots/scoring.jpg"
+                  fill
+                  sizes="(min-width: 1024px) 460px, 100vw"
                   alt="The golfer's phone: entering scores hole by hole and marking a playing partner's card."
-                  loading="lazy"
-                  className="block w-full object-cover object-top"
+                  className="object-cover object-top"
                 />
               </div>
               <Caption title="The golfer scores from their phone">

@@ -13,6 +13,7 @@
  * Reduced motion is honoured: no autoplay, no 3D swing, no per-word stagger.
  */
 
+import Link from "next/link";
 import React, {
   useCallback,
   useEffect,
@@ -76,6 +77,19 @@ export function HowItWorks() {
   const count = STEPS.length;
   const [active, setActive] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // the stack only turns while somebody can see it and is not reading it
+  const rootRef = useRef<HTMLElement>(null);
+  const [inView, setInView] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), {
+      threshold: 0.2,
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const activeStep = useMemo(() => STEPS[active], [active]);
 
@@ -96,12 +110,13 @@ export function HowItWorks() {
     setActive((p) => (p - 1 + count) % count);
   }, [count, stop]);
 
-  // Autoplay, unless the visitor prefers reduced motion.
+  // Autoplay, unless the visitor prefers reduced motion, has scrolled past,
+  // or is holding the pointer over the cards to read one.
   useEffect(() => {
-    if (reduce) return;
+    if (reduce || !inView || hovering) return;
     timer.current = setInterval(() => setActive((p) => (p + 1) % count), AUTOPLAY_MS);
     return stop;
-  }, [reduce, count, stop]);
+  }, [reduce, inView, hovering, count, stop]);
 
   // Keyboard navigation.
   useEffect(() => {
@@ -134,6 +149,7 @@ export function HowItWorks() {
   return (
     <section
       id="how-it-works"
+      ref={rootRef}
       className="relative scroll-mt-24 overflow-hidden bg-primary text-primary-foreground"
     >
       {/* A soft light from the top-left gives the ink panel depth without a flat
@@ -170,6 +186,8 @@ export function HowItWorks() {
           <div
             className="relative mx-auto h-[300px] w-full max-w-[380px] sm:h-[340px]"
             style={{ perspective: "1200px" }}
+            onMouseEnter={() => setHovering(true)}
+            onMouseLeave={() => setHovering(false)}
           >
             {STEPS.map((step, i) => {
               const Icon = step.icon;
@@ -300,21 +318,22 @@ export function HowItWorks() {
               </div>
             </div>
 
-            {/* Escalates from the hero: now that you know the shape of the day,
-                go and see the real interface. The ask itself waits for the end. */}
-            <div className="mt-10 border-t border-cream/10 pt-8">
-              <button
-                type="button"
-                onClick={() => {
-                  document
-                    .getElementById("the-product")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                className="group inline-flex items-center gap-2.5 rounded-xl border border-cream/20 px-6 py-3.5 font-medium text-cream transition-colors duration-200 hover:border-cream/40 hover:bg-cream/5"
+            {/* Now that you know the shape of the day, open the real thing:
+                either half, no sign-up. The heavier ask waits for the end. */}
+            <div className="mt-10 flex flex-wrap gap-3 border-t border-cream/10 pt-8">
+              <Link
+                href="/admin"
+                className="focus-ring group inline-flex items-center gap-2.5 rounded-xl bg-cream px-6 py-3.5 font-medium text-foreground transition-colors duration-200 hover:bg-cream/90"
               >
-                See the real thing
+                Open the club desk
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-              </button>
+              </Link>
+              <Link
+                href="/app"
+                className="focus-ring group inline-flex items-center gap-2.5 rounded-xl border border-cream/20 px-6 py-3.5 font-medium text-cream transition-colors duration-200 hover:border-cream/40 hover:bg-cream/5"
+              >
+                Open the golfer app
+              </Link>
             </div>
           </div>
         </div>
