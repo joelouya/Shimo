@@ -13,8 +13,13 @@ import { DEMO_USER_ID, clubById, courseById, findClub, playerById } from "@/lib/
 import { handicapSet } from "@/lib/scoring";
 import { IS_PILOT } from "@/lib/mode";
 import { useActiveTournament, useSyncStatus, useUserLive } from "@/lib/sim/hooks";
-import { allTournaments, useSim } from "@/lib/sim/store";
+import { allTournaments, registerForTournament, useSim } from "@/lib/sim/store";
+import { eligibilityForPlayer, registrationOpen } from "@/lib/eligibility";
 import { formatDate, ordinal } from "@/lib/utils";
+
+// the day before this page loaded: an "upcoming" event older than that is
+// stale, not upcoming
+const YESTERDAY_ISO = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -140,7 +145,7 @@ function LiveNowCard() {
 }
 
 export default function HomePage() {
-  const registrations = useSim((s) => s.registrations);
+  const entries = useSim((s) => s.entries);
   const created = useSim((s) => s.created);
   const dismissed = useSim((s) => s.dismissed);
   const tone = useSim((s) => s.tonePref);
@@ -160,13 +165,22 @@ export default function HomePage() {
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  const myEntryFor = (id: string) =>
+    me ? entries.find((e) => e.tournamentId === id && e.playerId === me.id) : undefined;
+  const entered = (id: string) => {
+    const e = myEntryFor(id);
+    return Boolean(e && e.status !== "withdrawn");
+  };
   const upcoming = allTournaments(created, dismissed)
-    .filter(
-      (t) =>
-        t.status === "upcoming" &&
-        (t.registered || registrations.includes(t.id)),
-    )
+    .filter((t) => t.status === "upcoming" && (t.registered || entered(t.id)))
     .sort((a, b) => a.date.localeCompare(b.date));
+  // published, still ahead, and not yet entered: the club's invitation
+  const open = allTournaments(created, dismissed)
+    .filter((t) => t.status === "upcoming" && t.date >= YESTERDAY_ISO && !t.registered && !entered(t.id))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 3);
+  const canEnter = (t: (typeof open)[number]) =>
+    Boolean(me && !me.guest && registrationOpen(t) && eligibilityForPlayer(t, me).kind === "eligible");
 
   const recent = allTournaments(created, dismissed).filter(
     (t) => t.status === "completed",
@@ -231,7 +245,7 @@ export default function HomePage() {
             </p>
           )}
           {upcoming.map((t) => (
-            <TournamentCard key={t.id} t={t} />
+            <TournamentCard key={t.id} t={t} entry={myEntryFor(t.id)} />
           ))}
         </div>
         <Link
@@ -242,6 +256,26 @@ export default function HomePage() {
           <ChevronRight className="size-3.5" />
         </Link>
       </section>
+
+      {open.length > 0 && (
+        <section className="mt-8 animate-enter-rise [animation-delay:240ms]">
+          <SectionLabel>Open for entry</SectionLabel>
+          <div className="flex flex-col gap-3">
+            {open.map((t) => (
+              <TournamentCard
+                key={t.id}
+                t={t}
+                onRegister={canEnter(t) ? () => registerForTournament(t.id) : undefined}
+              />
+            ))}
+          </div>
+          {IS_PILOT && !me && (
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              Tell the app who you are (above) to enter with one tap.
+            </p>
+          )}
+        </section>
+      )}
 
       {recent.length > 0 && (
       <section className="mt-8">

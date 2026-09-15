@@ -3273,6 +3273,7 @@ check("starting the day publishes the markers with the tee sheet", (() => {
   // a row saved by an older build carries none; the start fills it in
   S.simStore.setState({ ...st(), pairings: { ...st().pairings,
     [roundKey("t-marks", 1)]: [{ id: "g1", number: 1, teeTime: "07:00", playerIds: FM }] } }, true);
+  S.endTournamentDay("t-champs"); // one day on the course at a time
   S.startTournamentDay("t-marks", 1);
   const op = [...st().outbox].reverse().find((o) => o.kind === "entity" &&
     o.payload.table === "pairings" && o.payload.row.tournament_id === "t-marks");
@@ -3344,6 +3345,135 @@ section("The reconcile never reverts a local write");
   S.applyRemoteEntity("pairings", { ...row, player_ids: [],
     updated_at: new Date(Date.parse(newer) + 1_000).toISOString() });
   check("an emptied group is a removed group", st().pairings[key].length === 0);
+}
+
+/* ------------------------------------------------------------------ */
+section("Member registration: the field before the day");
+{
+  S.createTournament({ ...T, id: "t-reg", name: "Reg", status: "upcoming", maxPlayers: 2,
+    waitlist: true, regCloses: "2999-01-01", regClosesAt: "2999-01-01T00:00:00.000Z",
+    rounds: [T.rounds[0]] });
+  const tReg = () => st().created.find((t) => t.id === "t-reg");
+  const [pa, pb, pc] = st().roster.slice(0, 3).map((p) => p.id);
+  check("a phone with no identity cannot register",
+    S.registerPlayer("t-reg", "", { via: "phone" }).ok === false);
+  const r1 = S.registerPlayer("t-reg", pa, { via: "phone" });
+  check("a member registers with one tap",
+    r1.ok && r1.entry.status === "registered" && r1.entry.kind === "member" && r1.entry.via === "phone");
+  check("the entry is queued for the cloud with its conflict target",
+    st().outbox.some((o) => o.kind === "entity" && o.payload.table === "entries" &&
+      o.payload.conflict === "tournament_id,player_id" && o.payload.row.player_id === pa));
+  check("registering twice keeps one entry",
+    S.registerPlayer("t-reg", pa, { via: "phone" }).ok &&
+      st().entries.filter((e) => e.tournamentId === "t-reg" && e.playerId === pa).length === 1);
+  S.registerPlayer("t-reg", pb, { via: "phone" });
+  check("capacity counts members", S.registrationCapacity(st(), tReg()).full);
+  const r3 = S.registerPlayer("t-reg", pc, { via: "phone" });
+  check("a full field with a waitlist puts the next member on it",
+    r3.ok && r3.entry.status === "waitlisted");
+  S.withdrawEntry("t-reg", pa);
+  check("withdrawing frees a place",
+    !S.registrationCapacity(st(), tReg()).full && S.entryOf(st(), "t-reg", pa)?.status === "withdrawn");
+  S.promoteEntry("t-reg", pc);
+  check("the desk admits from the waitlist",
+    S.entryOf(st(), "t-reg", pc)?.status === "registered" && S.entryOf(st(), "t-reg", pc)?.via === "desk");
+  check("a closed window refuses a phone", (() => {
+    S.updateTournament({ ...tReg(), regCloses: "2000-01-01", regClosesAt: "2000-01-01T00:00:00.000Z" });
+    const r = S.registerPlayer("t-reg", pa, { via: "phone" });
+    return r.ok === false && r.reason === "closed";
+  })());
+  check("but the desk can still add a walk-up",
+    S.registerPlayer("t-reg", pa, { via: "desk", force: true }).ok === true);
+
+  // the wire
+  const row = MAP.entryToRow(S.entryOf(st(), "t-reg", pb));
+  check("an entry round-trips through its row",
+    MAP.rowToEntry(row).status === "registered" && MAP.rowToEntry(row).playerId === pb);
+  const held = S.entryOf(st(), "t-reg", pa);
+  const older = { ...MAP.entryToRow(held), status: "withdrawn",
+    updated_at: new Date(Date.parse(held.updatedAt) - 60_000).toISOString() };
+  S.mergeCloudEntries([older]);
+  check("an older cloud row does not undo a local change",
+    S.entryOf(st(), "t-reg", pa)?.status === "registered");
+  const newer = { ...older, updated_at: new Date(Date.now() + 60_000).toISOString() };
+  S.applyRemoteEntity("entries", newer);
+  check("a newer cloud row lands", S.entryOf(st(), "t-reg", pa)?.status === "withdrawn");
+  S.hydrateFromSnapshot({ tournament: MAP.tournamentToRow(tReg()), pairings: [], teams: [],
+    players: [], scores: [], cardIn: [], certifications: [], disputes: [], corrections: [],
+    audit: [], entries: [{ ...newer, status: "registered",
+      updated_at: new Date(Date.now() + 120_000).toISOString() }] });
+  check("a snapshot merges entries the same way",
+    S.entryOf(st(), "t-reg", pa)?.status === "registered");
+
+  // guests and walk-ups are in the same field
+  const g = S.registerGuest("t-reg", { name: "Walk Up", email: "walk@up.co", sponsorListConsent: false });
+  check("a guest registration is in the field too",
+    S.entryOf(st(), "t-reg", g.guestId)?.kind === "guest");
+  S.checkInPlayer("t-reg", { id: "p-walkup", clubId: "sigona", name: "Walk In", handicap: 12, gender: "M" }, { paid: true });
+  check("checking in a walk-up puts them in the field",
+    S.entryOf(st(), "t-reg", "p-walkup")?.status === "registered" &&
+      S.entryOf(st(), "t-reg", "p-walkup")?.via === "desk");
+}
+
+/* ------------------------------------------------------------------ */
+section("The day's lifecycle: one at a time, undoable, honest about results");
+{
+  const pid = FM[0];
+  check("t-marks is on the course", st().liveTournamentId === "t-marks");
+  S.raiseDispute(pid, 2, "The drop on the third", FM[1]);
+  const d = st().disputes.find((x) => x.tournamentId === "t-marks" && x.playerId === pid);
+  check("a dispute names its tournament", Boolean(d));
+  check("its row carries it and reads it back",
+    MAP.rowToDispute(MAP.disputeToRow("t-marks", d)).tournamentId === "t-marks");
+
+  S.endTournamentDay("t-marks");
+  check("ending the day stands the board down", st().liveTournamentId === null &&
+    st().created.find((t) => t.id === "t-marks").status === "completed");
+  await S.resolveDispute(d.id, { kind: "committee", score: 6, reason: "Committee ruling" });
+  const key = roundKey("t-marks", 1);
+  check("a dispute resolved after the day writes into its own tournament",
+    S.roundScores(st(), key)[pid][2] === 6);
+  check("and certifies that card, not today's",
+    S.roundCerts(st(), key)[pid]?.stage === "certified");
+  check("the ruling is filed under the right event",
+    st().auditLog.some((a) => a.kind === "dispute-resolved" && a.tournamentId === "t-marks"));
+  check("the score op names the tournament too", [...st().outbox].reverse().some((o) =>
+    o.kind === "resolve" && o.payload.playerId === pid && o.payload.tournamentId === "t-marks"));
+
+  // one day at a time
+  S.startTournamentDay("t-reg", 1);
+  check("a new day starts once the old one has ended", st().liveTournamentId === "t-reg");
+  const before = st().created.find((t) => t.id === "t-marks").status;
+  S.startTournamentDay("t-marks", 1);
+  check("a second day cannot start while one is on the course",
+    st().liveTournamentId === "t-reg" &&
+      st().created.find((t) => t.id === "t-marks").status === before &&
+      S.canStartTournamentDay(st(), "t-marks").ok === false);
+  S.endTournamentDay("t-marks");
+  check("ending an event that is not live leaves the live one alone",
+    st().liveTournamentId === "t-reg");
+
+  // undo a start
+  check("a day with no card in can be reopened", S.canReopenTournamentDay(st(), "t-reg"));
+  check("reopening puts it back to upcoming", S.reopenTournamentDay("t-reg") &&
+    st().liveTournamentId === null &&
+    st().created.find((t) => t.id === "t-reg").status === "upcoming");
+
+  // no golf, no winner
+  S.startTournamentDay("t-reg", 1);
+  S.endTournamentDay("t-reg");
+  check("ending with no scores names no winner",
+    st().created.find((t) => t.id === "t-reg").result === undefined);
+
+  // a copy is next week's event, not last month's
+  const src = st().created.find((t) => t.id === "t-reg");
+  const copyId = S.duplicateTournament("t-reg");
+  const copy = st().created.find((t) => t.id === copyId);
+  const sixDaysOn = new Date(Date.now() + 6 * 86_400_000).toISOString().slice(0, 10);
+  check("a duplicate is dated ahead", Boolean(copy) && copy.date >= sixDaysOn && copy.date > src.date);
+  check("its registration window moves with it",
+    copy.regClosesAt > src.regClosesAt && copy.rounds.every((r) => r.date >= copy.date));
+  check("it is upcoming with no result", copy.status === "upcoming" && copy.result === undefined);
 }
 
 /* ------------------------------------------------------------------ */

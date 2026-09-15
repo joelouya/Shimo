@@ -24,14 +24,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { COURSES, CLUBS } from "@/lib/data";
+import { COURSES } from "@/lib/data";
 import { clubIdentityOf, setClubIdentity, useSim } from "@/lib/sim/store";
 import { uploadTvBackground, validateLogo } from "@/lib/sync/storage";
 import type { ClubIdentity } from "@/lib/types";
 
-const CLUB_ID = CLUBS[0].id;
-
 export function TvSettingsCard() {
+  const CLUB_ID = useSim((s) => s.clubId);
   const identity = useSim((s) => clubIdentityOf(s, CLUB_ID));
   return (
     <section className="rounded-2xl bg-card p-6 shadow-card">
@@ -63,8 +62,8 @@ function Background({ identity }: { identity: ClubIdentity }) {
     setBusy(true);
     setError(null);
     try {
-      const { url } = await uploadTvBackground(CLUB_ID, file);
-      setClubIdentity(CLUB_ID, { tvBackgroundUrl: url });
+      const { url } = await uploadTvBackground(identity.clubId, file);
+      setClubIdentity(identity.clubId, { tvBackgroundUrl: url });
     } catch {
       setError("The upload did not complete. Check the connection and try again.");
     } finally {
@@ -126,7 +125,7 @@ function Background({ identity }: { identity: ClubIdentity }) {
           <Button
             variant="ghost"
             className="text-muted-foreground hover:text-destructive"
-            onClick={() => setClubIdentity(CLUB_ID, { tvBackgroundUrl: undefined })}
+            onClick={() => setClubIdentity(identity.clubId, { tvBackgroundUrl: undefined })}
           >
             Remove
           </Button>
@@ -142,7 +141,7 @@ function Messages({ identity }: { identity: ClubIdentity }) {
   const [draft, setDraft] = useState("");
 
   const save = (next: string[]) =>
-    setClubIdentity(CLUB_ID, { tvMessages: next.length ? next : undefined });
+    setClubIdentity(identity.clubId, { tvMessages: next.length ? next : undefined });
 
   return (
     <div>
@@ -212,7 +211,7 @@ function Messages({ identity }: { identity: ClubIdentity }) {
  */
 function Records({ identity }: { identity: ClubIdentity }) {
   const records = identity.courseRecords ?? [];
-  const courses = COURSES.filter((c) => c.clubId === CLUB_ID);
+  const courses = COURSES.filter((c) => c.clubId === identity.clubId);
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [tee, setTee] = useState(courses[0]?.tees ?? "White");
   const [strokes, setStrokes] = useState("");
@@ -222,7 +221,7 @@ function Records({ identity }: { identity: ClubIdentity }) {
 
   const tees = COURSES.find((c) => c.id === courseId)?.ratings.map((r) => r.tee) ?? [];
   const save = (next: NonNullable<ClubIdentity["courseRecords"]>) =>
-    setClubIdentity(CLUB_ID, { courseRecords: next.length ? next : undefined });
+    setClubIdentity(identity.clubId, { courseRecords: next.length ? next : undefined });
 
   const add = () => {
     const n = Number(strokes);

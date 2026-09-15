@@ -427,16 +427,19 @@ export default function LiveOpsPage() {
   );
   const openItems = useSim(
     (s) =>
-      s.disputes.filter((d) => d.status === "open").length +
-      s.corrections.filter((c) => c.status === "pending").length,
+      s.disputes.filter((d) => d.status === "open" && d.tournamentId === s.liveTournamentId).length +
+      s.corrections.filter((c) => c.status === "pending" && c.tournamentId === s.liveTournamentId).length,
   );
   const active = useActiveTournament();
 
   // pilot mode never alerts pace flags during play - they live in
   // Settings > Integrity instead
-  const openFlags = flags.filter(
-    (f) => f.status === "open" && (!IS_PILOT || f.kind !== "red"),
-  );
+  // pilot keeps red (pace) flags out of the room, and the club can switch
+  // anomaly flags off altogether from Settings
+  const showFlags = useSim((s) => s.clubDefaults.anomalyFlags);
+  const openFlags = showFlags
+    ? flags.filter((f) => f.status === "open" && (!IS_PILOT || f.kind !== "red"))
+    : [];
 
   const byId = new Map((active?.players ?? []).map((p) => [p.id, p] as const));
 

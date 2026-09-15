@@ -57,14 +57,44 @@ export interface HydrationSnapshot {
   disputes: Record<string, unknown>[];
   corrections: Record<string, unknown>[];
   audit: Record<string, unknown>[];
+  /** who is in the field; optional so older fixtures still hydrate */
+  entries?: Record<string, unknown>[];
 }
 
 /* ------------------------------------------------------------------ */
 /* Push                                                                */
 /* ------------------------------------------------------------------ */
 
-async function pushOps(sb: SupabaseClient, ops: SyncOp[], tournamentId: string) {
+/**
+ * What came back from a push: the ops that did not land. Each table is pushed
+ * on its own, so one refused row (a table the club's cloud does not have yet,
+ * a value a check constraint rejects) holds up only its own ops and never the
+ * scores queued beside it. When nothing at all lands the push throws, which
+ * is what an outage looks like and what the engine's retry expects.
+ */
+export interface PushResult {
+  failed: string[];
+}
+
+async function pushOps(
+  sb: SupabaseClient,
+  ops: SyncOp[],
+  tournamentId: string,
+): Promise<PushResult> {
   if (forceFail()) throw new Error("forced sync failure");
+  const failed: string[] = [];
+  let groups = 0;
+  let failedGroups = 0;
+  const attempt = async (ids: string[], run: () => Promise<void>) => {
+    groups++;
+    try {
+      await run();
+    } catch (e) {
+      failedGroups++;
+      failed.push(...ids);
+      if (REALTIME_DEBUG) console.warn("[shimo sync] a table refused a push", e);
+    }
+  };
 
   // scores (and resolved-discrepancy score changes)
   const scoreOps = ops.filter((o) => o.kind === "score" || o.kind === "resolve");
@@ -90,45 +120,53 @@ async function pushOps(sb: SupabaseClient, ops: SyncOp[], tournamentId: string) 
         updated_at: new Date(o.ts).toISOString(),
       });
     }
-    const { error } = await sb.from("scores").upsert([...byCell.values()], {
-      onConflict: "tournament_id,round,player_id,hole,source",
+    await attempt(scoreOps.map((o) => o.id), async () => {
+      const { error } = await sb.from("scores").upsert([...byCell.values()], {
+        onConflict: "tournament_id,round,player_id,hole,source",
+      });
+      if (error) throw error;
     });
-    if (error) throw error;
   }
 
   // entity rows, grouped by table
   const entityOps = ops.filter((o) => o.kind === "entity");
   const byTable = new Map<
     string,
-    { rows: Record<string, unknown>[]; conflict?: string; insertOnly?: boolean }
+    { ids: string[]; rows: Record<string, unknown>[]; conflict?: string; insertOnly?: boolean }
   >();
   for (const o of entityOps) {
     const table = String(o.payload.table);
     const row = o.payload.row as Record<string, unknown>;
     const conflict = o.payload.conflict as string | undefined;
     const insertOnly = Boolean(o.payload.insertOnly);
-    const bucket = byTable.get(table) ?? { rows: [], conflict, insertOnly };
+    const bucket = byTable.get(table) ?? { ids: [], rows: [], conflict, insertOnly };
+    bucket.ids.push(o.id);
     bucket.rows.push(row);
     byTable.set(table, bucket);
   }
-  for (const [table, { rows, conflict, insertOnly }] of byTable) {
-    if (insertOnly) {
-      // insert-only (audit log, guest entries): ignore duplicates so a retry
-      // can't double-insert and no UPDATE is attempted against a write-only
-      // table. Keyed by the table's own conflict target - `id` for audit, the
-      // composite (tournament_id,guest_id) for guest_entries.
-      const { error } = await sb.from(table).upsert(rows, {
-        onConflict: conflict ?? "id",
-        ignoreDuplicates: true,
-      });
-      if (error) throw error;
-    } else {
-      const { error } = await sb
-        .from(table)
-        .upsert(rows, conflict ? { onConflict: conflict } : undefined);
-      if (error) throw error;
-    }
+  for (const [table, { ids, rows, conflict, insertOnly }] of byTable) {
+    await attempt(ids, async () => {
+      if (insertOnly) {
+        // insert-only (audit log, guest entries): ignore duplicates so a retry
+        // can't double-insert and no UPDATE is attempted against a write-only
+        // table. Keyed by the table's own conflict target - `id` for audit, the
+        // composite (tournament_id,guest_id) for guest_entries.
+        const { error } = await sb.from(table).upsert(rows, {
+          onConflict: conflict ?? "id",
+          ignoreDuplicates: true,
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await sb
+          .from(table)
+          .upsert(rows, conflict ? { onConflict: conflict } : undefined);
+        if (error) throw error;
+      }
+    });
   }
+  // nothing landed at all: that is an outage, not a refusal
+  if (groups > 0 && failedGroups === groups) throw new Error("push failed");
+  return { failed };
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,6 +191,7 @@ async function hydrate(
     disputes,
     corrections,
     audit,
+    entries,
   ] = await Promise.all([
     sb.from("tournaments").select("*").eq("id", tournamentId).maybeSingle(),
     eq("pairings"),
@@ -164,6 +203,7 @@ async function hydrate(
     eq("disputes"),
     eq("corrections"),
     eq("audit_log"),
+    eq("entries"),
   ]);
 
   return {
@@ -177,6 +217,7 @@ async function hydrate(
     disputes: disputes.data ?? [],
     corrections: corrections.data ?? [],
     audit: audit.data ?? [],
+    entries: entries.data ?? [],
   };
 }
 
@@ -186,13 +227,17 @@ async function hydrate(
 
 export interface RemoteAdapter {
   kind: "supabase" | "none";
-  push(ops: SyncOp[], tournamentId: string): Promise<void>;
+  /** resolves with the ids of ops that were refused; throws when nothing landed */
+  push(ops: SyncOp[], tournamentId: string): Promise<PushResult>;
   hydrate(tournamentId: string): Promise<HydrationSnapshot>;
   /** the current live tournament id, if any device has started one */
   findLiveTournamentId(): Promise<string | null>;
   /** every published event (upcoming or live), so a phone can list them to
    *  register for before the day is started */
   findOpenTournaments(): Promise<Record<string, unknown>[]>;
+  /** everyone registered for these events, so a phone or the desk sees the
+   *  field before the day is started */
+  fetchEntries(tournamentIds: string[]): Promise<Record<string, unknown>[]>;
   /** realtime for every synced table; onChange(table, newRow). unsubscribe. */
   subscribeTables(
     onChange: (table: SyncTable, row: Record<string, unknown>) => void,
@@ -215,6 +260,7 @@ function localRemote(): RemoteAdapter {
     async push() {
       await new Promise((r) => setTimeout(r, 250));
       if (forceFail()) throw new Error("simulated sync failure");
+      return { failed: [] };
     },
     async hydrate() {
       return EMPTY_SNAPSHOT;
@@ -223,6 +269,9 @@ function localRemote(): RemoteAdapter {
       return null;
     },
     async findOpenTournaments() {
+      return [];
+    },
+    async fetchEntries() {
       return [];
     },
     subscribeTables() {
@@ -235,7 +284,7 @@ function supabaseRemote(): RemoteAdapter {
   return {
     kind: "supabase",
     async push(ops, tournamentId) {
-      await pushOps(await supabase(), ops, tournamentId);
+      return pushOps(await supabase(), ops, tournamentId);
     },
     async hydrate(tournamentId) {
       return hydrate(await supabase(), tournamentId);
@@ -258,6 +307,15 @@ function supabaseRemote(): RemoteAdapter {
         .select("*")
         .in("status", ["upcoming", "live"])
         .order("date", { ascending: true });
+      return (data ?? []) as Record<string, unknown>[];
+    },
+    async fetchEntries(tournamentIds) {
+      if (!tournamentIds.length) return [];
+      const sb = await supabase();
+      const { data } = await sb
+        .from("entries")
+        .select("*")
+        .in("tournament_id", tournamentIds);
       return (data ?? []) as Record<string, unknown>[];
     },
     subscribeTables(onChange) {

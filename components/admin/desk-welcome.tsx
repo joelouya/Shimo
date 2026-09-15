@@ -34,7 +34,7 @@ import { Label } from "@/components/ui/label";
 import { LogoMark } from "@/components/logo";
 import { ClubIdentityCard } from "@/components/admin/club-identity";
 import { CsvImportCard } from "@/components/admin/csv-import";
-import { clubById, courseById, COURSES } from "@/lib/data";
+import { COURSES, clubById, courseById, findClub } from "@/lib/data";
 import { makeRound, withRoundsSynced } from "@/lib/rounds";
 import {
   createTournament,
@@ -46,8 +46,6 @@ import type { Format, Tournament } from "@/lib/types";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
-/** The club this console administers. */
-const CLUB_ID = "muthaiga";
 
 type Step = "welcome" | "identity" | "members" | "tournament" | "tour" | "done";
 const ORDER: Step[] = [
@@ -273,7 +271,8 @@ function MembersStep({ onBack, onNext }: { onBack: () => void; onNext: () => voi
 }
 
 function TournamentStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
-  const club = clubById(CLUB_ID);
+  const CLUB_ID = useSim((s) => s.clubId);
+  const club = findClub(CLUB_ID) ?? clubById("muthaiga");
   const clubCourses = COURSES.filter((c) => c.clubId === CLUB_ID);
   const courses = clubCourses.length ? clubCourses : COURSES;
 
@@ -481,13 +480,14 @@ function DoneStep({
       {sent === null ? (
         <>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-soft">
-            Send your members their invitations now, or do it later from
-            Members. Nothing is sent until you choose to.
+            Prepare your members&apos; invitation links now, or later from
+            Members. Nothing is emailed by Shimo: you share each link from the
+            Members page, by WhatsApp or however the club talks to them.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-border/60 pt-5">
             <Button variant="clay" size="lg" onClick={invite} disabled={rosterCount === 0}>
               <Mail className="size-4" />
-              Send invitations now
+              Prepare invitation links
             </Button>
             <Button variant="ghost" size="lg" className="text-muted-foreground" onClick={onFinish}>
               Do this later

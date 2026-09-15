@@ -26,6 +26,7 @@ import {
   applyRemoteScore,
   hydrateFromSnapshot,
   markCloudChecked,
+  mergeCloudEntries,
   mergeCloudTournaments,
   registerDrainSignal,
   type SimState,
@@ -62,8 +63,13 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
     try {
       // discover every published event, so an upcoming one a golfer never
       // created still appears on their phone to register for
-      mergeCloudTournaments(await remote.findOpenTournaments());
+      const open = await remote.findOpenTournaments();
+      mergeCloudTournaments(open);
       markCloudChecked();
+      // and who is in each of them, so the desk sees registrations before
+      // the day and a member's second phone sees they are in
+      const ids = open.map((r) => String(r.id ?? "")).filter(Boolean);
+      if (ids.length) mergeCloudEntries(await remote.fetchEntries(ids));
       const liveId =
         store.getState().liveTournamentId ??
         (await remote.findLiveTournamentId());
@@ -139,11 +145,22 @@ export function startSyncEngine({ store, isLeader, mutate }: EngineDeps) {
     const ids = new Set(pending.map((o) => o.id));
     const now = Date.now();
     try {
-      await remote.push(pending, s.liveTournamentId ?? "unassigned");
+      const result = await remote.push(pending, s.liveTournamentId ?? "unassigned");
+      const refused = new Set(result.failed);
       mutate((d) => {
-        d.outbox = d.outbox.map((o) =>
-          ids.has(o.id) ? { ...o, status: "synced" as const } : o,
-        );
+        d.outbox = d.outbox.map((o) => {
+          if (!ids.has(o.id)) return o;
+          if (!refused.has(o.id)) return { ...o, status: "synced" as const };
+          // a refused row retries on its own clock and fails on its own,
+          // without holding up what did land beside it
+          const firstTriedAt = o.firstTriedAt ?? now;
+          return {
+            ...o,
+            attempts: o.attempts + 1,
+            firstTriedAt,
+            status: now - firstTriedAt >= FAIL_AFTER_MS ? ("failed" as const) : o.status,
+          };
+        });
         d.lastSyncedAt = now;
       });
       scheduleReconcile();

@@ -73,6 +73,7 @@ export const SYNC_TABLES = [
   "disputes",
   "corrections",
   "audit_log",
+  "entries",
 ] as const;
 
 export type SyncTable = (typeof SYNC_TABLES)[number];

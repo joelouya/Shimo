@@ -33,7 +33,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEMO_USER_ID } from "@/lib/data";
-import { addRosterMember, updateRosterMember, useSim } from "@/lib/sim/store";
+import {
+  addRosterMember,
+  clubNameOf,
+  updateRosterMember,
+  useSim,
+} from "@/lib/sim/store";
 import type { Player } from "@/lib/types";
 import { PlayerAvatar } from "@/components/player/identity";
 import {
@@ -120,17 +125,23 @@ function MemberMenu({
   m,
   onCopied,
   onLink,
+  onEdit,
 }: {
   m: Player;
   onCopied: (v: { name: string; url: string }) => void;
   onLink: (m: Player) => void;
+  onEdit: (m: Player) => void;
 }) {
   const state = accessOf(m);
   const copyLink = async () => {
     const token = ensureInviteToken(m.id);
     if (!token) return;
     const url = `${window.location.origin}${invitePath(token)}`;
-    await navigator.clipboard.writeText(url);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      /* no clipboard on this origin: the dialog shows the link to copy by hand */
+    }
     onCopied({ name: m.name, url });
   };
 
@@ -149,6 +160,10 @@ function MemberMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{ACCESS_LABEL[state]}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onEdit(m)}>
+          <Pencil />
+          Edit details
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => inviteMember(m.id)}>
           <Send />
           {state === "uninvited" ? "Create invitation" : "Issue a new invitation"}
@@ -183,9 +198,11 @@ function MemberMenu({
 
 export default function MembersPage() {
   const roster = useSim((s) => s.roster);
+  const clubId = useSim((s) => s.clubId);
+  const clubName = useSim((s) => clubNameOf(s));
   const members = useMemo(
-    () => roster.filter((p) => p.clubId === "muthaiga"),
-    [roster],
+    () => roster.filter((p) => p.clubId === clubId && !p.guest),
+    [roster, clubId],
   );
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Player | null>(null);
@@ -231,7 +248,7 @@ export default function MembersPage() {
     } else {
       addRosterMember({
         id: `p-new-${Date.now()}`,
-        clubId: "muthaiga",
+        clubId,
         ...form,
         handicap: Number(form.handicap),
       });
@@ -247,7 +264,7 @@ export default function MembersPage() {
         <div>
           <p className="smallcaps text-muted-foreground">Members</p>
           <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
-            The Muthaiga roster
+            The {clubName} roster
           </h1>
           <p className="mt-1 text-[13px] text-muted-foreground">
             {members.length} playing members on Shimo · handicaps from the club
@@ -284,7 +301,7 @@ export default function MembersPage() {
           <span>Member</span>
           <span className="text-center">HC</span>
           <span>Contact</span>
-          <span className="text-center">Rounds ’26</span>
+          <span className="text-center">{IS_PILOT ? "Member no." : "Rounds ’26"}</span>
           <span className="text-center">
             {IS_PILOT ? "Access" : "Tournaments"}
           </span>
@@ -318,7 +335,9 @@ export default function MembersPage() {
               <p className="truncate text-[12px] text-ink-soft tnum">{m.phone}</p>
               <p className="truncate text-[11px] text-muted-foreground">{m.email}</p>
             </div>
-            <p className="text-center text-[13px] text-ink-soft tnum">{roundsFor(m)}</p>
+            <p className="text-center text-[13px] text-ink-soft tnum">
+              {IS_PILOT ? (m.memberNo ?? "·") : roundsFor(m)}
+            </p>
             {IS_PILOT ? (
               <div className="flex justify-center">
                 <AccessBadge state={accessOf(m)} />
@@ -329,7 +348,7 @@ export default function MembersPage() {
               </p>
             )}
             {IS_PILOT ? (
-              <MemberMenu m={m} onCopied={setCopied} onLink={setToLink} />
+              <MemberMenu m={m} onCopied={setCopied} onLink={setToLink} onEdit={openEdit} />
             ) : (
               <button
                 onClick={() => openEdit(m)}

@@ -16,8 +16,8 @@ import { Logo } from "@/components/logo";
 import { DemoToggle } from "@/components/demo-toggle";
 import { SimGate } from "@/components/sim-gate";
 import { IS_PILOT } from "@/lib/mode";
-import { useSim } from "@/lib/sim/store";
-import { cn } from "@/lib/utils";
+import { clubNameOf, useSim } from "@/lib/sim/store";
+import { cn, initials } from "@/lib/utils";
 
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutGrid },
@@ -30,9 +30,14 @@ const NAV = [
 
 function Sidebar() {
   const pathname = usePathname();
+  // the badge counts what Live Ops will show: pilot keeps red flags out of
+  // the room, so they are not counted at its door either
   const openFlags = useSim(
-    (s) => s.flags.filter((f) => f.status === "open").length,
+    (s) => s.flags.filter((f) => f.status === "open" && (!IS_PILOT || f.kind !== "red")).length,
   );
+  const live = useSim((s) => Boolean(s.liveTournamentId));
+  const deskName = useSim((s) => s.deskName);
+  const clubName = useSim((s) => clubNameOf(s));
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-primary text-primary-foreground">
@@ -75,7 +80,7 @@ function Sidebar() {
                       {openFlags}
                     </span>
                   )}
-                  <span className="size-1.5 rounded-full bg-clay animate-live-pulse" />
+                  {live && <span className="size-1.5 rounded-full bg-clay animate-live-pulse" />}
                 </span>
               )}
             </Link>
@@ -85,14 +90,14 @@ function Sidebar() {
       <div className="border-t border-cream/10 p-4">
         <div className="flex items-center gap-3 rounded-xl bg-cream/5 p-3">
           <div className="flex size-9 items-center justify-center rounded-full bg-clay font-serif text-sm text-cream">
-            W
+            {deskName?.trim() ? initials(deskName) : "·"}
           </div>
           <div className="min-w-0">
             <p className="truncate text-[13px] font-medium text-cream">
-              Wanjiru Njenga
+              {deskName?.trim() || "The desk"}
             </p>
             <p className="truncate text-[11px] text-primary-foreground/60">
-              Muthaiga Golf Club
+              {clubName}
             </p>
           </div>
         </div>

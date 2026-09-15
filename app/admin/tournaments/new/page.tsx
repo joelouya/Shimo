@@ -19,7 +19,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { COURSES, clubById, courseById } from "@/lib/data";
 import { IS_PILOT, WIRED_FORMATS } from "@/lib/mode";
-import { createTournament, updateTournament, useSim } from "@/lib/sim/store";
+import {
+  createTournament,
+  updateTournament,
+  useSim,
+  type ClubDefaults,
+} from "@/lib/sim/store";
 import {
   COVERAGE_HELP,
   COVERAGE_LABEL,
@@ -42,6 +47,7 @@ import { uploadSponsorLogo, validateLogo } from "@/lib/sync/storage";
 import { REMOTE_CONFIGURED } from "@/lib/sync/client";
 import type {
   Contest,
+  Division,
   EventKind,
   FeeAudience,
   FeeTier,
@@ -87,6 +93,39 @@ function stepsFor(kind: EventKind) {
     : [...BASE_STEPS, CONTESTS_STEP, REVIEW_STEP];
 }
 const LAST_STEP = REVIEW_STEP.n;
+
+/**
+ * Three divisions across the handicap band the club set, rather than the
+ * fixed 0-9 / 10-18 / 19-28 that ignored it. A 0-36 band splits 0-12,
+ * 13-24, 25-36.
+ */
+function divisionsForBand(min: number, max: number): Division[] {
+  const lo = Math.max(0, Math.min(min, max));
+  const hi = Math.max(lo, max);
+  const span = hi - lo + 1;
+  const size = Math.max(1, Math.ceil(span / 3));
+  const names = ["Division A", "Division B", "Division C"];
+  const out: Division[] = [];
+  for (let i = 0; i < 3; i++) {
+    const a = lo + i * size;
+    if (a > hi) break;
+    const b = i === 2 ? hi : Math.min(hi, a + size - 1);
+    out.push({ name: names[i], range: [a, b] });
+  }
+  return out;
+}
+
+/** A fresh draft, seeded from the club's defaults and its own course. */
+function initialDraft(defaults: ClubDefaults, clubId: string): Draft {
+  const courseId = COURSES.find((c) => c.clubId === clubId && c.available !== false)?.id ?? INITIAL.courseId;
+  return {
+    ...INITIAL,
+    courseId,
+    tees: defaults.tees,
+    allowance: defaults.allowance,
+    rounds: [makeRound(1, { date: TODAY_ISO, courseId, tees: defaults.tees })],
+  };
+}
 
 const ALL_FORMATS: Format[] = [
   "Stableford",
@@ -172,7 +211,7 @@ const INITIAL: Draft = {
   tees: "Yellow",
   membership: "open",
   hcMin: 0,
-  hcMax: 28,
+  hcMax: 54,
   ageMin: "",
   ageMax: "",
   eligibilityNote: "",
@@ -223,11 +262,11 @@ function draftFromTournament(t: Tournament): Draft {
     tees: course.tees,
     membership: membershipOf(t),
     hcMin: t.minHandicap ?? 0,
-    hcMax: t.maxHandicap ?? 28,
+    hcMax: t.maxHandicap ?? 54,
     ageMin: t.minAge != null ? String(t.minAge) : "",
     ageMax: t.maxAge != null ? String(t.maxAge) : "",
     eligibilityNote: t.eligibilityNote ?? "",
-    gender: t.ladiesOnly ? "ladies" : "open",
+    gender: t.ladiesOnly ? "ladies" : t.menOnly ? "men" : "open",
     splitDivisions: t.divisions.length > 1,
     fee: t.entryFee,
     tiers: tiersOf(t),
@@ -241,7 +280,7 @@ function draftFromTournament(t: Tournament): Draft {
     maxPlayers: t.maxPlayers,
     waitlist: t.waitlist ?? false,
     questions: t.registrationQuestions ?? [],
-    regOpens: INITIAL.regOpens,
+    regOpens: t.regOpens ?? INITIAL.regOpens,
     regCloses: t.regCloses,
     regClosesAt: t.regClosesAt ?? defaultRegClosesAt(roundsOf(t)[0].date),
     allowance: t.handicapAllowance,
@@ -251,7 +290,7 @@ function draftFromTournament(t: Tournament): Draft {
     maxHoleScore: t.maxHoleScore === "net-double-bogey" ? "net-double-bogey" : "none",
     fieldProfile: t.fieldProfile ?? null,
     tvCoverage: t.tvCoverage ?? null,
-    countback: INITIAL.countback,
+    countback: t.countback ?? INITIAL.countback,
     correctionWindowMin: t.correctionWindowMin ?? 15,
     prizes: t.prizes.map((p) => ({ place: p.place, prize: p.prize })),
   };
@@ -275,20 +314,31 @@ const INITIAL_T = {
  * tournament is never persisted here: it has its own source of truth.
  * ------------------------------------------------------------------ */
 const WIZARD_DRAFT_KEY = "shimo-wizard-draft-v1";
+/** A half-filled form older than this is more likely stale than wanted. */
+const DRAFT_TTL_MS = 7 * 86_400_000;
 
-function loadWizardDraft(): { draft: Draft; step: number } | null {
+function loadWizardDraft(): { draft: Draft; step: number; savedAt: number | null } | null {
   try {
     const raw = localStorage.getItem(WIZARD_DRAFT_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { draft?: Draft; step?: number };
-    if (parsed?.draft) return { draft: parsed.draft, step: parsed.step ?? 1 };
+    const parsed = JSON.parse(raw) as { draft?: Draft; step?: number; savedAt?: number };
+    if (!parsed?.draft) return null;
+    const savedAt = parsed.savedAt ?? 0;
+    if (savedAt && Date.now() - savedAt > DRAFT_TTL_MS) {
+      localStorage.removeItem(WIZARD_DRAFT_KEY);
+      return null;
+    }
+    return { draft: parsed.draft, step: parsed.step ?? 1, savedAt: savedAt || null };
   } catch {}
   return null;
 }
 
 function saveWizardDraft(draft: Draft, step: number) {
   try {
-    localStorage.setItem(WIZARD_DRAFT_KEY, JSON.stringify({ draft, step }));
+    localStorage.setItem(
+      WIZARD_DRAFT_KEY,
+      JSON.stringify({ draft, step, savedAt: Date.now() }),
+    );
   } catch {}
 }
 
@@ -429,6 +479,7 @@ function SponsorRow({
   /** true on a corporate or charity day, where the inventory matters */
   full?: boolean;
 }) {
+  const clubId = useSim((s) => s.clubId);
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -444,7 +495,7 @@ function SponsorRow({
     }
     setBusy(true);
     try {
-      const { url } = await uploadSponsorLogo("muthaiga", sponsor.id, file);
+      const { url } = await uploadSponsorLogo(clubId, sponsor.id, file);
       onChange({ logoUrl: url });
     } catch (e) {
       setError((e as Error).message ?? "The upload failed. Try again.");
@@ -607,6 +658,7 @@ function CreateTournamentInner() {
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
   const created = useSim((s) => s.created);
+  const createdList = created;
   const roster = useSim((s) => s.roster);
   const editing = useMemo(
     () => (editId ? created.find((t) => t.id === editId) : undefined),
@@ -614,7 +666,9 @@ function CreateTournamentInner() {
   );
 
   const [step, setStep] = useState(1);
-  const [draft, setDraft] = useState<Draft>(INITIAL);
+  const defaults = useSim((s) => s.clubDefaults);
+  const clubId = useSim((s) => s.clubId);
+  const [draft, setDraft] = useState<Draft>(() => initialDraft(defaults, clubId));
   const [publishing, setPublishing] = useState(false);
   /*
    * The guess follows the roster and the format as the club fills the form in,
@@ -638,6 +692,8 @@ function CreateTournamentInner() {
   // Editing has its own source, so it is left alone. `hydrated` gates the save
   // effect below so the just-loaded draft is never clobbered by INITIAL first.
   const [hydrated, setHydrated] = useState(false);
+  // null: nothing restored; 0: restored, date unknown; else when it was saved
+  const [restoredAt, setRestoredAt] = useState<number | null>(null);
   if (!hydrated) {
     setHydrated(true);
     if (!editId) {
@@ -645,9 +701,16 @@ function CreateTournamentInner() {
       if (saved) {
         setDraft(saved.draft);
         setStep(saved.step);
+        setRestoredAt(saved.savedAt ?? 0);
       }
     }
   }
+  const startFresh = () => {
+    clearWizardDraft();
+    setDraft(initialDraft(defaults, clubId));
+    setStep(1);
+    setRestoredAt(null);
+  };
 
   // Persist as the club fills it in, so clicking away keeps their progress.
   useEffect(() => {
@@ -681,11 +744,17 @@ function CreateTournamentInner() {
       return next;
     });
 
+  /** The headline price: the cheapest rate that has actually been priced. */
+  const headlineFee = (tiers: FeeTier[], current: number) => {
+    const priced = tiers.filter((x) => x.amount > 0).map((x) => x.amount);
+    return priced.length ? Math.min(...priced) : current;
+  };
   const updateTier = (i: number, patch: Partial<FeeTier>) =>
     setDraft((d) => {
       const tiers = d.tiers.map((x, j) => (j === i ? { ...x, ...patch } : x));
-      // the headline price follows the cheapest rate on the sheet
-      return { ...d, tiers, fee: Math.min(...tiers.map((x) => x.amount)) };
+      // the headline price follows the cheapest rate on the sheet, ignoring
+      // a rate that has just been added and not yet priced
+      return { ...d, tiers, fee: headlineFee(tiers, d.fee) };
     });
 
   const addTier = () =>
@@ -695,7 +764,7 @@ function CreateTournamentInner() {
     setDraft((d) => {
       if (d.tiers.length <= 1) return d;
       const tiers = d.tiers.filter((_, j) => j !== i);
-      return { ...d, tiers, fee: Math.min(...tiers.map((x) => x.amount)) };
+      return { ...d, tiers, fee: headlineFee(tiers, d.fee) };
     });
 
   const updateSponsor = (i: number, patch: Partial<Sponsor>) =>
@@ -799,7 +868,43 @@ function CreateTournamentInner() {
    */
   const showSummary = step >= 5 && step !== LAST_STEP;
 
+  /*
+   * What is wrong with the step, in words, or null. Shown under the footer
+   * so the club is told why Continue is off rather than left to guess.
+   */
+  const problem = useMemo<string | null>(() => {
+    if (step === 1) {
+      if (draft.name.trim().length < 3) return "Give the event a name.";
+      if (!draft.date) return "Pick the date.";
+      if (!editing && draft.date < TODAY_ISO) return "That date has already passed.";
+      if (draft.eventKind === "charity" && draft.beneficiaryName.trim().length <= 1)
+        return "A charity day needs its beneficiary named.";
+      const clash = createdList.find(
+        (t) =>
+          t.id !== editing?.id &&
+          t.status !== "cancelled" &&
+          t.name.trim().toLowerCase() === draft.name.trim().toLowerCase() &&
+          t.date === draft.date,
+      );
+      if (clash) return "There is already an event with that name on that date.";
+    }
+    if (step === 2) {
+      const dates = draft.rounds.map((r) => r.date);
+      for (let i = 1; i < dates.length; i++) {
+        if (dates[i] < dates[i - 1]) return `Round ${i + 1} is dated before round ${i}.`;
+      }
+    }
+    if (step === 4) {
+      if (draft.maxPlayers <= 0) return "Set the size of the field.";
+      const firstRound = draft.rounds[0]?.date ?? draft.date;
+      if (draft.regClosesAt && draft.regClosesAt.slice(0, 10) > firstRound)
+        return "Registration closes after the first round has been played.";
+    }
+    return null;
+  }, [step, draft, editing, createdList]);
+
   const canContinue = useMemo(() => {
+    if (problem) return false;
     if (step === 1)
       return (
         draft.name.trim().length >= 3 &&
@@ -818,7 +923,7 @@ function CreateTournamentInner() {
       );
     if (step === 4) return draft.fee >= 0 && draft.maxPlayers > 0;
     return true;
-  }, [step, draft]);
+  }, [step, draft, problem]);
 
   const publish = () => {
     setPublishing(true);
@@ -849,18 +954,18 @@ function CreateTournamentInner() {
       status: editing ? editing.status : "upcoming",
       membersOnly: draft.membership === "members",
       membership: draft.membership,
-      maxHandicap: draft.hcMax < 28 ? draft.hcMax : undefined,
+      // 54 is the WHS ceiling, so it reads as "no maximum"
+      maxHandicap: draft.hcMax < 54 ? draft.hcMax : undefined,
       minHandicap: draft.hcMin > 0 ? draft.hcMin : undefined,
       minAge: draft.ageMin.trim() ? Number(draft.ageMin) : undefined,
       maxAge: draft.ageMax.trim() ? Number(draft.ageMax) : undefined,
       eligibilityNote: draft.eligibilityNote.trim() || undefined,
       ladiesOnly: draft.gender === "ladies",
+      menOnly: draft.gender === "men",
+      countback: draft.countback.trim() || undefined,
+      regOpens: draft.regOpens || undefined,
       divisions: draft.splitDivisions
-        ? [
-            { name: "Division A", range: [0, 9] },
-            { name: "Division B", range: [10, 18] },
-            { name: "Division C", range: [19, 28] },
-          ]
+        ? divisionsForBand(draft.hcMin, draft.hcMax)
         : [{ name: "Overall", range: [draft.hcMin, draft.hcMax] }],
       description: `${draft.format} at ${club.name}, off ${draft.tees.toLowerCase()} tees. Published from the Shimo tournament desk: entries, tee times, live scoring and results handled in one place.`,
       prizes: (() => {
@@ -930,6 +1035,22 @@ function CreateTournamentInner() {
         <h1 className="mt-1 font-serif text-[clamp(30px,3.6vw,40px)] font-medium leading-[1.03] tracking-[-0.012em] text-foreground">
           {draft.name.trim() || "Untitled tournament"}
         </h1>
+        {restoredAt != null && !editing && (
+          <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-secondary/60 px-4 py-2.5 text-[13px] text-muted-foreground">
+            <span>
+              {restoredAt
+                ? `Picking up the draft you left on ${new Date(restoredAt).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}.`
+                : "Picking up a draft you left earlier."}
+            </span>
+            <button
+              type="button"
+              onClick={startFresh}
+              className="font-medium text-clay hover:text-clay-deep cursor-pointer"
+            >
+              Start fresh instead
+            </button>
+          </p>
+        )}
       </header>
 
       <div
@@ -2174,10 +2295,19 @@ function CreateTournamentInner() {
             )}
           </div>
 
+          {problem && (
+            <p className="mt-4 text-[13px] text-amber-flag">{problem}</p>
+          )}
           <div className="mt-5 flex items-center justify-between">
             <Button
               variant="ghost"
-              onClick={() => setStep((s) => Math.max(1, s - 1))}
+              onClick={() =>
+                setStep((s) => {
+                  const order = stepsFor(draft.eventKind).map((x) => x.n);
+                  const i = order.indexOf(s);
+                  return order[Math.max(0, i - 1)] ?? 1;
+                })
+              }
               disabled={step === 1}
             >
               <ArrowLeft className="size-4" />
@@ -2185,7 +2315,15 @@ function CreateTournamentInner() {
             </Button>
             {step < LAST_STEP ? (
               <Button
-                onClick={() => setStep((s) => s + 1)}
+                onClick={() =>
+                  setStep((s) => {
+                    // the next step this kind of day has, not n+1: a club
+                    // event skips the Contests step entirely
+                    const order = stepsFor(draft.eventKind).map((x) => x.n);
+                    const i = order.indexOf(s);
+                    return order[Math.min(order.length - 1, i + 1)] ?? s;
+                  })
+                }
                 disabled={!canContinue}
               >
                 Continue

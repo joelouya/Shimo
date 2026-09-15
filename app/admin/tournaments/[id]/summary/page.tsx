@@ -18,6 +18,7 @@ import { TournamentNav } from "@/components/admin/tournament-nav";
 import { ClubCrest, ClubSurface } from "@/components/club-brand";
 import { SponsorStrip } from "@/components/sponsor-strip";
 import { RecapPanel } from "@/components/admin/recap-panel";
+import { CertificationPanel } from "@/components/admin/certification-panel";
 import { COURSES, clubById, courseById, playerById } from "@/lib/data";
 import { roundKey, roundsOf } from "@/lib/rounds";
 import {
@@ -92,13 +93,15 @@ export default function TournamentSummaryPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const [committeeRound, setCommitteeRound] = useState(1);
   const created = useSim((s) => s.created);
+  const dismissed = useSim((s) => s.dismissed);
   const pairings = useSim((s) => s.pairings);
   const roster = useSim((s) => s.roster);
   const guests = useSim((s) => s.guests);
   const scores = useSim((s) => s.scores);
 
-  const t = allTournaments(created).find((x) => x.id === id);
+  const t = allTournaments(created, dismissed).find((x) => x.id === id);
 
   const { overall, divisions } = useMemo(() => {
     if (!t)
@@ -243,8 +246,9 @@ export default function TournamentSummaryPage({
         </div>
       ) : null}
 
-      {/* champion — the one gold moment in the system, given its full weight */}
-      {champion && (
+      {/* champion — the one gold moment in the system, given its full weight;
+          only once the day is over and there is golf to crown */}
+      {champion && t.status === "completed" && (t.result || overall.some((r) => r.thru > 0)) && (
         <section className="animate-enter-rise mt-8 overflow-hidden rounded-2xl border-t-[3px] border-gold-bright bg-primary text-primary-foreground shadow-lift ring-1 ring-gold-bright/25">
           <div className="flex items-center gap-5 px-7 py-7">
             <Crown className="size-11 shrink-0 text-gold-bright" />
@@ -309,8 +313,16 @@ export default function TournamentSummaryPage({
           <p className="smallcaps mb-3 text-muted-foreground">Prizes</p>
           <div className="overflow-hidden rounded-2xl bg-card shadow-card">
             {t.prizes.map((p, i) => {
-              // best-effort: pair the top finishers to the first prizes listed
-              const finisher = overall[i];
+              // podium prizes are matched by what they are called; a nearest
+              // the pin listed third is not the third-placed finisher's
+              const podium = /winner|champion|\b1st\b|first/i.test(p.place)
+                ? 0
+                : /runner|\b2nd\b|second/i.test(p.place)
+                  ? 1
+                  : /\b3rd\b|third/i.test(p.place)
+                    ? 2
+                    : -1;
+              const finisher = podium >= 0 ? overall[podium] : undefined;
               return (
                 <div
                   key={p.place + i}
@@ -325,7 +337,7 @@ export default function TournamentSummaryPage({
                     </p>
                     <p className="text-[12px] text-muted-foreground">{p.prize}</p>
                   </div>
-                  {finisher && i < 3 && (
+                  {finisher && (
                     <p className="shrink-0 text-right text-[13px] text-ink-soft">
                       {finisher.player.name}
                       <span className="ml-1.5 text-muted-foreground tnum">
@@ -391,6 +403,36 @@ export default function TournamentSummaryPage({
             </p>
           )}
         </div>
+      </section>
+
+      {/*
+        The Committee room, for this event. Live Ops hosts it while the day is
+        on; once the day has ended this is where a late dispute or a
+        correction still gets decided, and where the sealed hashes are read.
+      */}
+      <section id="committee" className="mt-10">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="smallcaps text-muted-foreground">Committee</p>
+          {roundsOf(t).length > 1 && (
+            <div className="flex gap-1">
+              {roundsOf(t).map((r) => (
+                <button
+                  key={r.number}
+                  type="button"
+                  onClick={() => setCommitteeRound(r.number)}
+                  className={
+                    committeeRound === r.number
+                      ? "rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground"
+                      : "rounded-full border border-border px-3 py-1 text-[12px] font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                  }
+                >
+                  Round {r.number}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <CertificationPanel tournamentId={t.id} round={committeeRound} />
       </section>
 
       {/*

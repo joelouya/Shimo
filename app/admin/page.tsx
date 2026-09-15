@@ -12,7 +12,8 @@ import { useActiveTournament, useStandings,
   useRoundScores,
   useSlowClock
 } from "@/lib/sim/hooks";
-import { allTournaments, groupHolesPlayed, useSim } from "@/lib/sim/store";
+import { viewModeFor } from "@/lib/scoring";
+import { allTournaments, clubNameOf, groupHolesPlayed, useSim } from "@/lib/sim/store";
 import { paceReadings } from "@/lib/pace";
 import { roundKey } from "@/lib/rounds";
 import { cn, formatDate, formatKES, toPar } from "@/lib/utils";
@@ -56,8 +57,9 @@ function DayLedger({ items }: { items: Metric[] }) {
 
 function LivePanel() {
   const active = useActiveTournament();
-  const isStableford = active?.tournament.format !== "Stroke Play";
-  const rows = useStandings(isStableford ? "points" : "net");
+  const mode = viewModeFor(active?.tournament.format);
+  const isStableford = mode === "points";
+  const rows = useStandings(mode);
   const scores = useRoundScores();
   const allFlags = useSim((s) => s.flags);
   const flags = allFlags.filter(
@@ -234,6 +236,11 @@ const DEMO_METRICS: Metric[] = [
 ];
 
 export default function AdminDashboard() {
+  const clubName = useSim((s) => clubNameOf(s));
+  const deskName = useSim((s) => s.deskName);
+  const deskFirst = deskName?.trim().split(" ")[0] ?? "";
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const pilotMetrics = usePilotMetrics();
   const created = useSim((s) => s.created);
   const dismissed = useSim((s) => s.dismissed);
@@ -259,10 +266,10 @@ export default function AdminDashboard() {
               day: "numeric",
               month: "long",
             })}{" "}
-            · Muthaiga Golf Club
+            · {clubName}
           </p>
           <h1 className="mt-2 font-serif text-[clamp(36px,4.8vw,50px)] font-medium leading-[1.0] tracking-[-0.018em] text-foreground">
-            Good morning, Wanjiru.
+            {greeting}{deskFirst ? `, ${deskFirst}` : ""}.
           </h1>
         </div>
         <div className="flex items-center gap-3">

@@ -61,11 +61,13 @@ export default function PosterPage({
 }) {
   const { id } = use(params);
   const created = useSim((s) => s.created);
+  const dismissed = useSim((s) => s.dismissed);
   const pairings = useSim((s) => s.pairings);
   const roster = useSim((s) => s.roster);
+  const guests = useSim((s) => s.guests);
   const scores = useSim((s) => s.scores);
 
-  const t = allTournaments(created).find((x) => x.id === id);
+  const t = allTournaments(created, dismissed).find((x) => x.id === id);
   const identity = useClubIdentity(t?.clubId ?? "");
 
   // Until the club picks, show the poster they came here for: an event that has
@@ -93,7 +95,7 @@ export default function PosterPage({
       ),
     ];
     const field = fieldIds
-      .map((pid) => roster.find((p) => p.id === pid))
+      .map((pid) => roster.find((p) => p.id === pid) ?? guests.find((p) => p.id === pid))
       .filter((p): p is Player => !!p);
     const fallback = courseById(t.courseId);
     const mode: ViewMode = t.format === "Stableford" ? "points" : "net";

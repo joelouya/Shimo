@@ -24,6 +24,7 @@ export function TournamentNav({ id }: { id: string }) {
   // the live one; every other event shows just its own artifacts.
   const isLive = useSim((s) => s.liveTournamentId === id);
   const items = [
+    { label: "Registrations", href: `/admin/tournaments/${id}/registrations` },
     { label: "Pairings", href: `/admin/tournaments/${id}/pairings` },
     ...(isLive
       ? [
@@ -32,6 +33,7 @@ export function TournamentNav({ id }: { id: string }) {
         ]
       : []),
     { label: "Results", href: `/admin/tournaments/${id}/summary` },
+    { label: "Committee", href: `/admin/tournaments/${id}/summary#committee` },
     { label: "Poster", href: `/admin/tournaments/${id}/poster` },
     ...(isLive ? [{ label: "TV", href: "/admin/tv" }] : []),
   ];

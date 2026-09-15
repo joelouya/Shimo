@@ -14,8 +14,8 @@ import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 
 import {
+  CLUBS,
   COURSES,
-  clubById,
   DEMO_USER_ID,
   GROUPS,
   LIVE_TOURNAMENT_ID,
@@ -23,6 +23,7 @@ import {
   PLAYERS,
   TOURNAMENTS,
   USER_GROUP_ID,
+  clubById,
   playerById,
 } from "@/lib/data";
 import {
@@ -34,6 +35,7 @@ import {
   mulberry32,
   rowStats,
   type RoundCards,
+  viewModeFor,
 } from "@/lib/scoring";
 import {
   APP_VERSION,
@@ -55,20 +57,23 @@ import { CLIENT_ID } from "@/lib/sync/client";
 import { roundKey, roundOf, roundsOf } from "@/lib/rounds";
 import { defaultMarkers, markedByMe, markerOf, markersFor, validMarkers } from "@/lib/markers";
 import { rosterRowFor } from "@/lib/membership";
+import { registrationOpen } from "@/lib/eligibility";
 import {
   auditToRow,
   certToRow,
+  clubToRow,
   correctionToRow,
   disputeToRow,
+  entryToRow,
   guestEntryToRow,
   pairingToRow,
-  clubToRow,
   playerToRow,
   rowToAudit,
-  rowToClub,
   rowToCert,
+  rowToClub,
   rowToCorrection,
   rowToDispute,
+  rowToEntry,
   rowToPairing,
   rowToPlayer,
   rowToTeam,
@@ -87,6 +92,7 @@ import type {
   Sponsor,
   Team,
   Tournament,
+  TournamentEntry,
 } from "@/lib/types";
 
 const COURSE = COURSES.find((c) => c.id === "muthaiga-main")!;
@@ -190,6 +196,8 @@ export interface Certification {
 
 export interface Dispute {
   id: string;
+  /** the tournament whose card this concerns; decisions write into it */
+  tournamentId: string;
   playerId: string;
   /** which round's card this concerns (1-based) */
   round: number;
@@ -207,6 +215,8 @@ export interface Dispute {
 
 export interface CorrectionRequest {
   id: string;
+  /** the tournament whose card this concerns; decisions write into it */
+  tournamentId: string;
   playerId: string;
   /** which round's card this concerns (1-based) */
   round: number;
@@ -226,6 +236,22 @@ export interface SignatureArtifact {
   /** svg path data for finger-drawn signatures */
   svg?: string;
 }
+
+/** What a new tournament starts from, and what Live Ops watches for. */
+export interface ClubDefaults {
+  tees: string;
+  teeInterval: number;
+  /** percent, WHS singles recommendation is 95 */
+  allowance: number;
+  /** surface pace and scoring anomalies in Live Ops during play */
+  anomalyFlags: boolean;
+}
+export const DEFAULT_CLUB_DEFAULTS: ClubDefaults = {
+  tees: "Yellow",
+  teeInterval: 10,
+  allowance: 95,
+  anomalyFlags: true,
+};
 
 /** A playing group as saved with a tournament (pairings screen output). */
 export interface SavedGroup {
@@ -284,7 +310,19 @@ export interface SimState {
   notifications: AppNotification[];
   lastUserPos: number;
   /** tournament ids the user registered for in this session */
-  registrations: string[];
+  /**
+   * The club this console administers. Every "muthaiga" that used to be a
+   * literal reads this instead; the desk sets it once at first run.
+   */
+  clubId: string;
+  /** Competition defaults the wizard starts from and Live Ops reads. */
+  clubDefaults: ClubDefaults;
+  /**
+   * Who is in each tournament's field before the day: members who tapped
+   * Register, guests who registered, walk-ups the desk added. Synced, so the
+   * desk drawing the tee sheet and every phone see the same field.
+   */
+  entries: TournamentEntry[];
   /** tournaments created through the admin wizard */
   created: Tournament[];
   mutuaFlagged: boolean;
@@ -465,7 +503,9 @@ export function buildInitialState(): SimState {
     flags: [],
     notifications: [],
     lastUserPos: 0,
-    registrations: [],
+    entries: [],
+    clubId: "muthaiga",
+    clubDefaults: { ...DEFAULT_CLUB_DEFAULTS },
     created: [],
     mutuaFlagged: false,
     extraAmberFired: false,
@@ -617,11 +657,18 @@ function normalize(saved: SimState): SimState {
   out.clubIdentity ??= base.clubIdentity;
   out.disputes ??= [];
   out.corrections ??= [];
+  // records written before disputes and corrections named their tournament
+  // belong to whatever was live when they were saved
+  for (const d of out.disputes) d.tournamentId ??= out.liveTournamentId ?? LIVE_TOURNAMENT_ID;
+  for (const c of out.corrections) c.tournamentId ??= out.liveTournamentId ?? LIVE_TOURNAMENT_ID;
   out.auditLog ??= [];
   out.outbox ??= [];
   out.roster ??= base.roster;
   out.guests ??= [];
   out.guestEntries ??= [];
+  out.entries ??= [];
+  out.clubId ||= "muthaiga";
+  out.clubDefaults = { ...DEFAULT_CLUB_DEFAULTS, ...(out.clubDefaults ?? {}) };
   out.exposure ??= [];
   out.pace ??= {};
   out.paceThresholdMin ??= 15;
@@ -635,10 +682,55 @@ function normalize(saved: SimState): SimState {
   return out;
 }
 
+/**
+ * Whether the last save to this device worked. A phone with a full disk
+ * still scores (state lives in memory and the outbox still drains), but the
+ * player should be told, because a closed tab would then forget the round.
+ */
+const storageListeners = new Set<() => void>();
+let storageFailedAt: number | null = null;
+export function subscribeStorage(fn: () => void) {
+  storageListeners.add(fn);
+  return () => {
+    storageListeners.delete(fn);
+  };
+}
+export function storageFailed(): number | null {
+  return storageFailedAt;
+}
+function noteStorage(failed: boolean) {
+  const next = failed ? (storageFailedAt ?? Date.now()) : null;
+  if (next === storageFailedAt) return;
+  storageFailedAt = next;
+  for (const fn of storageListeners) fn();
+}
+
+/** What to save when the device is short of room: only what the cloud lacks. */
+function shed(s: SimState): SimState {
+  return {
+    ...s,
+    outbox: s.outbox.filter((o) => o.status !== "synced"),
+    auditLog: s.auditLog.slice(-1200),
+    exposure: s.exposure.slice(-200),
+    events: s.events.slice(0, 12),
+    flags: s.flags.slice(0, 80),
+    integrityLog: s.integrityLog.slice(0, 80),
+  };
+}
+
 function persist(s: SimState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  } catch {}
+    noteStorage(false);
+  } catch {
+    // out of room: keep what the cloud does not have and try once more
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(shed(s)));
+      noteStorage(false);
+    } catch {
+      noteStorage(true);
+    }
+  }
 }
 
 /*
@@ -653,9 +745,23 @@ export function registerDrainSignal(fn: () => void) {
   drainSignal = fn;
 }
 
+/**
+ * Bound the lists that only grow. Everything here has already been pushed
+ * to the cloud (or is demo noise), so trimming loses nothing a club needs
+ * from this device; the caps are generous for one long corporate day.
+ */
+function trimLogs(draft: SimState) {
+  if (draft.auditLog.length > 3000) draft.auditLog = draft.auditLog.slice(-2400);
+  if (draft.flags.length > 200) draft.flags = draft.flags.slice(0, 160);
+  if (draft.integrityLog.length > 200) draft.integrityLog = draft.integrityLog.slice(0, 160);
+  if (draft.disputes.length > 400) draft.disputes = draft.disputes.slice(0, 320);
+  if (draft.corrections.length > 400) draft.corrections = draft.corrections.slice(0, 320);
+}
+
 function mutate(fn: (draft: SimState) => void) {
   const draft = structuredClone(simStore.getState());
   fn(draft);
+  trimLogs(draft);
   // timestamp-based versions keep concurrent tabs from colliding on the
   // same version number and ignoring each other's writes
   draft.v = Math.max(draft.v + 1, Date.now());
@@ -1074,6 +1180,15 @@ function enqueueScore(
     payload.tournamentId ?? draft.liveTournamentId ?? LIVE_TOURNAMENT_ID;
   stamp(draft, "scores", scoreStampRow(tournamentId, payload, new Date(ts).toISOString()));
   enqueueOp(draft, kind, { ...payload, tournamentId }, ts);
+}
+
+/** Push one player's certification for a named tournament and round. */
+function syncCertAt(draft: SimState, tournamentId: string, round: number, playerId: string) {
+  const c = roundCerts(draft, roundKey(tournamentId, round))[playerId];
+  if (!c) return;
+  enqueueEntity(draft, "certifications", certToRow(tournamentId, round, c), {
+    conflict: "tournament_id,round,player_id",
+  });
 }
 
 function syncCert(draft: SimState, playerId: string) {
@@ -1685,14 +1800,169 @@ export function registrationCapacity(
   s: SimState,
   t: Tournament,
 ): { full: boolean; spotsLeft: number | null; waitlistOpen: boolean } {
+  return capacityFromEntries(s.entries, t);
+}
+
+/** The same reading from a list of entries, for components that select it. */
+export function capacityFromEntries(
+  entries: TournamentEntry[],
+  t: Tournament,
+): { full: boolean; spotsLeft: number | null; waitlistOpen: boolean } {
   const max = t.maxPlayers ?? 0;
   if (!max) return { full: false, spotsLeft: null, waitlistOpen: false };
-  const confirmed = s.guestEntries.filter(
-    (e) => e.tournamentId === t.id && !e.waitlisted,
+  const confirmed = entries.filter(
+    (e) => e.tournamentId === t.id && e.status === "registered",
   ).length;
   const spotsLeft = Math.max(0, max - confirmed);
   const full = spotsLeft === 0;
   return { full, spotsLeft, waitlistOpen: full && Boolean(t.waitlist) };
+}
+
+/* ---- entries: the field before the day ---- */
+
+const EMPTY_ENTRIES: TournamentEntry[] = [];
+
+/** Every entry for one tournament (any status). A stable ref when none. */
+export function entriesFor(s: SimState, tournamentId: string): TournamentEntry[] {
+  const list = s.entries.filter((e) => e.tournamentId === tournamentId);
+  return list.length ? list : EMPTY_ENTRIES;
+}
+
+export function entryOf(
+  s: SimState,
+  tournamentId: string,
+  playerId: string,
+): TournamentEntry | undefined {
+  return s.entries.find((e) => e.tournamentId === tournamentId && e.playerId === playerId);
+}
+
+/** This device's player's entry for a tournament, if any. */
+export function myEntry(s: SimState, tournamentId: string): TournamentEntry | undefined {
+  const me = meId(s);
+  return me ? entryOf(s, tournamentId, me) : undefined;
+}
+
+function upsertEntry(draft: SimState, e: TournamentEntry) {
+  const i = draft.entries.findIndex(
+    (x) => x.tournamentId === e.tournamentId && x.playerId === e.playerId,
+  );
+  if (i >= 0) draft.entries[i] = e;
+  else draft.entries.push(e);
+}
+
+/** Write an entry locally and queue it for the cloud (last write wins by updated_at). */
+function pushEntry(draft: SimState, e: TournamentEntry) {
+  upsertEntry(draft, e);
+  enqueueEntity(draft, "entries", entryToRow(e), { conflict: "tournament_id,player_id" });
+}
+
+/** Merge one entries row from the wire, honouring the staleness stamp. */
+function mergeEntryRow(draft: SimState, row: Record<string, unknown>) {
+  if (isStale(draft, "entries", row)) return;
+  stamp(draft, "entries", row);
+  upsertEntry(draft, rowToEntry(row));
+}
+
+export type RegisterResult =
+  | { ok: true; entry: TournamentEntry }
+  | { ok: false; reason: "no-identity" | "not-found" | "closed" | "full" };
+
+function tournamentById(s: SimState, id: string): Tournament | undefined {
+  return s.created.find((x) => x.id === id) ?? TOURNAMENTS.find((x) => x.id === id);
+}
+
+/**
+ * Put a player in a tournament's field. The phone path checks the window and
+ * the cap (a full field takes the waitlist if the club runs one); the desk
+ * can force a walk-up in regardless, because the desk decides.
+ */
+export function registerPlayer(
+  tournamentId: string,
+  playerId: string,
+  opts: { via: "phone" | "desk"; force?: boolean } = { via: "desk" },
+): RegisterResult {
+  const s = simStore.getState();
+  if (!playerId) return { ok: false, reason: "no-identity" };
+  const t = tournamentById(s, tournamentId);
+  if (!t) return { ok: false, reason: "not-found" };
+  const existing = entryOf(s, tournamentId, playerId);
+  if (existing && existing.status !== "withdrawn") return { ok: true, entry: existing };
+  if (!opts.force && !registrationOpen(t)) return { ok: false, reason: "closed" };
+  const cap = registrationCapacity(s, t);
+  const status: TournamentEntry["status"] | null = !cap.full
+    ? "registered"
+    : opts.force
+      ? "registered"
+      : cap.waitlistOpen
+        ? "waitlisted"
+        : null;
+  if (!status) return { ok: false, reason: "full" };
+  const now = new Date().toISOString();
+  const player = playerInField(s, playerId);
+  const entry: TournamentEntry = {
+    tournamentId,
+    playerId,
+    kind: player?.guest ? "guest" : "member",
+    status,
+    via: opts.via,
+    registeredAt: existing?.registeredAt ?? now,
+    updatedAt: now,
+  };
+  mutate((draft) => {
+    pushEntry(draft, entry);
+    if (opts.via === "phone") {
+      draft.notifications.unshift({
+        id: noteSeq++ + Math.floor(Math.random() * 1000) * 100000,
+        emoji: status === "waitlisted" ? "⏳" : "⛳️",
+        title:
+          status === "waitlisted"
+            ? `On the waitlist: ${t.name}`
+            : `You're in: ${t.name}`,
+        body:
+          status === "waitlisted"
+            ? "The field is full for now. The desk admits from the list as places open."
+            : "Entry recorded. Tee times come from the desk once the field is drawn.",
+        ts: Date.now(),
+      });
+    }
+  });
+  return { ok: true, entry };
+}
+
+/** The player this phone stands for registers themselves. */
+export function registerForTournament(id: string): RegisterResult {
+  const pid = meId(simStore.getState());
+  return registerPlayer(id, pid, { via: "phone" });
+}
+
+export function withdrawEntry(tournamentId: string, playerId: string) {
+  const existing = entryOf(simStore.getState(), tournamentId, playerId);
+  if (!existing || existing.status === "withdrawn") return;
+  mutate((draft) => {
+    pushEntry(draft, { ...existing, status: "withdrawn", updatedAt: new Date().toISOString() });
+  });
+}
+
+/** The desk admits someone from the waitlist. */
+export function promoteEntry(tournamentId: string, playerId: string) {
+  const existing = entryOf(simStore.getState(), tournamentId, playerId);
+  if (!existing || existing.status === "registered") return;
+  mutate((draft) => {
+    pushEntry(draft, {
+      ...existing,
+      status: "registered",
+      via: "desk",
+      updatedAt: new Date().toISOString(),
+    });
+  });
+}
+
+/** Entries discovered from the cloud for the open tournaments. */
+export function mergeCloudEntries(rows: Record<string, unknown>[]) {
+  if (!rows.length) return;
+  mutate((draft) => {
+    for (const row of rows) mergeEntryRow(draft, row);
+  });
 }
 
 /**
@@ -1711,10 +1981,11 @@ export function registrationCapacity(
 export function registerGuest(
   tournamentId: string,
   input: GuestRegistrationInput,
-  clubId = "muthaiga",
+  clubIdArg?: string,
 ): GuestEntry {
   let entry!: GuestEntry;
   mutate((draft) => {
+    const clubId = clubIdArg ?? draft.clubId;
     const email = (input.email ?? "").trim().toLowerCase();
     const existing = email
       ? draft.guests.find((g) => (g.email ?? "").toLowerCase() === email)
@@ -1786,6 +2057,17 @@ export function registerGuest(
       ...(input.answers ? { answers: input.answers } : {}),
     };
     draft.guestEntries.push(entry);
+    // the guest's place in the field, visible to the desk and every phone;
+    // the code above stays in guest_entries and is never listed
+    pushEntry(draft, {
+      tournamentId,
+      playerId: guest.id,
+      kind: "guest",
+      status: waitlisted ? "waitlisted" : "registered",
+      via: "phone",
+      registeredAt: entry.registeredAt,
+      updatedAt: entry.registeredAt,
+    });
     enqueueEntity(draft, "players", playerToRow(guest), { conflict: "id" });
     /* Push the entry itself, so a code registered on this phone resolves on a
        fresh one. guest_entries is non-enumerable and immutable: insert-only,
@@ -1826,7 +2108,7 @@ function addMins(hhmm: string, mins: number): string {
  * group, so their scorecard opens when the day is started. Idempotent: a second
  * pass just refreshes the paid flag and never seats them twice.
  */
-export function checkInGuest(
+export function checkInPlayer(
   tournamentId: string,
   player: Player,
   opts: { paid?: boolean } = {},
@@ -1839,6 +2121,23 @@ export function checkInGuest(
       at: Date.now(),
       paid: Boolean(opts.paid),
     };
+    // a walk-up, or someone off the waitlist: the desk has admitted them, so
+    // they are in the field whatever the entry said before
+    const now = new Date().toISOString();
+    const existing = draft.entries.find(
+      (e) => e.tournamentId === tournamentId && e.playerId === player.id,
+    );
+    if (!existing || existing.status !== "registered") {
+      pushEntry(draft, {
+        tournamentId,
+        playerId: player.id,
+        kind: player.guest ? "guest" : "member",
+        status: "registered",
+        via: existing?.via ?? "desk",
+        registeredAt: existing?.registeredAt ?? now,
+        updatedAt: now,
+      });
+    }
     // make sure the player row is in the cloud for every device in the field
     enqueueEntity(draft, "players", playerToRow(player), { conflict: "id" });
   });
@@ -1877,6 +2176,9 @@ export function checkInGuest(
     round,
   );
 }
+
+/** The desk path used to be guests only; the name stays for callers. */
+export const checkInGuest = checkInPlayer;
 
 /** A stable empty map so an un-checked-in tournament keeps one snapshot ref. */
 const EMPTY_CHECKINS: Record<string, { at: number; paid: boolean }> = {};
@@ -1959,6 +2261,9 @@ export function recordExposure(
       at: Date.now(),
       ...(seconds !== undefined ? { seconds } : {}),
     });
+    // observed, pushed, and then kept only as a recent window: the recap
+    // reads the cloud, and this device must not grow a season of rows
+    if (draft.exposure.length > 600) draft.exposure = draft.exposure.slice(-400);
     enqueueEntity(
       draft,
       "exposure_events",
@@ -2052,6 +2357,23 @@ export function savePairings(
 }
 
 /**
+ * The first tee time of a round, from the pairings page. Kept on the round
+ * (and mirrored to the tournament for round 1) so a desk check-in, a reload
+ * or another device recomputes the same times the page showed.
+ */
+export function setRoundFirstTee(tournamentId: string, round: number, firstTee: string) {
+  if (!/^\d{2}:\d{2}$/.test(firstTee)) return;
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === tournamentId);
+    if (!t) return;
+    const r = (t.rounds ?? []).find((x) => x.number === round);
+    if (r) r.firstTee = firstTee;
+    if (round === 1) t.firstTee = firstTee;
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+}
+
+/**
  * The desk swaps who marks whom in one group (two players who arrived
  * together keeping each other's cards). Refuses anything that is not a full,
  * self-free assignment; publishes like a pairings save.
@@ -2110,8 +2432,27 @@ export function teamsIn(s: SimState, tournamentId: string, round = 1): Team[] {
  * "publish" moment - the tournament, its pairings, and every player in the
  * field go to the cloud so any device that joins hydrates the whole thing.
  */
+/** Whether a day can be started: nothing else may be on the course. */
+export function canStartTournamentDay(
+  s: SimState,
+  tournamentId: string,
+): { ok: true } | { ok: false; liveId: string; liveName: string } {
+  const liveId = s.liveTournamentId;
+  if (!liveId || liveId === tournamentId) return { ok: true };
+  const live = s.created.find((t) => t.id === liveId) ?? TOURNAMENTS.find((t) => t.id === liveId);
+  if (!live || live.status !== "live") return { ok: true };
+  return { ok: false, liveId, liveName: live.name };
+}
+
 export function startTournamentDay(tournamentId: string, round = 1) {
   mutate((draft) => {
+    // one day on the course at a time: a second start would leave the first
+    // marked live forever and split the desk between them
+    const other = draft.liveTournamentId;
+    if (other && other !== tournamentId) {
+      const live = draft.created.find((t) => t.id === other);
+      if (live?.status === "live") return;
+    }
     draft.liveTournamentId = tournamentId;
     draft.liveRound = round;
     const t = draft.created.find((x) => x.id === tournamentId);
@@ -2142,6 +2483,39 @@ export function startTournamentDay(tournamentId: string, round = 1) {
       }
     }
   });
+}
+
+/**
+ * Undo a start. Allowed while nothing has been published or certified for
+ * the round, which is the mistake this exists for: the desk pressed Start
+ * on the wrong event, or the day before. Scores phones may have entered are
+ * kept; the event simply goes back to upcoming and off every phone's Live
+ * tab until it is started again.
+ */
+export function canReopenTournamentDay(s: SimState, tournamentId: string): boolean {
+  const t = s.created.find((x) => x.id === tournamentId);
+  if (!t || t.status !== "live") return false;
+  const key = roundKey(tournamentId, s.liveTournamentId === tournamentId ? s.liveRound || 1 : 1);
+  const anyIn = Object.values(s.cardIn[key] ?? {}).some(Boolean);
+  const anyCert = Object.values(s.certifications[key] ?? {}).some(
+    (c) => c.stage !== "awaiting-marker",
+  );
+  return !anyIn && !anyCert;
+}
+
+export function reopenTournamentDay(tournamentId: string): boolean {
+  if (!canReopenTournamentDay(simStore.getState(), tournamentId)) return false;
+  mutate((draft) => {
+    const t = draft.created.find((x) => x.id === tournamentId);
+    if (!t) return;
+    t.status = "upcoming";
+    if (draft.liveTournamentId === tournamentId) {
+      draft.liveTournamentId = null;
+      draft.liveRound = 1;
+    }
+    enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
+  });
+  return true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -2271,6 +2645,28 @@ export function groupsFromOrder(
   return groups;
 }
 
+export function setClubId(clubId: string) {
+  if (!clubId) return;
+  mutate((d) => {
+    d.clubId = clubId;
+  });
+}
+
+export function setClubDefaults(patch: Partial<ClubDefaults>) {
+  mutate((d) => {
+    d.clubDefaults = { ...d.clubDefaults, ...patch };
+  });
+}
+
+/** The club's name as the desk set it, else the seed's, else a fallback. */
+export function clubNameOf(s: SimState, clubId = s.clubId): string {
+  return (
+    s.clubIdentity?.[clubId]?.name?.trim() ||
+    CLUBS.find((c) => c.id === clubId)?.name ||
+    "Your club"
+  );
+}
+
 /** The engine heard back from the cloud (or has no cloud to ask). */
 export function markCloudChecked() {
   mutate((d) => {
@@ -2322,7 +2718,8 @@ function pushAudit(draft: SimState, rec: Omit<AuditRecord, "id" | "appVersion">)
 }
 
 function activeTournamentOf(draft: SimState): Tournament {
-  if (!IS_PILOT) return LIVE_T;
+  // a created event that is live wins in either mode; the seeded Captain's
+  // Prize is what demo falls back to when nothing of the club's is on
   return draft.created.find((t) => t.id === draft.liveTournamentId) ?? LIVE_T;
 }
 
@@ -2543,6 +2940,7 @@ export function raiseDispute(
     cert.stage = "disputed";
     draft.disputes.unshift({
       id: `disp-${Date.now().toString(36)}`,
+      tournamentId: t.id,
       playerId,
       round: draft.liveRound,
       holeIdx,
@@ -2583,12 +2981,24 @@ export function raiseDispute(
   });
 }
 
-export function markCommitteeReview(playerId: string) {
+/** The Committee has picked a dispute up; the card shows it. */
+export function markCommitteeReview(disputeId: string) {
   mutate((draft) => {
-    const c = roundCerts(draft)[playerId];
+    const d = draft.disputes.find((x) => x.id === disputeId);
+    if (!d) return;
+    const c = roundCerts(draft, roundKey(d.tournamentId, d.round))[d.playerId];
     if (c && c.stage === "disputed") c.stage = "committee-review";
-    syncCert(draft, playerId);
+    syncCertAt(draft, d.tournamentId, d.round, d.playerId);
   });
+}
+
+/** The tournament a record belongs to, wherever it lives. */
+function tournamentOf(s: SimState, id: string): Tournament {
+  return (
+    s.created.find((x) => x.id === id) ??
+    TOURNAMENTS.find((x) => x.id === id) ??
+    LIVE_T
+  );
 }
 
 /** Committee resolution; appends, never overwrites. */
@@ -2603,11 +3013,9 @@ export async function resolveDispute(
   const s = simStore.getState();
   const d = s.disputes.find((x) => x.id === disputeId);
   if (!d) return;
-  const t = IS_PILOT
-    ? (s.created.find((x) => x.id === s.liveTournamentId) ?? LIVE_T)
-    : LIVE_T;
-  // a dispute belongs to the round it was raised in, which may not be the
-  // round now on the course
+  // a dispute belongs to the tournament and round it was raised in, which
+  // may not be what is on the course now, or anything at all after the day
+  const t = tournamentOf(s, d.tournamentId);
   const dkey = roundKey(t.id, d.round);
   const course =
     COURSES.find((c) => c.id === roundOf(t, d.round).courseId) ?? COURSE;
@@ -2683,9 +3091,10 @@ export async function resolveDispute(
         hole: d.holeIdx,
         gross: agreed,
         source: "committee",
+        tournamentId: t.id,
       });
     }
-    syncCert(draft, d.playerId);
+    syncCertAt(draft, t.id, d.round, d.playerId);
     syncAuditTail(draft, 1);
   });
 }
@@ -2702,6 +3111,7 @@ export function requestCorrection(
     const t = activeTournamentOf(draft);
     draft.corrections.unshift({
       id: `corr-${Date.now().toString(36)}`,
+      tournamentId: t.id,
       playerId,
       round: draft.liveRound,
       holeIdx,
@@ -2747,10 +3157,8 @@ export async function decideCorrection(
   const s = simStore.getState();
   const c = s.corrections.find((x) => x.id === correctionId);
   if (!c || c.status !== "pending") return;
-  const t = IS_PILOT
-    ? (s.created.find((x) => x.id === s.liveTournamentId) ?? LIVE_T)
-    : LIVE_T;
-  // a correction belongs to the round whose card it amends
+  // a correction belongs to the tournament and round whose card it amends
+  const t = tournamentOf(s, c.tournamentId);
   const ckey = roundKey(t.id, c.round);
   const course =
     COURSES.find((x) => x.id === roundOf(t, c.round).courseId) ?? COURSE;
@@ -2807,9 +3215,10 @@ export async function decideCorrection(
         hole: corr.holeIdx,
         gross: corr.proposedGross,
         source: "committee",
+        tournamentId: t.id,
       });
     }
-    syncCert(draft, corr.playerId);
+    syncCertAt(draft, t.id, corr.round, corr.playerId);
     syncAuditTail(draft, 1);
   });
 }
@@ -2963,20 +3372,6 @@ export function meId(s: SimState): string {
   return authedPlayerId(s) ?? s.deviceIdentity ?? "";
 }
 
-export function registerForTournament(id: string) {
-  mutate((draft) => {
-    if (!draft.registrations.includes(id)) draft.registrations.push(id);
-    const t = [...draft.created, ...TOURNAMENTS].find((x) => x.id === id);
-    draft.notifications.unshift({
-      id: noteSeq++ + Math.floor(Math.random() * 1000) * 100000,
-      emoji: "⛳️",
-      title: `You're in: ${t?.name ?? "tournament"}`,
-      body: "Entry confirmed. Tee times publish 48h before.",
-      ts: Date.now(),
-    });
-  });
-}
-
 export function createTournament(t: Tournament) {
   mutate((draft) => {
     draft.created.unshift(t);
@@ -2997,6 +3392,22 @@ export function duplicateTournament(id: string): string | null {
     TOURNAMENTS.find((x) => x.id === id);
   if (!source) return null;
   const newId = `t-copy-${Date.now().toString(36)}`;
+  /*
+   * A copy is next month's medal, not last month's: every date moves
+   * forward by the same amount so the first round lands a week from today
+   * and registration closes the evening before, the way the wizard would
+   * have set it. The club then edits the name and the date.
+   */
+  const day = 86_400_000;
+  const parse = (iso: string) => Date.parse(`${iso}T12:00:00`);
+  const targetFirst = Date.now() + 7 * day;
+  const delta = Math.max(0, Math.round((targetFirst - parse(source.date)) / day));
+  const shift = (iso: string | undefined) =>
+    iso && !Number.isNaN(parse(iso.slice(0, 10)))
+      ? new Date(parse(iso.slice(0, 10)) + delta * day).toISOString().slice(0, 10)
+      : iso;
+  const rounds = (source.rounds ?? []).map((r) => ({ ...r, date: shift(r.date) ?? r.date }));
+  const firstDate = shift(source.date) ?? source.date;
   const copy: Tournament = {
     ...structuredClone(source),
     id: newId,
@@ -3004,6 +3415,12 @@ export function duplicateTournament(id: string): string | null {
     status: "upcoming",
     registered: false,
     result: undefined,
+    date: firstDate,
+    rounds,
+    regCloses: shift(source.regCloses) ?? source.regCloses,
+    regClosesAt: source.regClosesAt
+      ? new Date(Date.parse(source.regClosesAt) + delta * day).toISOString()
+      : source.regClosesAt,
     // rounds keep their shape but not their identity's scores; ids stay stable
     // within the new tournament, which is all the round key needs
   };
@@ -3097,8 +3514,15 @@ export function endTournamentDay(id: string) {
     const players = [...fieldIds]
       .map((pid) => draft.roster.find((p) => p.id === pid) ?? PLAYERS.find((p) => p.id === pid))
       .filter((p): p is Player => !!p);
-    const mode = t.format === "Stableford" ? "points" : "net";
-    if (players.length) {
+    const mode = viewModeFor(t.format);
+    // a winner needs golf: an event ended before a card came in has no
+    // result, rather than the first name on the sheet
+    const anyScore = rounds.some((r) =>
+      Object.values(draft.scores[roundKey(id, r.number)] ?? {}).some((card) =>
+        card.some((g) => g != null),
+      ),
+    );
+    if (players.length && anyScore) {
       const toParStr = (n: number) => (n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`);
       const standings = cumulativeStandings(
         players,
@@ -3125,8 +3549,10 @@ export function endTournamentDay(id: string) {
       }
     }
     t.status = "completed";
-    draft.liveTournamentId = null;
-    draft.liveRound = 1;
+    if (draft.liveTournamentId === id) {
+      draft.liveTournamentId = null;
+      draft.liveRound = 1;
+    }
     enqueueEntity(draft, "tournaments", tournamentToRow(t), { conflict: "id" });
   });
 }
@@ -3475,6 +3901,10 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
         if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
         break;
       }
+      case "entries": {
+        upsertEntry(draft, rowToEntry(row));
+        break;
+      }
     }
   });
 }
@@ -3620,6 +4050,7 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
       const a = rowToAudit(r);
       if (!draft.auditLog.some((x) => x.id === a.id)) draft.auditLog.push(a);
     }
+    for (const r of snap.entries ?? []) mergeEntryRow(draft, r);
   });
 }
 

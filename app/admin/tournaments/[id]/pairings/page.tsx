@@ -24,8 +24,11 @@ import {
   fieldOfRound,
   groupsFromOrder,
   orderByStandings,
+  promoteEntry,
+  registerPlayer,
   savePairings,
   setGroupMarkers,
+  setRoundFirstTee,
   simStore,
   useSim,
 } from "@/lib/sim/store";
@@ -92,11 +95,14 @@ function PlayerChip({
   onRemove,
   onSelect,
   selected,
+  note,
 }: {
   p: Player;
   onRemove?: () => void;
   onSelect?: () => void;
   selected?: boolean;
+  /** a quiet warning beside the name, e.g. "withdrawn" */
+  note?: string;
 }) {
   const pid = p.id;
   return (
@@ -114,6 +120,11 @@ function PlayerChip({
     >
       <GripVertical className="size-3 text-muted-foreground" />
       <span className="flex-1 truncate text-[12.5px] text-foreground">{p.name}</span>
+      {note && (
+        <span className="rounded bg-red-wash px-1 text-[10px] font-medium text-red-flag">
+          {note}
+        </span>
+      )}
       <span className="rounded bg-secondary px-1 text-[10px] text-muted-foreground tnum">
         {p.handicap}
       </span>
@@ -250,8 +261,11 @@ export default function PairingsPage({
 }) {
   const { id } = use(params);
   const created = useSim((s) => s.created);
+  const dismissed = useSim((s) => s.dismissed);
   const roster = useSim((s) => s.roster);
-  const t = allTournaments(created).find((x) => x.id === id);
+  const guests = useSim((s) => s.guests);
+  const entries = useSim((s) => s.entries);
+  const t = allTournaments(created, dismissed).find((x) => x.id === id);
   const rounds = t ? roundsOf(t) : [];
 
   // pairings are per round: leaders get re-paired for the next one
@@ -291,17 +305,57 @@ export default function PairingsPage({
   const [selected, setSelected] = useState<string | null>(null);
 
   const byId = useMemo(
-    () => new Map(roster.map((p) => [p.id, p] as const)),
-    [roster],
+    () => new Map([...roster, ...guests].map((p) => [p.id, p] as const)),
+    [roster, guests],
   );
   const assigned = useMemo(
     () => new Set(groups.flatMap((g) => g.playerIds)),
     [groups],
   );
-  const pool = useMemo(
-    () => roster.filter((p) => !assigned.has(p.id)).map((p) => p.id),
-    [roster, assigned],
+  /*
+   * The pool is who registered, in the order they did. A club with no entries
+   * yet (demo, or a members' day run entirely from the desk) still gets the
+   * roster, so the sheet can be drawn either way.
+   */
+  const myEntries = useMemo(
+    () => entries.filter((e) => e.tournamentId === id),
+    [entries, id],
   );
+  const registrants = useMemo(
+    () =>
+      myEntries
+        .filter((e) => e.status === "registered")
+        .sort((a, b) => a.registeredAt.localeCompare(b.registeredAt))
+        .map((e) => e.playerId)
+        .filter((pid) => byId.has(pid)),
+    [myEntries, byId],
+  );
+  const waitlist = useMemo(
+    () => myEntries.filter((e) => e.status === "waitlisted").map((e) => e.playerId).filter((pid) => byId.has(pid)),
+    [myEntries, byId],
+  );
+  const withdrawn = useMemo(
+    () => new Set(myEntries.filter((e) => e.status === "withdrawn").map((e) => e.playerId)),
+    [myEntries],
+  );
+  const usingEntries = registrants.length > 0 || waitlist.length > 0;
+  const pool = useMemo(
+    () =>
+      (usingEntries ? registrants : roster.map((p) => p.id)).filter((pid) => !assigned.has(pid)),
+    [usingEntries, registrants, roster, assigned],
+  );
+  const [notice, setNotice] = useState<string | null>(null);
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [rosterQuery, setRosterQuery] = useState("");
+  const fromRoster = useMemo(() => {
+    if (!usingEntries) return [];
+    const q = rosterQuery.trim().toLowerCase();
+    const have = new Set([...registrants, ...waitlist, ...assigned]);
+    return roster
+      .filter((p) => p.active !== false && !have.has(p.id))
+      .filter((p) => !q || p.name.toLowerCase().includes(q))
+      .slice(0, 12);
+  }, [usingEntries, roster, registrants, waitlist, assigned, rosterQuery]);
 
   // autosave pairings + tee times so tournament day can pick them up
   const interval = roundInfo?.teeInterval || t?.teeInterval || 10;
@@ -374,6 +428,15 @@ export default function PairingsPage({
   }
 
   const movePlayer = (pid: string, toGroup: string | null) => {
+    if (toGroup != null) {
+      const target = groups.find((g) => g.id === toGroup);
+      if (target && !target.playerIds.includes(pid) && target.playerIds.length >= 4) {
+        // refused, and said so: the player stays where they were
+        setNotice(`Group ${groups.indexOf(target) + 1} already has four players.`);
+        setTimeout(() => setNotice(null), 2400);
+        return;
+      }
+    }
     setGroups((gs) => {
       const cleared = gs.map((g) => ({
         ...g,
@@ -445,7 +508,10 @@ export default function PairingsPage({
             <Input
               type="time"
               value={firstTee}
-              onChange={(e) => setFirstTee(e.target.value)}
+              onChange={(e) => {
+                setFirstTee(e.target.value);
+                setRoundFirstTee(id, round, e.target.value);
+              }}
               className="h-9 w-[110px]"
             />
           </div>
@@ -508,7 +574,7 @@ export default function PairingsPage({
         {/* registered pool */}
         <div>
           <p className="smallcaps mb-2.5 text-muted-foreground">
-            Registered · unassigned ({pool.length})
+            {usingEntries ? "Registered · unassigned" : "Roster · unassigned"} ({pool.length})
           </p>
           {selected && (
             <p className="mb-2 rounded-lg bg-clay-wash px-3 py-2 text-[11px] text-clay-deep">
@@ -538,6 +604,67 @@ export default function PairingsPage({
               />
             ))}
           </div>
+          {waitlist.length > 0 && (
+            <div className="mt-4">
+              <p className="smallcaps mb-2 text-muted-foreground">Waitlist ({waitlist.length})</p>
+              <div className="flex flex-col gap-1.5">
+                {waitlist.map((pid) => (
+                  <div
+                    key={pid}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-[13px] text-muted-foreground"
+                  >
+                    <span className="truncate">{byId.get(pid)?.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => promoteEntry(id, pid)}
+                      className="shrink-0 text-[12px] font-medium text-clay hover:text-clay-deep cursor-pointer"
+                    >
+                      Admit
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {usingEntries && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setRosterOpen((v) => !v)}
+                className="text-[12px] font-medium text-clay hover:text-clay-deep cursor-pointer"
+              >
+                {rosterOpen ? "Hide the roster" : "Add from the roster…"}
+              </button>
+              {rosterOpen && (
+                <div className="mt-2">
+                  <Input
+                    value={rosterQuery}
+                    onChange={(e) => setRosterQuery(e.target.value)}
+                    placeholder="Search members"
+                    className="h-9 text-[13px]"
+                  />
+                  <div className="mt-2 flex max-h-56 flex-col gap-1 overflow-y-auto">
+                    {fromRoster.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => registerPlayer(id, p.id, { via: "desk", force: true })}
+                        className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] text-foreground hover:bg-accent/60 cursor-pointer"
+                      >
+                        <span className="truncate">{p.name}</span>
+                        <span className="text-[11px] text-muted-foreground">HC {p.handicap}</span>
+                      </button>
+                    ))}
+                    {fromRoster.length === 0 && (
+                      <p className="px-3 py-2 text-[12px] text-muted-foreground">
+                        Everyone matching is already in.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* groups */}
@@ -556,6 +683,9 @@ export default function PairingsPage({
               Add group
             </button>
           </div>
+          {notice && (
+            <p className="mb-2 rounded-lg bg-amber-wash px-3 py-2 text-[12px] text-amber-flag">{notice}</p>
+          )}
           <div className="grid grid-cols-3 gap-3">
             {groups.map((g, i) => (
               <div
@@ -605,6 +735,7 @@ export default function PairingsPage({
                         key={pid}
                         p={byId.get(pid)!}
                         onRemove={() => movePlayer(pid, null)}
+                        note={withdrawn.has(pid) ? "withdrawn" : undefined}
                       />
                     ) : null,
                   )}

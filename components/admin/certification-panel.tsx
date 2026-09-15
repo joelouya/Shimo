@@ -31,7 +31,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { auditTrailCsv } from "@/lib/integrity";
-import { useActiveTournament, useRoundCerts, useRoundScores } from "@/lib/sim/hooks";
+import { useTournamentView } from "@/lib/sim/hooks";
+import { roundKey } from "@/lib/rounds";
 import {
   decideCorrection,
   deskAttest,
@@ -191,7 +192,7 @@ function DisputeCard({ d, name }: { d: Dispute; name: string }) {
           size="sm"
           variant="outline"
           onClick={() => {
-            markCommitteeReview(d.playerId);
+            markCommitteeReview(d.id);
             setOpen(true);
           }}
         >
@@ -349,13 +350,40 @@ function CorrectionCard({ c, name }: { c: CorrectionRequest; name: string }) {
 
 /* ------------------------------------------------------------------ */
 
-export function CertificationPanel() {
-  const active = useActiveTournament();
-  const certs = useRoundCerts();
-  const scores = useRoundScores();
-  const cardIn = useSim((s) => s.cardIn);
-  const disputes = useSim((s) => s.disputes);
-  const corrections = useSim((s) => s.corrections);
+const EMPTY_MAP = {} as const;
+
+export function CertificationPanel({
+  tournamentId,
+  round,
+}: {
+  /** which event; the live one when absent */
+  tournamentId?: string;
+  /** which round; the live round when absent */
+  round?: number;
+} = {}) {
+  const liveId = useSim((s) => s.liveTournamentId);
+  const liveRound = useSim((s) => s.liveRound);
+  const viewId = tournamentId ?? liveId;
+  const viewRound = round ?? liveRound ?? 1;
+  const active = useTournamentView(viewId, viewRound);
+  const key = viewId ? roundKey(viewId, viewRound) : "";
+  const certs = useSim((s) => (key ? (s.certifications[key] ?? EMPTY_MAP) : EMPTY_MAP)) as Record<string, { stage: CertStage; markerAttestedAt?: number; playerCertifiedAt?: number; lockedHash?: string }>;
+  const scores = useSim((s) => (key ? (s.scores[key] ?? EMPTY_MAP) : EMPTY_MAP)) as Record<string, (number | null)[]>;
+  // keyed by round: a whole-map read here used to index the wrong level and
+  // never showed a paper card as in
+  const cardIn = useSim((s) => (key ? (s.cardIn[key] ?? EMPTY_MAP) : EMPTY_MAP)) as Record<string, boolean>;
+  const allDisputes = useSim((s) => s.disputes);
+  const allCorrections = useSim((s) => s.corrections);
+  // this event's items only: a dispute from last month must not appear in
+  // today's room, or be resolved into today's card
+  const disputes = useMemo(
+    () => allDisputes.filter((d) => d.tournamentId === viewId),
+    [allDisputes, viewId],
+  );
+  const corrections = useMemo(
+    () => allCorrections.filter((c) => c.tournamentId === viewId),
+    [allCorrections, viewId],
+  );
   const auditLog = useSim((s) => s.auditLog);
   const roster = useSim((s) => s.roster);
   const guests = useSim((s) => s.guests);

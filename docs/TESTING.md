@@ -88,6 +88,16 @@ guard it in both `applyRemoteEntity` and `hydrateFromSnapshot`, then add a
 check here; without the guard a reconcile that runs seconds after a push will
 revert the write until it echoes.
 
+### The field before the day
+
+"Member registration: the field before the day" drives the `entries` table
+through the real store: a member registers with one tap, the cap counts
+members and guests alike, a full field with a waitlist takes the next entry,
+withdrawing frees a place, the desk admits from the waitlist and can force a
+walk-up in after the window has closed, a guest registration and a desk
+check-in both land in the same field, and an older cloud row never undoes a
+local change (merge, realtime and snapshot paths alike).
+
 ### What it does not test
 
 Real network latency, real Postgres concurrency under real RLS, real Realtime

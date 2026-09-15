@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Logo, LogoMark } from "@/components/logo";
-import { clubById } from "@/lib/data";
+import { clubById, findClub } from "@/lib/data";
 import {
   DEFAULT_ACCENT,
   AA_TEXT,
@@ -33,9 +33,6 @@ import { uploadClubLogo, validateLogo } from "@/lib/sync/storage";
 import { REMOTE_CONFIGURED } from "@/lib/sync/client";
 import { cn } from "@/lib/utils";
 
-/** The club this console administers. */
-const CLUB_ID = "muthaiga";
-
 const SWATCHES = [
   { hex: "#b84a2e", label: "Shimo terracotta" },
   { hex: "#1e7a4c", label: "Fairway green" },
@@ -46,7 +43,8 @@ const SWATCHES = [
 ];
 
 export function ClubIdentityCard() {
-  const club = clubById(CLUB_ID);
+  const CLUB_ID = useSim((s) => s.clubId);
+  const club = findClub(CLUB_ID) ?? clubById("muthaiga");
   const identity = useSim((s) => clubIdentityOf(s, CLUB_ID));
   const fileRef = useRef<HTMLInputElement>(null);
 
