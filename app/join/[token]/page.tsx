@@ -24,8 +24,15 @@ import { Logo } from "@/components/logo";
 import { SimGate } from "@/components/sim-gate";
 import { Button } from "@/components/ui/button";
 import { findClub } from "@/lib/data";
-import { activateInvite, applyRemoteEntity, setDeviceIdentity, useSim } from "@/lib/sim/store";
+import {
+  activateInvite,
+  activateInviteById,
+  applyRemoteEntity,
+  setDeviceIdentity,
+  useSim,
+} from "@/lib/sim/store";
 import { REMOTE_CONFIGURED, supabase } from "@/lib/sync/client";
+import type { Player } from "@/lib/types";
 import { initials } from "@/lib/utils";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
@@ -52,40 +59,105 @@ function Claim({ token }: { token: string }) {
    * for display only; activateInvite re-checks it at the moment of writing, so
    * a link opened twice on two devices cannot claim twice.
    */
-  const member = useMemo(
+  const localMember = useMemo(
     () => roster.find((p) => p.invite?.token === token),
     [roster, token],
   );
-  const claimable = Boolean(member && !member.invite?.activatedAt && member.active !== false);
 
   /*
-   * A fresh phone opening the link from WhatsApp holds no roster yet, so the
-   * first paint must not be the failure screen. Ask the cloud for the row
-   * this token names and wait for that answer before deciding.
+   * The cloud keeps only a hash of the token, so it is asked who this
+   * invitation is for (lookup_invite) and later to claim it (claim_invite);
+   * neither call can list invitations. The roster on this device answers
+   * only when it minted the token itself, which is the demo and the desk.
+   * A fresh phone opening the link from WhatsApp holds no roster, so the
+   * first paint waits for the cloud rather than showing the failure screen.
    */
-  const [looked, setLooked] = useState(!REMOTE_CONFIGURED);
+  const [remote, setRemote] = useState<
+    | { state: "pending" }
+    | { state: "none" }
+    | { state: "found"; player: Player; activated: boolean; active: boolean }
+  >(REMOTE_CONFIGURED ? { state: "pending" } : { state: "none" });
   useEffect(() => {
-    if (member || looked) return;
+    if (localMember || !REMOTE_CONFIGURED) return;
     let live = true;
     (async () => {
       try {
         const sb = await supabase();
-        const { data } = await sb
-          .from("players")
-          .select("*")
-          .eq("invite_token", token)
-          .maybeSingle();
-        if (live && data) applyRemoteEntity("players", data as Record<string, unknown>);
+        const { data } = await sb.rpc("lookup_invite", { p_token: token });
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!live) return;
+        if (!row) {
+          setRemote({ state: "none" });
+          return;
+        }
+        const player: Player = {
+          id: row.id as string,
+          clubId: row.club_id as string,
+          name: row.name as string,
+          handicap: Number(row.handicap ?? 0),
+          gender: "M",
+          memberNo: (row.member_no as string) ?? undefined,
+        };
+        setRemote({
+          state: "found",
+          player,
+          activated: Boolean(row.activated),
+          active: row.active !== false,
+        });
       } catch {
-        /* offline or not found: the roster we hold decides */
-      } finally {
-        if (live) setLooked(true);
+        if (live) setRemote({ state: "none" });
       }
     })();
     return () => {
       live = false;
     };
-  }, [member, looked, token]);
+  }, [localMember, token]);
+
+  const member: Player | undefined =
+    localMember ?? (remote.state === "found" ? remote.player : undefined);
+  const looked = Boolean(localMember) || remote.state !== "pending";
+  const claimable = localMember
+    ? Boolean(!localMember.invite?.activatedAt && localMember.active !== false)
+    : remote.state === "found" && !remote.activated && remote.active;
+  const [claimError, setClaimError] = useState<string | null>(null);
+
+  const claim = async () => {
+    if (!member) return;
+    setClaimError(null);
+    if (localMember) {
+      const ok = activateInvite(token, localMember.email);
+      if (!ok) return;
+    } else {
+      try {
+        const sb = await supabase();
+        const { data, error } = await sb.rpc("claim_invite", { p_token: token });
+        const row = Array.isArray(data) ? data[0] : data;
+        if (error || !row) {
+          setClaimError("That did not go through. Check your signal and try again.");
+          return;
+        }
+        // the row is now ours: put it in the roster here, marked claimed
+        applyRemoteEntity("players", {
+          id: row.id,
+          club_id: row.club_id,
+          name: row.name,
+          handicap: row.handicap,
+          member_no: row.member_no,
+          invite_activated_at: row.activated_at,
+          invite_claimed_by: row.claimed_by,
+          active: true,
+          updated_at: row.activated_at,
+        });
+        activateInviteById(row.id as string);
+      } catch {
+        setClaimError("That did not go through. Check your signal and try again.");
+        return;
+      }
+    }
+    // The club vouched for this person; this device is now them.
+    setDeviceIdentity(member.id);
+    setClaimed(true);
+  };
 
   if (!member && !looked) {
     return (
@@ -183,22 +255,13 @@ function Claim({ token }: { token: string }) {
           </Button>
         ) : (
           <>
-            <Button
-              variant="clay"
-              size="lg"
-              className="w-full"
-              onClick={() => {
-                if (!member) return;
-                const ok = activateInvite(token, member.email);
-                if (!ok) return;
-                // The club vouched for this person; this device is now them.
-                setDeviceIdentity(member.id);
-                setClaimed(true);
-              }}
-            >
+            <Button variant="clay" size="lg" className="w-full" onClick={claim}>
               <Check className="size-4" />
               Yes, this is me
             </Button>
+            {claimError && (
+              <p className="mt-3 text-[13px] text-red-flag">{claimError}</p>
+            )}
             <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
               Not you? Do not use this link. Tell the club so they can send it
               to the right person.

@@ -50,6 +50,18 @@ Binding consequences:
   players registered for an open event, the same way they can already read a
   drawn tee sheet; the authenticated policies planned for the admin console
   close that.
+- **An invitation token is never stored in plaintext.** The cloud keeps a
+  SHA-256 of it; the plaintext exists on the desk that issued it (where the
+  link is copied from) and in the link itself. Looking an invitation up and
+  claiming it go through functions that answer one token and cannot list
+  them. A second desk cannot copy a link it did not issue; it issues a fresh
+  one, which retires the old.
+- **What the public key can still do, until the desk signs in.** Read the
+  roster including email addresses and member numbers, read and mint links to
+  card photographs, replace a club's crest, and write scores as the desk on a
+  card that is not yet returned. These are recorded, not hidden, and they
+  close with the authenticated policies (see the auth scope in
+  docs/NEXT-PASS.md).
 - **A guest code is scoped and short-lived.** It opens one scorecard in one
   tournament and nothing else, it stops resolving once that tournament closes,
   and the codes are never enumerable: there is no surface, client or server,

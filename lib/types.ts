@@ -231,8 +231,13 @@ export interface MemberInvite {
   /**
    * Unguessable and single-use. This is a credential: following it claims a
    * named person's membership, their handicap and their scoring history.
+   * Held in plaintext only on the device that minted it (that is where the
+   * link is copied from); the cloud keeps a hash and every other device sees
+   * only that.
    */
-  token: string;
+  token?: string;
+  /** SHA-256 of the token, as the cloud stores it */
+  hash?: string;
   /** ISO datetime the club last sent or copied it */
   sentAt?: string;
   /** ISO datetime the member claimed the row. Absent means not yet activated. */

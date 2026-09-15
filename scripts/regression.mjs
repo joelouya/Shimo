@@ -3477,6 +3477,56 @@ section("The day's lifecycle: one at a time, undoable, honest about results");
 }
 
 /* ------------------------------------------------------------------ */
+section("Invitations: the token stays where it was minted");
+{
+  const m = st().roster.find((p) => !p.guest && !p.invite?.activatedAt) ?? st().roster[0];
+  const token = S.inviteMember(m.id);
+  check("inviting mints a token this device holds",
+    typeof token === "string" && token.length === 20 &&
+      st().roster.find((p) => p.id === m.id).invite.token === token);
+  const row = MAP.playerToRow(st().roster.find((p) => p.id === m.id));
+  check("the row carries the plaintext for the database to hash",
+    row.invite_token === token && row.invite_token_hash === null);
+  await new Promise((r) => setTimeout(r, 30)); // the hash lands a tick later
+  const hash = st().roster.find((p) => p.id === m.id).invite?.hash;
+  check("and the device remembers the hash the cloud will hold",
+    typeof hash === "string" && hash.length === 64);
+
+  // the cloud's echo: hash only, no plaintext
+  const echo = { ...MAP.playerToRow(st().roster.find((p) => p.id === m.id)),
+    invite_token: null, invite_token_hash: hash,
+    updated_at: new Date(Date.now() + 1000).toISOString() };
+  S.applyRemoteEntity("players", echo);
+  const after = st().roster.find((p) => p.id === m.id);
+  check("the echo of the same invitation keeps the link on this desk",
+    after.invite?.token === token && after.invite?.hash === hash);
+  check("a row read back from the cloud has no plaintext",
+    MAP.rowToPlayer(echo).invite.token === undefined && MAP.rowToPlayer(echo).invite.hash === hash);
+
+  // another desk reissued: a different hash, and this link is dead
+  const reissued = { ...echo, invite_token_hash: "f".repeat(64),
+    updated_at: new Date(Date.now() + 2000).toISOString() };
+  S.applyRemoteEntity("players", reissued);
+  check("a reissue from another desk retires the link this one held",
+    st().roster.find((p) => p.id === m.id).invite?.token === undefined);
+
+  // claiming by id, the way the cloud's claim_invite hands the row back
+  const claimed = S.activateInviteById(m.id, "Member@Example.com");
+  check("claiming by id activates the row and records the address",
+    Boolean(claimed) && st().roster.find((p) => p.id === m.id).invite?.activatedAt &&
+      st().roster.find((p) => p.id === m.id).invite?.claimedBy === "member@example.com");
+  check("a claimed invitation cannot be claimed again", S.activateInviteById(m.id) === null);
+
+  // linking an address never mints a new token
+  const other = st().roster.find((p) => !p.guest && p.id !== m.id);
+  const t2 = S.inviteMember(other.id);
+  S.linkMemberEmail(other.id, "linked@example.com");
+  const linked = st().roster.find((p) => p.id === other.id);
+  check("linking an email keeps the invitation that was sent",
+    linked.invite?.token === t2 && linked.invite?.claimedBy === "linked@example.com");
+}
+
+/* ------------------------------------------------------------------ */
 console.log(
   `\n${failures.length ? "FAILED" : "PASSED"}  ${pass} checks passed` +
     (failures.length ? `, ${failures.length} failed:\n  - ${failures.join("\n  - ")}` : ""),

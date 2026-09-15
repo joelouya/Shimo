@@ -199,7 +199,10 @@ export function playerToRow(p: Player) {
     email: p.email ?? null,
     member_no: p.memberNo ?? null,
     dob: p.dob ?? null,
+    // plaintext travels only from the minting device; the database hashes it
+    // on the way in and keeps nothing else
     invite_token: p.invite?.token ?? null,
+    invite_token_hash: p.invite?.hash ?? null,
     invite_sent_at: p.invite?.sentAt ?? null,
     invite_activated_at: p.invite?.activatedAt ?? null,
     invite_claimed_by: p.invite?.claimedBy ?? null,
@@ -223,16 +226,20 @@ export function rowToPlayer(r: Record<string, unknown>): Player {
     email: (r.email as string) ?? undefined,
     memberNo: (r.member_no as string) ?? undefined,
     dob: (r.dob as string) ?? undefined,
-    /* A row from a database that predates M13 has no token, which reads as
-       "never invited" rather than as an error. */
-    invite: r.invite_token
-      ? {
-          token: r.invite_token as string,
-          sentAt: (r.invite_sent_at as string) ?? undefined,
-          activatedAt: (r.invite_activated_at as string) ?? undefined,
-          claimedBy: (r.invite_claimed_by as string) ?? undefined,
-        }
-      : undefined,
+    /* A row from a database that predates M13 has no invitation, which reads
+       as "never invited" rather than as an error. From M25 the cloud holds a
+       hash, never the token; a pre-M25 row still carrying plaintext is read
+       so the link keeps working until the backfill has run. */
+    invite:
+      r.invite_token || r.invite_token_hash || r.invite_activated_at || r.invite_claimed_by
+        ? {
+            token: (r.invite_token as string) || undefined,
+            hash: (r.invite_token_hash as string) || undefined,
+            sentAt: (r.invite_sent_at as string) ?? undefined,
+            activatedAt: (r.invite_activated_at as string) ?? undefined,
+            claimedBy: (r.invite_claimed_by as string) ?? undefined,
+          }
+        : undefined,
     active: r.active === false ? false : undefined,
     guest: r.is_guest
       ? {

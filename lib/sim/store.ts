@@ -1182,6 +1182,25 @@ function enqueueScore(
   enqueueOp(draft, kind, { ...payload, tournamentId }, ts);
 }
 
+/**
+ * A player row from the cloud carries the invitation's hash, never its
+ * token. The desk that minted the token keeps it, as long as the cloud is
+ * describing the same invitation (same hash, or a hash this device has not
+ * computed yet); a different hash means another desk reissued it and the
+ * link this device holds is dead.
+ */
+function keepInviteToken(local: Player, incoming: Player): Player {
+  const token = local.invite?.token;
+  if (!token || incoming.invite?.token) return incoming;
+  const same =
+    !incoming.invite?.hash || !local.invite?.hash || incoming.invite.hash === local.invite.hash;
+  if (!same) return incoming;
+  return {
+    ...incoming,
+    invite: { ...(incoming.invite ?? {}), token, hash: incoming.invite?.hash ?? local.invite?.hash },
+  };
+}
+
 /** Push one player's certification for a named tournament and round. */
 function syncCertAt(draft: SimState, tournamentId: string, round: number, playerId: string) {
   const c = roundCerts(draft, roundKey(tournamentId, round))[playerId];
@@ -1587,7 +1606,26 @@ export function inviteMember(id: string): string | null {
     m.invite = { token, sentAt: new Date().toISOString() };
     enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
   });
+  if (token) void rememberInviteHash(id, token);
   return token;
+}
+
+/**
+ * The hash the cloud will hold for a token this device just minted, kept
+ * beside it so the cloud's echo (hash only) can be recognised as the same
+ * invitation and the plaintext kept for the link. Async because SHA-256 is.
+ */
+async function rememberInviteHash(id: string, token: string) {
+  try {
+    const hash = await sha256Hex(token);
+    mutate((draft) => {
+      const m = draft.roster.find((p) => p.id === id);
+      if (m?.invite?.token === token) m.invite.hash = hash;
+    });
+  } catch {
+    /* no crypto here (an old browser): the link still works, the echo
+       simply replaces the token with the hash and the desk reissues */
+  }
 }
 
 /**
@@ -1614,16 +1652,20 @@ export function ensureInviteToken(id: string): string | null {
  */
 export function inviteAllMembers(): number {
   let issued = 0;
+  const minted: { id: string; token: string }[] = [];
   mutate((draft) => {
     const now = new Date().toISOString();
     for (const m of draft.roster) {
       if (m.invite?.activatedAt) continue;
       if (m.active === false) continue;
-      m.invite = { token: newInviteToken(), sentAt: now };
+      const token = newInviteToken();
+      m.invite = { token, sentAt: now };
+      minted.push({ id: m.id, token });
       enqueueEntity(draft, "players", playerToRow(m), { conflict: "id" });
       issued++;
     }
   });
+  for (const { id, token } of minted) void rememberInviteHash(id, token);
   return issued;
 }
 
@@ -1636,13 +1678,25 @@ export function inviteAllMembers(): number {
  * was real.
  */
 export function activateInvite(token: string, email?: string): Player | null {
+  const m = simStore.getState().roster.find((p) => p.invite?.token === token);
+  if (!m) return null;
+  return activateInviteById(m.id, email);
+}
+
+/**
+ * The cloud has claimed an invitation (claim_invite ran) or this device holds
+ * the plaintext and is claiming it locally: mark the row activated here and
+ * push it. Returns null for a row that is unknown, claimed, or switched off.
+ */
+export function activateInviteById(id: string, email?: string): Player | null {
   let claimed: Player | null = null;
   mutate((draft) => {
-    const m = draft.roster.find((p) => p.invite?.token === token);
-    if (!m || !m.invite) return;
-    if (m.invite.activatedAt) return;
+    const m = draft.roster.find((p) => p.id === id);
+    if (!m) return;
+    if (m.invite?.activatedAt) return;
     if (m.active === false) return;
-    m.invite.activatedAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    m.invite = { ...(m.invite ?? {}), activatedAt: now };
     if (email) m.invite.claimedBy = email.trim().toLowerCase();
     m.active = true;
     claimed = { ...m };
@@ -1674,8 +1728,9 @@ export function linkMemberEmail(id: string, email: string) {
     const m = draft.roster.find((p) => p.id === id);
     if (!m) return;
     const now = new Date().toISOString();
+    // linking does not mint: a link the club already sent keeps working
     m.invite = {
-      token: m.invite?.token ?? newInviteToken(),
+      ...(m.invite ?? {}),
       sentAt: m.invite?.sentAt ?? now,
       activatedAt: m.invite?.activatedAt ?? now,
       claimedBy: email.trim().toLowerCase(),
@@ -3859,7 +3914,7 @@ export function applyRemoteEntity(table: string, row: Record<string, unknown>) {
       case "players": {
         const p = rowToPlayer(row);
         const i = draft.roster.findIndex((x) => x.id === p.id);
-        if (i >= 0) draft.roster[i] = p;
+        if (i >= 0) draft.roster[i] = keepInviteToken(draft.roster[i], p);
         else draft.roster.push(p);
         ensureCard(draft, p.id);
         break;
@@ -3987,7 +4042,7 @@ export function hydrateFromSnapshot(snap: HydrationSnapshot) {
     for (const r of snap.players) {
       const p = rowToPlayer(r);
       const j = draft.roster.findIndex((x) => x.id === p.id);
-      if (j >= 0) draft.roster[j] = p;
+      if (j >= 0) draft.roster[j] = keepInviteToken(draft.roster[j], p);
       else draft.roster.push(p);
       ensureCard(draft, p.id);
     }
