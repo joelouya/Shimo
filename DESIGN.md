@@ -247,7 +247,7 @@ Three flags, and no more. Each means one thing.
   dark ground; every other surface in Shimo is paper.
 - **Cream** (`{colors.cream}`) is also named in its own right, for the places
   where it is not the page: a label on a terracotta button, text on the navy
-  rail, a row on the clubhouse screen.
+  top bar and title band, a row on the clubhouse screen.
 - **Terracotta Lift** (`{colors.clay-lift}`): the accent for a dark ground. The
   base clay measures 3.47:1 on broadcast ink, which is legible on an actual
   television, where every figure is large text, and not legible anywhere the
@@ -338,9 +338,19 @@ different distances.
 **Phone and desk (Operate).** A standard fluid layout on Tailwind's default
 breakpoints (`sm` 640, `md` 768, `lg` 1024, `xl` 1280). The golfer app is
 built mobile-first and constrained to a 430px column so it holds its proportions
-when installed to a home screen; the admin desk is desktop-first with a fixed
-navigation rail and a fluid working area. Rhythm is the 4px base: 8px inside a
-row, 16px inside a card, 20-24px inside a panel, 24px between sections.
+when installed to a home screen; the admin desk is desktop-first with a navy
+top bar, a navy title band beneath it that runs edge to edge, and a fluid
+working area up to 1440px wide. A page's first block may lift into the band.
+Below 1024px the bar's destinations move into a drawer. Rhythm is the 4px
+base: 8px inside a row, 16px inside a card, 20-24px inside a panel, 24px
+between sections.
+
+Three layouts recur on the desk and are drawn from a shared kit: a row of
+stat cards (a label, a serif figure, a delta line, a clay sparkline on paper)
+across the head of a page; a list beside the chosen thing (the season beside
+the selected event, cards beside the card being read, groups beside the group
+being watched), the selected row set in ink; and a card grid for people, with
+the ledger one toggle away. Segmented pill tabs carry counts.
 
 Density rises where the task demands it. The desk scoring grid is deliberately
 tighter than anything else in the product, with frozen player and total columns
@@ -463,8 +473,8 @@ slowly. Confidence through accuracy rather than through weight.
 
 ### Navigation
 
-- **Admin:** a fixed navy rail, cream labels at 15px, the active item carried on
-  a raised sand block.
+- **Admin:** a navy top bar; the six destinations as pills in a row, the active
+  one on cream, the live event and the desk on the right. A drawer below 1024px.
 - **Golfer:** a bottom tab bar of five items, icon over an 11px label, the active
   item in terracotta.
 

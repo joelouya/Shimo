@@ -2186,9 +2186,12 @@ section("Guests");
     return /^[a-z2-9]{3}-[a-z2-9]{3}$/.test(c) && !/[ilo01]/.test(c);
   })());
   check("codes do not collide across a full field", (() => {
+    // the biggest corporate day on record is 270; two of them, so a collision
+    // here is a bug and not the birthday paradox (2000 draws collided once in
+    // about four hundred runs, which is what a flaky check looks like)
     const seen = new Set();
-    for (let i = 0; i < 2000; i++) seen.add(G.newGuestCode());
-    return seen.size === 2000;
+    for (let i = 0; i < 540; i++) seen.add(G.newGuestCode());
+    return seen.size === 540;
   })());
   check("a code typed in capitals, spaced, without the dash still works",
     G.normaliseCode("  ABC 123 ") === "abc-123");

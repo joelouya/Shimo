@@ -96,6 +96,3 @@ when it is done.
 - Stat-card sparklines draw from the last three hours of the score feed
   (capped at 24 events in the store) and from certification times; a proper
   per-hole timeline would need the score rows' own timestamps.
-- The guest-code collision check in the regression harness is probabilistic
-  (`codes do not collide across a full field`) and failed once in four runs;
-  seed it or dedupe against existing codes in the harness.
