@@ -1,6 +1,5 @@
 "use client";
 
-import { PageHeader } from "@/components/admin/page-header";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,17 +10,21 @@ import {
   Flag,
   Image as ImageIcon,
   Link as LinkIcon,
-  MoreHorizontal,
   Pencil,
   Plus,
   Printer,
+  Radio,
   RotateCcw,
   Trash2,
   Trophy,
+  Tv,
   UserCheck,
   Users,
 } from "lucide-react";
 
+import { PageHeader } from "@/components/admin/page-header";
+import { ListRow, MasterDetail } from "@/components/admin/master-detail";
+import { Segmented } from "@/components/admin/segmented";
 import { Badge } from "@/components/ui/badge";
 import { QrCode } from "@/components/qr";
 import { Button } from "@/components/ui/button";
@@ -33,17 +36,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { clubById } from "@/lib/data";
+import { clubById, findCourse } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import { useSyncStatus } from "@/lib/sim/hooks";
-import { roundKey } from "@/lib/rounds";
+import { roundKey, roundsOf } from "@/lib/rounds";
 import {
   adoptTournament,
   allTournaments,
@@ -58,39 +54,12 @@ import {
 } from "@/lib/sim/store";
 import { printScorecards } from "@/lib/scorecard/print";
 import type { Tournament } from "@/lib/types";
-import { formatKES } from "@/lib/utils";
+import { cn, formatDate, formatKES } from "@/lib/utils";
 
 function StatusBadge({ t }: { t: Tournament }) {
   if (t.status === "live") return <Badge variant="live">● Live</Badge>;
   if (t.status === "completed") return <Badge variant="outline">Completed</Badge>;
   return <Badge variant="secondary">Entries open</Badge>;
-}
-
-/**
- * One row of secondary actions, behind a single control.
- *
- * The upcoming row grew to five buttons of equal weight, which reads as five
- * equally likely things to do next. On a tournament day exactly one of them is
- * likely, so that one stays out and the rest go behind the ellipsis. The desk
- * loses nothing: everything is still one click away, it is just no longer
- * competing with the thing they actually came here to do.
- */
-function RowMenu({ children }: { children: React.ReactNode }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="More actions"
-          className="text-muted-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
-        >
-          <MoreHorizontal className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{children}</DropdownMenuContent>
-    </DropdownMenu>
-  );
 }
 
 /**
@@ -117,36 +86,48 @@ function PublishStatus({ id }: { id: string }) {
 
 /** "12 registered · 2 waitlisted", from the synced entries; the seed's
  *  field size when the event has none yet. */
-function EntryCount({ t }: { t: Tournament }) {
+function useEntryCount(t: Tournament) {
   const entries = useSim((s) => s.entries);
   const mine = entries.filter((e) => e.tournamentId === t.id);
   const registered = mine.filter((e) => e.status === "registered").length;
   const waitlisted = mine.filter((e) => e.status === "waitlisted").length;
-  if (!mine.length) return <>{t.fieldSize} entered</>;
+  return { any: mine.length > 0, registered, waitlisted };
+}
+
+function EntryCount({ t }: { t: Tournament }) {
+  const c = useEntryCount(t);
+  if (!c.any) return <>{t.fieldSize} entered</>;
   return (
     <>
-      {registered} registered
-      {waitlisted > 0 && ` · ${waitlisted} waitlisted`}
+      {c.registered} registered
+      {c.waitlisted > 0 && ` · ${c.waitlisted} waitlisted`}
       {t.maxPlayers ? ` of ${t.maxPlayers}` : ""}
     </>
   );
 }
 
-function TournamentRow({
-  t,
-  isNew,
-  isCreated,
-  onEdit,
-  onDelete,
-  onEnd,
-  onCopyRegistration,
-  onDuplicate,
-  onPrintScorecards,
-  onStart,
-}: {
-  t: Tournament;
-  isNew?: boolean;
-  isCreated: boolean;
+function DateBlock({ date, inverse }: { date: string; inverse?: boolean }) {
+  const d = new Date(date + "T12:00:00");
+  return (
+    <div
+      className={cn(
+        "flex w-12 shrink-0 flex-col items-center rounded-xl py-2",
+        inverse ? "bg-cream/10" : "bg-secondary/70",
+      )}
+    >
+      <span className={cn("smallcaps text-[9px]", inverse ? "text-cream/70" : "text-muted-foreground")}>
+        {d.toLocaleDateString("en-KE", { month: "short" })}
+      </span>
+      <span className={cn("font-serif text-xl leading-none tnum", inverse ? "text-cream" : "text-foreground")}>
+        {d.getDate()}
+      </span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+type Handlers = {
   onEdit: (t: Tournament) => void;
   onDelete: (t: Tournament) => void;
   onEnd: (t: Tournament) => void;
@@ -154,193 +135,255 @@ function TournamentRow({
   onDuplicate: (t: Tournament) => void;
   onPrintScorecards: (t: Tournament) => void;
   onStart: (t: Tournament) => void;
+};
+
+function Tile({
+  href,
+  icon,
+  label,
+  sub,
+  emphasis,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  sub?: React.ReactNode;
+  emphasis?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "focus-ring flex items-start gap-3 rounded-xl border p-3.5 transition-colors",
+        emphasis
+          ? "border-clay/30 bg-clay-wash/40 hover:bg-clay-wash/70"
+          : "border-border bg-card hover:bg-accent/40",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-lg",
+          emphasis ? "bg-clay text-cream" : "bg-secondary text-ink-soft",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13.5px] font-medium text-foreground">{label}</span>
+        {sub && <span className="block truncate text-[11.5px] text-muted-foreground">{sub}</span>}
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * The chosen event, opened beside the list: what it is, how the field
+ * stands, every door into it, and the one action the day is waiting on.
+ * The secondary things (edit, duplicate, print, delete) are here as plain
+ * buttons rather than behind an ellipsis; there is room for them now.
+ */
+function TournamentDetail({
+  t,
+  isCreated,
+  handlers,
+}: {
+  t: Tournament;
+  isCreated: boolean;
+  handlers: Handlers;
 }) {
   const canReopen = useSim((s) => canReopenTournamentDay(s, t.id));
+  const groups = useSim((s) => s.pairings[roundKey(t.id, 1)]);
+  const count = useEntryCount(t);
+  const drawn = (groups ?? []).filter((g) => g.playerIds.length > 0);
+  const seated = drawn.reduce((a, g) => a + g.playerIds.length, 0);
+  const rounds = roundsOf(t);
+  const course = findCourse(t.courseId);
+  const upcoming = t.status === "upcoming";
+  const live = t.status === "live";
+  const completed = t.status === "completed";
+
   return (
-    <div
-      className={`flex items-center gap-5 px-5 py-4 ${
-        isNew ? "bg-clay-wash/40" : ""
-      }`}
-    >
-      <div className="flex w-12 shrink-0 flex-col items-center rounded-xl bg-secondary/70 py-2">
-        <span className="smallcaps text-[9px] text-muted-foreground">
-          {new Date(t.date + "T12:00:00").toLocaleDateString("en-KE", { month: "short" })}
-        </span>
-        <span className="font-serif text-xl leading-none text-foreground tnum">
-          {new Date(t.date + "T12:00:00").getDate()}
-        </span>
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2.5">
-          <p className="truncate text-[15px] font-medium text-foreground">{t.name}</p>
-          <StatusBadge t={t} />
-          {isNew && <Badge variant="claySoft">Just published</Badge>}
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {clubById(t.clubId).name} · {t.format} · {formatKES(t.entryFee)} ·{" "}
-          <EntryCount t={t} />
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {t.status === "live" ? (
-          <>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/admin/scores">Enter scores</Link>
-            </Button>
-            <Button variant="clay" size="sm" asChild>
-              <Link href="/admin/live">
-                Live Ops <ArrowRight className="size-3" />
-              </Link>
-            </Button>
-            <RowMenu>
-              {IS_PILOT && (
-                <DropdownMenuItem asChild>
-                  <Link href={`/admin/tournaments/${t.id}/desk`}>
-                    <UserCheck />
-                    Check in players
-                  </Link>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem asChild>
-                <Link href={`/admin/tournaments/${t.id}/pairings`}>
-                  <Users />
-                  Pairings & tee times
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/admin/tournaments/${t.id}/poster`}>
-                  <ImageIcon />
-                  Poster
-                </Link>
-              </DropdownMenuItem>
-              {IS_PILOT && isCreated && (
-                <>
-                  <DropdownMenuSeparator />
-                  {canReopen && (
-                    <DropdownMenuItem onSelect={() => reopenTournamentDay(t.id)}>
-                      <RotateCcw />
-                      Undo start (back to upcoming)
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onSelect={() => onEnd(t)}>
-                    <Flag />
-                    End tournament
-                  </DropdownMenuItem>
-                </>
-              )}
-            </RowMenu>
-          </>
-        ) : t.status === "upcoming" ? (
-          <>
-            {/* In pilot the day is the point; otherwise the tee sheet is. */}
-            {IS_PILOT ? (
+    <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+      {/* the event, on a navy sheet like the panel it lives beside */}
+      <div className="bg-primary p-6 text-primary-foreground">
+        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <DateBlock date={t.date} inverse />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge t={t} />
+                {rounds.length > 1 && (
+                  <span className="text-[11px] text-primary-foreground/60">{rounds.length} rounds</span>
+                )}
+              </div>
+              <h2 className="mt-2 font-serif text-[30px] leading-tight text-cream">{t.name}</h2>
+              <p className="mt-1 text-[13px] text-primary-foreground/60">
+                {clubById(t.clubId).name} · {course?.name ?? t.courseId} · {t.format}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {live && (
               <>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/admin/tournaments/${t.id}/pairings`}>
-                    <Users className="size-3" />
-                    Pairings & tee times
+                  <Link href="/admin/scores">Enter scores</Link>
+                </Button>
+                <Button variant="clay" size="sm" asChild>
+                  <Link href="/admin/live">
+                    Live Ops <ArrowRight className="size-3" />
                   </Link>
                 </Button>
-                <Button variant="clay" size="sm" onClick={() => onStart(t)}>
-                  Start tournament day
-                </Button>
               </>
-            ) : (
-              <Button variant="outline" size="sm" asChild>
+            )}
+            {upcoming && IS_PILOT && (
+              <Button variant="clay" size="sm" onClick={() => handlers.onStart(t)}>
+                Start tournament day
+              </Button>
+            )}
+            {upcoming && !IS_PILOT && (
+              <Button variant="clay" size="sm" asChild>
                 <Link href={`/admin/tournaments/${t.id}/pairings`}>
                   <Users className="size-3" />
                   Pairings & tee times
                 </Link>
               </Button>
             )}
-            <RowMenu>
-              <DropdownMenuItem asChild>
-                <Link href={`/admin/tournaments/${t.id}/registrations`}>
-                  <ClipboardList />
-                  Registrations
+            {completed && (
+              <Button variant="clay" size="sm" asChild>
+                <Link href={`/admin/tournaments/${t.id}/summary`}>
+                  <ClipboardList className="size-3" />
+                  Results
                 </Link>
-              </DropdownMenuItem>
-              {IS_PILOT && (
-                <DropdownMenuItem asChild>
-                  <Link href={`/admin/tournaments/${t.id}/desk`}>
-                    <UserCheck />
-                    Check in players
-                  </Link>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onSelect={() => onEdit(t)}>
-                <Pencil />
-                Edit details
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/admin/tournaments/${t.id}/poster`}>
-                  <ImageIcon />
-                  Poster
-                </Link>
-              </DropdownMenuItem>
-              {/*
-                The link an organiser forwards to a corporate field. Copied
-                rather than opened, because the club's job with it is to paste
-                it into an email or a WhatsApp group.
-              */}
-              <DropdownMenuItem onSelect={() => onCopyRegistration(t)}>
-                <LinkIcon />
-                Copy registration link
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onPrintScorecards(t)}>
-                <Printer />
-                Print scorecards
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onDuplicate(t)}>
-                <Copy />
-                Duplicate
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(t)}>
-                <Trash2 />
-                {isCreated ? "Delete tournament" : "Remove from list"}
-              </DropdownMenuItem>
-            </RowMenu>
-          </>
-        ) : (
-          <>
-            <p className="text-xs text-muted-foreground">
-              Won by{" "}
-              <span className="font-medium text-foreground">
-                {t.result?.winner ?? "·"}
-              </span>
-            </p>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/admin/tournaments/${t.id}/summary`}>
-                <ClipboardList className="size-3" />
-                Summary
-              </Link>
-            </Button>
-            <RowMenu>
-              <DropdownMenuItem asChild>
-                <Link href={`/admin/tournaments/${t.id}/poster`}>
-                  <ImageIcon />
-                  Results poster
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/admin/tournaments/${t.id}/pairings`}>
-                  <Users />
-                  Pairings & tee times
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(t)}>
-                <Trash2 />
-                {isCreated ? "Delete tournament" : "Remove from list"}
-              </DropdownMenuItem>
-            </RowMenu>
-          </>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* the field, as a ruled line */}
+      <div className="grid grid-cols-2 divide-border/60 border-b border-border/60 sm:grid-cols-4 sm:divide-x">
+        {[
+          {
+            l: "Entries",
+            v: count.any ? count.registered : t.fieldSize,
+            s: count.any
+              ? `${count.waitlisted ? `${count.waitlisted} waiting · ` : ""}${t.maxPlayers ? `cap ${t.maxPlayers}` : "no cap"}`
+              : "entered",
+          },
+          { l: "Tee sheet", v: drawn.length ? drawn.length : "·", s: drawn.length ? `${drawn.length} groups · ${seated} seated` : "not drawn yet" },
+          { l: "Entry fee", v: formatKES(t.entryFee), s: t.feeTiers?.length ? `${t.feeTiers.length} rates` : "one rate" },
+          { l: "First tee", v: t.firstTee, s: `${t.teeInterval || 10}-minute intervals` },
+        ].map((f) => (
+          <div key={f.l} className="px-5 py-4">
+            <p className="smallcaps text-muted-foreground">{f.l}</p>
+            <p className="mt-1.5 font-serif text-[22px] leading-none text-foreground tnum">{f.v}</p>
+            <p className="mt-1 text-[11.5px] text-muted-foreground">{f.s}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* every door into the event */}
+      <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+        {!completed && (
+          <Tile
+            href={`/admin/tournaments/${t.id}/registrations`}
+            icon={<ClipboardList className="size-4" />}
+            label="Registrations"
+            sub={<EntryCount t={t} />}
+            emphasis={upcoming}
+          />
+        )}
+        <Tile
+          href={`/admin/tournaments/${t.id}/pairings`}
+          icon={<Users className="size-4" />}
+          label="Pairings & tee times"
+          sub={drawn.length ? `${drawn.length} groups drawn` : "Draw the sheet"}
+        />
+        {IS_PILOT && !completed && (
+          <Tile
+            href={`/admin/tournaments/${t.id}/desk`}
+            icon={<UserCheck className="size-4" />}
+            label="Check-in desk"
+            sub="Codes and walk-ups on the day"
+          />
+        )}
+        {live && (
+          <Tile href="/admin/scores" icon={<ClipboardList className="size-4" />} label="Scoring desk" sub="Enter scores from cards" />
+        )}
+        {live && (
+          <Tile href="/admin/tv" icon={<Tv className="size-4" />} label="Clubhouse screen" sub="Producer panel" emphasis={false} />
+        )}
+        {(live || completed) && (
+          <Tile
+            href={`/admin/tournaments/${t.id}/summary`}
+            icon={<Trophy className="size-4" />}
+            label={completed ? "Results and Committee" : "Results so far"}
+            sub={completed ? (t.result?.winner ? `Won by ${t.result.winner}` : "No cards recorded") : "Standings and the Committee room"}
+          />
+        )}
+        <Tile
+          href={`/admin/tournaments/${t.id}/poster`}
+          icon={<ImageIcon className="size-4" />}
+          label={completed ? "Results poster" : "Poster"}
+          sub="Fixture and results artwork"
+        />
+      </div>
+
+      {/* the rest, plainly */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 bg-secondary/30 px-5 py-3">
+        {upcoming && (
+          <Button variant="ghost" size="sm" onClick={() => handlers.onEdit(t)}>
+            <Pencil className="size-3.5" />
+            Edit details
+          </Button>
+        )}
+        {upcoming && (
+          <Button variant="ghost" size="sm" onClick={() => handlers.onCopyRegistration(t)}>
+            <LinkIcon className="size-3.5" />
+            Copy registration link
+          </Button>
+        )}
+        {!completed && (
+          <Button variant="ghost" size="sm" onClick={() => handlers.onPrintScorecards(t)}>
+            <Printer className="size-3.5" />
+            Print scorecards
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" onClick={() => handlers.onDuplicate(t)}>
+          <Copy className="size-3.5" />
+          Duplicate
+        </Button>
+        {live && IS_PILOT && isCreated && canReopen && (
+          <Button variant="ghost" size="sm" onClick={() => reopenTournamentDay(t.id)}>
+            <RotateCcw className="size-3.5" />
+            Undo start
+          </Button>
+        )}
+        {live && IS_PILOT && isCreated && (
+          <Button variant="ghost" size="sm" onClick={() => handlers.onEnd(t)}>
+            <Flag className="size-3.5" />
+            End tournament
+          </Button>
+        )}
+        {!live && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto text-red-flag hover:text-red-flag"
+            onClick={() => handlers.onDelete(t)}
+          >
+            <Trash2 className="size-3.5" />
+            {isCreated ? "Delete" : "Remove from list"}
+          </Button>
         )}
       </div>
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+
+type Filter = "all" | "live" | "upcoming" | "completed";
 
 export default function AdminTournamentsPage() {
   const router = useRouter();
@@ -353,6 +396,27 @@ export default function AdminTournamentsPage() {
     .sort((a, b) => a.date.localeCompare(b.date));
   const completed = all.filter((t) => t.status === "completed");
   const createdIds = new Set(created.map((t) => t.id));
+
+  const [filter, setFilter] = useState<Filter>("all");
+  const ordered =
+    filter === "all"
+      ? [...live, ...upcoming, ...completed]
+      : filter === "live"
+        ? live
+        : filter === "upcoming"
+          ? upcoming
+          : completed;
+
+  // the one the desk is reading: the day on the course first, else the next
+  // event, else whatever is first in the list
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected =
+    ordered.find((t) => t.id === selectedId) ??
+    all.find((t) => t.id === selectedId) ??
+    live[0] ??
+    upcoming[0] ??
+    all[0] ??
+    null;
 
   const [toDelete, setToDelete] = useState<Tournament | null>(null);
   const [toEnd, setToEnd] = useState<Tournament | null>(null);
@@ -436,6 +500,16 @@ export default function AdminTournamentsPage() {
       ? all.find((t) => t.id === justCreatedId && t.status === "upcoming")
       : null;
 
+  const handlers: Handlers = {
+    onEdit,
+    onDelete: setToDelete,
+    onEnd: setToEnd,
+    onCopyRegistration: copyRegistration,
+    onDuplicate,
+    onPrintScorecards,
+    onStart: (t) => setToStart(t),
+  };
+
   return (
     <div>
       <Dialog open={Boolean(toStart)} onOpenChange={(o) => !o && setToStart(null)}>
@@ -460,37 +534,7 @@ export default function AdminTournamentsPage() {
           </div>
         </DialogContent>
       </Dialog>
-      {justCreated && (
-        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-clay/30 bg-clay-wash/40 p-4 sm:flex-row sm:items-center">
-          <div className="flex-1">
-            <p className="text-[14px] font-medium text-foreground">
-              &ldquo;{justCreated.name}&rdquo; is published and open for
-              registration.
-            </p>
-            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-              <PublishStatus id={justCreated.id} /> Members can enter from their
-              phones now. When play begins, start the day to open live scoring
-              and put it on every golfer&apos;s screen.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              variant="clay"
-              size="sm"
-              onClick={() => setToStart(justCreated)}
-            >
-              Start tournament day
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setJustCreatedId(null)}
-            >
-              Later
-            </Button>
-          </div>
-        </div>
-      )}
+
       <PageHeader
         eyebrow="Tournaments"
         title="The season, in one place"
@@ -513,43 +557,119 @@ export default function AdminTournamentsPage() {
         }
       />
 
-      {[
-        { label: "Live now", items: live },
-        { label: "Upcoming", items: upcoming },
-        { label: "Completed", items: completed },
-      ].map(
-        (section) =>
-          section.items.length > 0 && (
-            <section key={section.label} className="mt-8">
-              <p className="smallcaps mb-3 text-muted-foreground">{section.label}</p>
-              <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-card shadow-card">
-                {section.items.map((t) => (
-                  <TournamentRow onStart={(x) => setToStart(x)}
-                    key={t.id}
-                    t={t}
-                    isNew={createdIds.has(t.id) && !IS_PILOT}
-                    isCreated={createdIds.has(t.id)}
-                    onEdit={onEdit}
-                    onCopyRegistration={copyRegistration}
-                    onDelete={setToDelete}
-                    onEnd={setToEnd}
-                    onDuplicate={onDuplicate}
-                    onPrintScorecards={onPrintScorecards}
-                  />
-                ))}
-              </div>
-            </section>
-          ),
+      {justCreated && (
+        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-clay/30 bg-clay-wash/40 p-4 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <p className="text-[14px] font-medium text-foreground">
+              &ldquo;{justCreated.name}&rdquo; is published and open for registration.
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+              <PublishStatus id={justCreated.id} /> Members can enter from their phones now.
+              When play begins, start the day to open live scoring and put it on every
+              golfer&apos;s screen.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="clay" size="sm" onClick={() => setToStart(justCreated)}>
+              Start tournament day
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setJustCreatedId(null)}>
+              Later
+            </Button>
+          </div>
+        </div>
       )}
+
+      <div className="mt-6">
+        <MasterDetail
+          list={
+            <div>
+              <Segmented<Filter>
+                aria-label="Which tournaments"
+                size="sm"
+                value={filter}
+                onChange={setFilter}
+                items={[
+                  { value: "all", label: "All" },
+                  { value: "live", label: "Live", count: live.length, attention: live.length > 0 },
+                  { value: "upcoming", label: "Upcoming", count: upcoming.length },
+                  { value: "completed", label: "Completed", count: completed.length },
+                ]}
+              />
+              <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-card">
+                {ordered.length === 0 && (
+                  <p className="px-5 py-6 text-center text-[13px] text-muted-foreground">
+                    Nothing here yet.
+                  </p>
+                )}
+                {ordered.map((t) => {
+                  const isSel = selected?.id === t.id;
+                  return (
+                    <ListRow key={t.id} selected={isSel} onSelect={() => setSelectedId(t.id)}>
+                      <DateBlock date={t.date} inverse={isSel} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-[14px] font-medium">{t.name}</span>
+                          {t.status === "live" && (
+                            <span className="size-1.5 shrink-0 rounded-full bg-clay animate-live-pulse" />
+                          )}
+                        </span>
+                        <span
+                          className={cn(
+                            "mt-0.5 block truncate text-[11.5px]",
+                            isSel ? "text-primary-foreground/60" : "text-muted-foreground",
+                          )}
+                        >
+                          {t.format} · <EntryCount t={t} />
+                        </span>
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 text-[11px]",
+                          isSel ? "text-primary-foreground/60" : "text-muted-foreground",
+                        )}
+                      >
+                        {t.status === "completed" ? "Done" : t.status === "live" ? "Live" : formatDate(t.date).split(" ").slice(0, 2).join(" ")}
+                      </span>
+                    </ListRow>
+                  );
+                })}
+              </div>
+            </div>
+          }
+          detail={
+            selected ? (
+              <TournamentDetail
+                key={selected.id}
+                t={selected}
+                isCreated={createdIds.has(selected.id)}
+                handlers={handlers}
+              />
+            ) : (
+              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 px-8 text-center">
+                <Radio className="size-5 text-stone" />
+                <p className="mt-3 font-serif text-[19px] text-foreground">No tournaments yet</p>
+                <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted-foreground">
+                  Create one and it opens here, with everything the day needs a click away.
+                </p>
+                <Button variant="clay" size="sm" className="mt-5" asChild>
+                  <Link href="/admin/tournaments/new">
+                    <Plus className="size-3.5" />
+                    Create tournament
+                  </Link>
+                </Button>
+              </div>
+            )
+          }
+        />
+      </div>
 
       {/* Delete confirmation */}
       <Dialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {deleteIsRemoval
-                ? "Remove this from your list?"
-                : "Delete this tournament?"}
+              {deleteIsRemoval ? "Remove this from your list?" : "Delete this tournament?"}
             </DialogTitle>
             <DialogDescription className="leading-relaxed">
               <span className="font-medium text-foreground">{toDelete?.name}</span>{" "}
@@ -582,20 +702,15 @@ export default function AdminTournamentsPage() {
       </Dialog>
 
       {/* The registration link, and what it means to hand it out. */}
-      <Dialog
-        open={!!registrationFor}
-        onOpenChange={(o) => !o && setRegistrationFor(null)}
-      >
+      <Dialog open={!!registrationFor} onOpenChange={(o) => !o && setRegistrationFor(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Registration link copied</DialogTitle>
             <DialogDescription className="leading-relaxed">
               Anyone with this link can put themselves on the sheet for{" "}
-              <span className="font-medium text-foreground">
-                {registrationFor?.name}
-              </span>
-              . They register as a guest, not as a member, and they never reach
-              the club roster. Send it to the field, not to the public.
+              <span className="font-medium text-foreground">{registrationFor?.name}</span>. They
+              register as a guest, not as a member, and they never reach the club roster. Send
+              it to the field, not to the public.
             </DialogDescription>
           </DialogHeader>
           {/* Printed at A4 and propped on the registration desk is how a
@@ -623,9 +738,9 @@ export default function AdminTournamentsPage() {
           <DialogHeader>
             <DialogTitle>End {toEnd?.name}?</DialogTitle>
             <DialogDescription className="leading-relaxed">
-              This freezes the final standings and closes live scoring. You&apos;ll
-              go straight to the prizegiving summary. Cards already certified stay
-              locked; the board stays viewable.
+              This freezes the final standings and closes live scoring. You&apos;ll go straight
+              to the prizegiving summary. Cards already certified stay locked; the board stays
+              viewable.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

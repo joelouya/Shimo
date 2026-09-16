@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/admin/page-header";
 import {
   memo,
   useCallback,
@@ -528,21 +529,13 @@ export default function BulkScoresPage() {
 
   return (
     <div>
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <p className="smallcaps text-muted-foreground">Enter scores from cards</p>
-            <LiveBadge />
-          </div>
-          <h1 className="mt-2 font-serif text-[clamp(30px,3.6vw,40px)] font-medium leading-[1.03] tracking-[-0.012em] text-foreground">
-            {tournament.name}
-          </h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {tournament.format} · {tournament.handicapAllowance}% allowance ·
-            scores feed the live leaderboard instantly
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <PageHeader
+        live
+        eyebrow="Enter scores from cards"
+        title={tournament.name}
+        meta={`${tournament.format} · ${tournament.handicapAllowance}% allowance · scores feed the live leaderboard instantly`}
+        actions={
+        <div className="flex flex-wrap items-center gap-3">
           {!online && (
             <span className="flex items-center gap-1.5 rounded-full bg-amber-wash px-3 py-1.5 text-[12px] font-medium text-amber-flag">
               <CloudOff className="size-3.5" />
@@ -574,7 +567,8 @@ export default function BulkScoresPage() {
             </Button>
           )}
         </div>
-      </header>
+        }
+      />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[12.5px] text-muted-foreground">

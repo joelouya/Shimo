@@ -23,8 +23,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CertificationPanel } from "@/components/admin/certification-panel";
+import { ListRow, MasterDetail } from "@/components/admin/master-detail";
+import { PageHeader } from "@/components/admin/page-header";
+import { Segmented } from "@/components/admin/segmented";
 import { PlayerAvatar } from "@/components/player/identity";
 import { LiveBadge } from "@/components/live-dot";
 import { DEMO_USER_ID, playerById } from "@/lib/data";
@@ -318,6 +320,81 @@ function GroupCard({
   );
 }
 
+/** One line per group in the list: where it is, who is in it, what it needs. */
+function GroupRow({
+  g,
+  byId,
+  pace,
+  selected,
+  onSelect,
+}: {
+  g: SavedGroup;
+  byId: Map<string, Player>;
+  pace?: PaceReading;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const scores = useRoundScores();
+  const certs = useRoundCerts();
+  const allFlags = useSim((s) => s.flags);
+  const flags = allFlags.filter(
+    (f) => f.groupId === g.id && f.status === "open" && (!IS_PILOT || f.kind !== "red"),
+  );
+  const thru = g.playerIds.length
+    ? Math.min(...g.playerIds.map((pid) => (scores[pid] ?? []).filter((x) => x != null).length))
+    : 0;
+  const finished = thru >= 18;
+  const groupCerts = g.playerIds.map((pid) => certs[pid]);
+  const state = groupState({
+    thru,
+    allCertified: g.playerIds.length > 0 && groupCerts.every((c) => c?.stage === "certified"),
+    anyDisputed: groupCerts.some((c) => c?.stage === "disputed" || c?.stage === "committee-review"),
+    hasAmberFlag: flags.some((f) => f.kind === "amber"),
+    hasRedFlag: flags.some((f) => f.kind === "red"),
+  });
+  const names = g.playerIds
+    .map((pid) => byId.get(pid)?.name.split(" ").pop() ?? "")
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <ListRow selected={selected} onSelect={onSelect}>
+      <span
+        className={cn(
+          "flex w-11 shrink-0 flex-col items-center rounded-lg py-1.5 font-serif leading-none tnum",
+          selected ? "bg-cream/10" : state.phase === "certified" ? "bg-secondary/60" : "bg-secondary",
+        )}
+      >
+        <span className="text-[16px]">{state.phase === "certified" ? "✓" : finished ? "F" : `H${thru + 1}`}</span>
+        <span className={cn("mt-0.5 text-[9px] uppercase tracking-wider", selected ? "text-cream/60" : "text-muted-foreground")}>
+          Gr {g.number}
+        </span>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium">{names || "Empty group"}</span>
+        <span className={cn("block truncate text-[11px]", selected ? "text-primary-foreground/60" : "text-muted-foreground")}>
+          {state.attention === "dispute"
+            ? "Disputed, for the Committee"
+            : state.attention === "review"
+              ? "Marker discrepancy"
+              : pace?.outOfPosition
+                ? `${pace.behind} min behind`
+                : state.phase === "certified"
+                  ? "Certified and sealed"
+                  : finished
+                    ? "Card in"
+                    : `Teed off ${g.teeTime}`}
+        </span>
+      </span>
+      {state.attention !== "none" && (
+        <Flag
+          className={cn("size-3 shrink-0", state.attention === "dispute" ? "text-red-flag" : "text-amber-flag")}
+          fill="currentColor"
+        />
+      )}
+    </ListRow>
+  );
+}
+
 function LeaderboardPanel({ isStableford }: { isStableford: boolean }) {
   const rows = useStandings(isStableford ? "points" : "net").slice(0, 10);
   return (
@@ -481,94 +558,78 @@ export default function LiveOpsPage() {
       (pid) => (scores[pid] ?? []).filter((x) => x != null).length < 18,
     ),
   ).length;
+  // the group being watched: the chosen one, else one asking for a human,
+  // else the first still out. Cheap enough to derive on every render.
+  const watchGroups = active?.groups ?? [];
+  const watching =
+    watchGroups.find((g) => g.id === selectedGroup) ??
+    watchGroups.find((g) => openFlags.some((f) => f.groupId === g.id)) ??
+    watchGroups.find((g) =>
+      g.playerIds.some((pid) => (scores[pid] ?? []).filter((x) => x != null).length < 18),
+    ) ??
+    watchGroups[0] ??
+    null;
 
   if (!active) {
     return (
       <div>
-        <p className="smallcaps text-muted-foreground">Live Ops</p>
-        <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
-          Nothing on the course today
-        </h1>
-        <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground">
-          Start a tournament day from the tournaments list and this room comes
-          alive: every group, every card, every flag.
-        </p>
-        <Button className="mt-6" asChild>
-          <Link href="/admin/tournaments">Go to tournaments</Link>
-        </Button>
+        <PageHeader
+          eyebrow="Live Ops"
+          title="Nothing on the course today"
+          meta="Start a tournament day from the tournaments list and this room comes alive: every group, every card, every flag."
+          actions={
+            <Button variant="outline" asChild>
+              <Link href="/admin/tournaments">Go to tournaments</Link>
+            </Button>
+          }
+        />
       </div>
     );
   }
 
   return (
     <div>
-      <header className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between 2xl:gap-8">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <LiveBadge />
-            <p className="smallcaps text-muted-foreground">
-              {active.roundInfo.name}
-              {rounds.length > 1 && ` of ${rounds.length}`} · first tee{" "}
-              {active.roundInfo.firstTee}
-            </p>
-          </div>
-          <h1 className="mt-2 font-serif text-[clamp(34px,4.4vw,46px)] font-medium leading-[1.02] tracking-[-0.016em] text-foreground">
-            {active.tournament.name}
-          </h1>
-        </div>
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-3 2xl:justify-end 2xl:pb-1">
-          {/* the day's three figures as one ruled line, like the dashboard */}
-          <div className="flex divide-x divide-border/70 rounded-xl bg-card shadow-card">
-            {[
-              { l: "Groups out", v: groupsOut },
-              { l: "Scores in", v: scoresIn },
-              { l: "Open flags", v: openFlags.length },
-            ].map((s) => (
-              <div key={s.l} className="px-4 py-2 text-center">
-                <p className="font-serif text-[22px] leading-none text-foreground tnum">
-                  {s.v}
-                </p>
-                <p className="smallcaps mt-1 text-[9px] text-muted-foreground">{s.l}</p>
-              </div>
-            ))}
-          </div>
-          <SharePublicBoard tournamentId={active.tournament.id} />
-          <Button variant="outline" asChild>
-            <Link href="/admin/scores">
-              <ClipboardList className="size-4" />
-              Enter scores from cards
-            </Link>
-          </Button>
-          {IS_PILOT && hasNextRound && (
-            <Button variant="outline" onClick={() => setAdvancing(true)}>
-              <ArrowRight className="size-4" />
-              Close round
+      <PageHeader
+        live
+        eyebrow={`${active.roundInfo.name}${rounds.length > 1 ? ` of ${rounds.length}` : ""} · first tee ${active.roundInfo.firstTee}`}
+        title={active.tournament.name}
+        meta={`${groupsOut} of ${active.groups.length} groups out · ${scoresIn} scores in · ${openFlags.length} open flag${openFlags.length === 1 ? "" : "s"}`}
+        actions={
+          <>
+            <SharePublicBoard tournamentId={active.tournament.id} />
+            <Button variant="outline" asChild>
+              <Link href="/admin/scores">
+                <ClipboardList className="size-4" />
+                Enter scores from cards
+              </Link>
             </Button>
-          )}
-          {IS_PILOT && (
-            <Button variant="clay" onClick={() => setEnding(true)}>
-              <Flag className="size-4" />
-              End tournament
-            </Button>
-          )}
-        </div>
-      </header>
-
-      <Tabs value={tab} onValueChange={setTab} className="mt-6">
-        <TabsList className="h-11">
-          <TabsTrigger value="course" className="px-5 text-[13px]">
-            On course
-          </TabsTrigger>
-          <TabsTrigger value="certs" className="px-5 text-[13px]">
-            Certification & disputes
-            {openItems > 0 && (
-              <span className="ml-1 rounded-full bg-amber-wash px-1.5 text-[11px] font-semibold text-amber-flag tnum">
-                {openItems}
-              </span>
+            {IS_PILOT && hasNextRound && (
+              <Button variant="outline" onClick={() => setAdvancing(true)}>
+                <ArrowRight className="size-4" />
+                Close round
+              </Button>
             )}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+            {IS_PILOT && (
+              <Button variant="clay" onClick={() => setEnding(true)}>
+                <Flag className="size-4" />
+                End tournament
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <div className="mt-6">
+        <Segmented
+          aria-label="Live Ops view"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { value: "course", label: "On course" },
+            { value: "certs", label: "Certification & disputes", count: openItems || undefined, attention: openItems > 0 },
+          ]}
+        />
+      </div>
 
       {tab === "certs" ? (
         <div className="mt-5">
@@ -586,30 +647,52 @@ export default function LiveOpsPage() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {active.groups.map((g) => (
-            <GroupCard
-              key={g.id}
-              g={g}
-              byId={byId}
-              pace={paceBy.get(g.id)}
-              selected={selectedGroup === g.id}
-              onSelect={() =>
-                setSelectedGroup((prev) => (prev === g.id ? null : g.id))
-              }
-            />
-          ))}
-          {active.groups.length === 0 && (
-            <p className="col-span-3 rounded-2xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
-              No pairings saved yet. Set them in Pairings & tee times.
-            </p>
-          )}
-        </div>
-        <div>
-          <LeaderboardPanel isStableford={active.tournament.format === "Stableford"} />
-          <EventFeed byId={byId} />
-        </div>
+      <div className="mt-6">
+        <MasterDetail
+          listWidth={340}
+          list={
+            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+              {active.groups.length === 0 && (
+                <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+                  No pairings saved yet. Set them in Pairings & tee times.
+                </p>
+              )}
+              {active.groups.map((g) => (
+                <GroupRow
+                  key={g.id}
+                  g={g}
+                  byId={byId}
+                  pace={paceBy.get(g.id)}
+                  selected={watching?.id === g.id}
+                  onSelect={() => setSelectedGroup(g.id)}
+                />
+              ))}
+            </div>
+          }
+          detail={
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+              <div>
+                {watching ? (
+                  <GroupCard
+                    g={watching}
+                    byId={byId}
+                    pace={paceBy.get(watching.id)}
+                    selected={false}
+                    onSelect={() => {}}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-10 text-center text-sm text-muted-foreground">
+                    Pick a group to watch it here.
+                  </div>
+                )}
+              </div>
+              <div>
+                <LeaderboardPanel isStableford={active.tournament.format === "Stableford"} />
+                <EventFeed byId={byId} />
+              </div>
+            </div>
+          }
+        />
       </div>
         </>
       )}
