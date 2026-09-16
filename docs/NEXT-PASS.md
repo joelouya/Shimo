@@ -82,3 +82,20 @@ when it is done.
 
 - See Pass 5 of the plan (CTA architecture, copy against COMMITMENTS.md,
   images, hero performance, error pages).
+
+## Desk layout (from the top-bar pass)
+
+- The wizard, Settings, Pairings, Poster, Summary, the check-in desk and the
+  TV producer body kept their own layouts under the new band. The wizard's
+  review step still reads as a form rather than a printed fixture card.
+- Live Ops on a tablet stacks list, watched group, then the board; a sheet
+  that opens the watched group over the list would read better under 1024px.
+- The tournaments detail pane opens sub-pages in place of tabs; when the
+  registrations, tee sheet and results pages settle, they could become tabs
+  inside the pane so the desk never leaves the season view.
+- Stat-card sparklines draw from the last three hours of the score feed
+  (capped at 24 events in the store) and from certification times; a proper
+  per-hole timeline would need the score rows' own timestamps.
+- The guest-code collision check in the regression harness is probabilistic
+  (`codes do not collide across a full field`) and failed once in four runs;
+  seed it or dedupe against existing codes in the harness.

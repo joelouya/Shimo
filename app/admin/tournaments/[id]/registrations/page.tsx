@@ -11,9 +11,11 @@
  */
 
 import { PageHeader } from "@/components/admin/page-header";
+import { EntityCard } from "@/components/admin/entity-card";
+import { Segmented } from "@/components/admin/segmented";
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Clock, Plus, UserRound } from "lucide-react";
+import { Check, Clock, LayoutGrid, List, Plus, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +57,8 @@ export default function RegistrationsPage({
 
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
+  const [seg, setSeg] = useState<"field" | "waitlist" | "withdrawn">("field");
+  const [view, setView] = useState<"grid" | "list">("grid");
 
   const byId = useMemo(
     () => new Map([...roster, ...guests].map((p) => [p.id, p] as const)),
@@ -229,8 +233,107 @@ export default function RegistrationsPage({
 
       {/* the field */}
       <section className="mt-8">
-        <p className="smallcaps mb-3 text-muted-foreground">In the field ({registered.length})</p>
-        {registered.length === 0 ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <Segmented
+            aria-label="Which entries"
+            size="sm"
+            value={seg}
+            onChange={setSeg}
+            items={[
+              { value: "field", label: "In the field", count: registered.length },
+              { value: "waitlist", label: "Waitlist", count: waitlisted.length, attention: waitlisted.length > 0 },
+              { value: "withdrawn", label: "Withdrawn", count: withdrawn.length },
+            ]}
+          />
+          <Segmented
+            aria-label="Entries view"
+            size="sm"
+            value={view}
+            onChange={setView}
+            items={[
+              { value: "grid", label: <LayoutGrid className="size-3.5" /> },
+              { value: "list", label: <List className="size-3.5" /> },
+            ]}
+          />
+        </div>
+        {(() => {
+          const shown = seg === "field" ? registered : seg === "waitlist" ? waitlisted : withdrawn;
+          if (shown.length === 0 && seg !== "field") {
+            return (
+              <p className="rounded-2xl border border-dashed border-border px-6 py-8 text-center text-[13px] text-muted-foreground">
+                {seg === "waitlist" ? "Nobody is waiting." : "Nobody has withdrawn."}
+              </p>
+            );
+          }
+          if (shown.length > 0 && view === "grid") {
+            return (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {shown.map(({ e, player }) => {
+                  const checked = Boolean(checkIns[player.id]);
+                  return (
+                    <EntityCard
+                      key={player.id}
+                      player={player}
+                      sub={e.kind === "guest" ? "Guest" : "Member"}
+                      status={
+                        checked ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-clay-wash px-2.5 py-0.5 text-[11px] font-medium text-clay-deep">
+                            <Check className="size-3" /> Checked in
+                          </span>
+                        ) : e.status === "waitlisted" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-wash px-2.5 py-0.5 text-[11px] font-medium text-amber-flag">
+                            <Clock className="size-3" /> Waiting
+                          </span>
+                        ) : e.status === "withdrawn" ? (
+                          <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">Withdrawn</span>
+                        ) : (
+                          <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-ink-soft">Registered</span>
+                        )
+                      }
+                      facts={[
+                        { icon: <UserRound className="size-3.5" />, text: e.via === "desk" ? "Added at the desk" : "From their phone" },
+                        { icon: <Clock className="size-3.5" />, text: when(e.registeredAt) || "·" },
+                      ]}
+                      pairs={[
+                        { k: "Handicap", v: player.handicap ?? "·" },
+                        { k: e.kind === "guest" ? "Company" : "Member no.", v: e.kind === "guest" ? (player.guest?.company ?? "·") : (player.memberNo ?? "·") },
+                      ]}
+                      footer={
+                        <>
+                          {e.status === "waitlisted" && (
+                            <Button size="sm" variant="clay" onClick={() => promoteEntry(t.id, player.id)}>
+                              Admit
+                            </Button>
+                          )}
+                          {e.status !== "withdrawn" ? (
+                            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => withdrawEntry(t.id, player.id)}>
+                              Withdraw
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => registerPlayer(t.id, player.id, { via: "desk", force: true })}>
+                              Reinstate
+                            </Button>
+                          )}
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </div>
+            );
+          }
+          if (shown.length > 0) {
+            return (
+              <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-card shadow-card">
+                {shown.map((r) => (
+                  <Row key={r.player.id} e={r.e} player={r.player} />
+                ))}
+              </div>
+            );
+          }
+          return null;
+        })()}
+        {registered.length === 0 && seg === "field" ? (
           <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-card/50 px-8 py-12 text-center">
             <span className="flex size-11 items-center justify-center rounded-full bg-secondary text-stone">
               <UserRound className="size-5" strokeWidth={1.75} />
@@ -241,39 +344,8 @@ export default function RegistrationsPage({
               registration link. Anyone who rings the desk can be added above.
             </p>
           </div>
-        ) : (
-          <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-card shadow-card">
-            {registered.map((r) => (
-              <Row key={r.player.id} e={r.e} player={r.player} />
-            ))}
-          </div>
-        )}
+        ) : null}
       </section>
-
-      {waitlisted.length > 0 && (
-        <section className="mt-8">
-          <p className="smallcaps mb-3 flex items-center gap-1.5 text-muted-foreground">
-            <Clock className="size-3" />
-            Waitlist ({waitlisted.length})
-          </p>
-          <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-card shadow-card">
-            {waitlisted.map((r) => (
-              <Row key={r.player.id} e={r.e} player={r.player} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {withdrawn.length > 0 && (
-        <section className="mt-8">
-          <p className="smallcaps mb-3 text-muted-foreground">Withdrawn ({withdrawn.length})</p>
-          <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-card opacity-70 shadow-card">
-            {withdrawn.map((r) => (
-              <Row key={r.player.id} e={r.e} player={r.player} />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

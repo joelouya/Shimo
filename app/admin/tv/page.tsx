@@ -19,6 +19,7 @@
  * believes rather than as a live readout of the screen.
  */
 
+import { PageHeader } from "@/components/admin/page-header";
 import { REMOTE_CONFIGURED } from "@/lib/sync/client";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
@@ -171,18 +172,20 @@ export default function ProducerPanel() {
     <div>
       <Back />
 
-      <header className="mt-6 flex items-start justify-between">
-        <div>
-          <p className="smallcaps text-muted-foreground">TV producer</p>
-          <h1 className="mt-2 font-serif text-[clamp(30px,3.4vw,40px)] font-medium tracking-[-0.012em] text-foreground">{live.name}</h1>
-        </div>
-        <Button variant="outline" asChild>
-          <Link href={`/tournament/${live.id}/tv`} target="_blank">
-            <ExternalLink className="size-4" />
-            Open the screen
-          </Link>
-        </Button>
-      </header>
+      <PageHeader
+        live
+        eyebrow="TV producer"
+        title={live.name}
+        meta="The clubhouse screen, steered from here: coverage, what is queued, what has aired"
+        actions={
+          <Button variant="outline" asChild>
+            <Link href={`/tournament/${live.id}/tv`} target="_blank">
+              <ExternalLink className="size-4" />
+              Open the screen
+            </Link>
+          </Button>
+        }
+      />
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
         {/* the operator console */}

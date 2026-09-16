@@ -1,13 +1,19 @@
 "use client";
 
 import { PageHeader } from "@/components/admin/page-header";
+import { EntityCard } from "@/components/admin/entity-card";
+import { Segmented } from "@/components/admin/segmented";
 import { useMemo, useState } from "react";
 import {
   Check,
   Copy,
+  LayoutGrid,
   Link2,
+  List,
+  Mail,
   MoreHorizontal,
   Pencil,
+  Phone,
   Plus,
   Search,
   Send,
@@ -218,6 +224,20 @@ export default function MembersPage() {
   const [toLink, setToLink] = useState<Player | null>(null);
   const [linkEmail, setLinkEmail] = useState("");
   const [invited, setInvited] = useState<number | null>(null);
+  // faces or rows: the desk's choice, remembered on this device
+  const [view, setView] = useState<"grid" | "list">(() => {
+    try {
+      return localStorage.getItem("shimo-members-view") === "list" ? "list" : "grid";
+    } catch {
+      return "grid";
+    }
+  });
+  const chooseView = (v: "grid" | "list") => {
+    setView(v);
+    try {
+      localStorage.setItem("shimo-members-view", v);
+    } catch {}
+  };
 
   const filtered = useMemo(
     () =>
@@ -287,16 +307,85 @@ export default function MembersPage() {
         }
       />
 
-      <div className="relative mt-7 max-w-sm">
-        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search members…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="pl-10"
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search members…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Segmented
+          aria-label="Members view"
+          size="sm"
+          value={view}
+          onChange={chooseView}
+          items={[
+            { value: "grid", label: <LayoutGrid className="size-3.5" /> },
+            { value: "list", label: <List className="size-3.5" /> },
+          ]}
         />
       </div>
 
+      {view === "grid" && (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {filtered.map((m) => (
+            <EntityCard
+              key={m.id}
+              player={m}
+              name={
+                <>
+                  {m.name}
+                  {m.id === DEMO_USER_ID && (
+                    <span className="ml-1.5 rounded bg-clay-wash px-1 py-px align-middle text-[9px] text-clay-deep">
+                      demo user
+                    </span>
+                  )}
+                </>
+              }
+              sub={`Member · ${m.gender === "F" ? "Ladies" : "Men’s"} section`}
+              status={IS_PILOT ? <AccessBadge state={accessOf(m)} /> : <Badge variant="secondary">HC {m.handicap}</Badge>}
+              facts={[
+                { icon: <Mail className="size-3.5" />, text: m.email || "No email on file" },
+                { icon: <Phone className="size-3.5" />, text: m.phone || "No phone on file" },
+              ]}
+              pairs={
+                IS_PILOT
+                  ? [
+                      { k: "Handicap index", v: m.handicap },
+                      { k: "Member no.", v: m.memberNo ?? "·" },
+                    ]
+                  : [
+                      { k: "Handicap index", v: m.handicap },
+                      { k: "Rounds ’26", v: roundsFor(m) },
+                    ]
+              }
+              menu={
+                IS_PILOT ? (
+                  <MemberMenu m={m} onCopied={setCopied} onLink={setToLink} onEdit={openEdit} />
+                ) : (
+                  <button
+                    onClick={() => openEdit(m)}
+                    aria-label={`Edit ${m.name}`}
+                    className="focus-ring rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                )
+              }
+            />
+          ))}
+          {filtered.length === 0 && (
+            <p className="col-span-full rounded-2xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+              Nobody matches.
+            </p>
+          )}
+        </div>
+      )}
+
+      {view === "list" && (
       <div className="mt-4 overflow-x-auto rounded-2xl bg-card shadow-card">
         <div className="grid min-w-[720px] grid-cols-[2fr_5rem_1.6fr_6rem_6rem_3rem] items-center gap-3 border-b border-border bg-secondary/40 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           <span>Member</span>
@@ -353,6 +442,7 @@ export default function MembersPage() {
             ) : (
               <button
                 onClick={() => openEdit(m)}
+                aria-label={`Edit ${m.name}`}
                 className="justify-self-end rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
               >
                 <Pencil className="size-3.5" />
@@ -361,6 +451,7 @@ export default function MembersPage() {
           </div>
         ))}
       </div>
+      )}
 
       <Dialog
         open={dialogOpen}
