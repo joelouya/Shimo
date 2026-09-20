@@ -108,20 +108,21 @@ export function Stakes() {
         </Reveal>
 
         <Reveal delay={0.08} className="relative">
-          <div className="overflow-hidden rounded-3xl shadow-lift ring-1 ring-black/5">
+          {/* A taller crop than the photograph, so both faces sit in its
+              upper half and the corner the card covers is table, not people. */}
+          <div className="relative aspect-[5/4] overflow-hidden rounded-3xl shadow-lift ring-1 ring-black/5">
             <Image
               src="/photos/comparing-scorecards.png"
-              width={1586}
-              height={992}
+              fill
               quality={90}
               sizes="(min-width: 1024px) 560px, 100vw"
               alt="Two golfers on a clubhouse terrace, comparing their paper scorecards after the round."
-              className="block h-auto w-full"
+              className="object-cover object-[62%_30%]"
             />
           </div>
-          {/* the card sits over the photograph's corner, the way it sits on
-              the table in it */}
-          <div className="pointer-events-none absolute -bottom-8 -left-2 w-[62%] max-w-[300px] sm:-left-6 lg:-left-10">
+          {/* the card sits over the photograph's bottom corner, the way it
+              sits on the table in it, and never over a face */}
+          <div className="pointer-events-none absolute -bottom-10 -left-3 w-[46%] max-w-[270px] sm:-left-6 lg:-left-8">
             <PaperCard />
           </div>
         </Reveal>
