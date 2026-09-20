@@ -5,10 +5,13 @@
  *
  * Before any mechanism, name the pain plainly so a stranger has a reason to
  * care. This is the one place the page is allowed to feel like golf rather than
- * software, and it does it on-brand: no stock photography, just an editorial
- * paper-scorecard motif built from type and texture, carrying a query that
- * never got resolved cleanly. No CTA. Its only job is "yes, that is my problem."
+ * software: two players checking paper cards on the clubhouse terrace, with
+ * the editorial scorecard motif laid over the corner of the photograph,
+ * carrying a query that never got resolved cleanly. No CTA. Its only job is
+ * "yes, that is my problem."
  */
+
+import Image from "next/image";
 
 import { Reveal } from "@/components/landing/reveal";
 
@@ -28,7 +31,7 @@ function PaperCard() {
   return (
     <div className="relative mx-auto w-full max-w-[380px]">
       {/* the paper */}
-      <div className="relative rotate-[-3deg] rounded-[6px] bg-[#fffdf8] p-6 shadow-lift ring-1 ring-black/5">
+      <div className="relative rotate-[-3deg] rounded-[6px] bg-[#fffdf8] p-5 shadow-lift ring-1 ring-black/5 sm:p-6">
         {/* coffee ring */}
         <div
           aria-hidden="true"
@@ -84,7 +87,7 @@ function PaperCard() {
 export function Stakes() {
   return (
     <section className="relative border-t border-border bg-background">
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 py-24 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20 lg:py-32">
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-16 px-6 py-24 pb-32 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20 lg:py-32 lg:pb-36">
         <Reveal>
           <p className="smallcaps flex items-center gap-3 text-muted-foreground">
             <span className="h-px w-8 bg-clay/60" />
@@ -104,8 +107,23 @@ export function Stakes() {
           </p>
         </Reveal>
 
-        <Reveal delay={0.08} className="flex justify-center lg:justify-end">
-          <PaperCard />
+        <Reveal delay={0.08} className="relative">
+          <div className="overflow-hidden rounded-3xl shadow-lift ring-1 ring-black/5">
+            <Image
+              src="/photos/comparing-scorecards.png"
+              width={1586}
+              height={992}
+              quality={90}
+              sizes="(min-width: 1024px) 560px, 100vw"
+              alt="Two golfers on a clubhouse terrace, comparing their paper scorecards after the round."
+              className="block h-auto w-full"
+            />
+          </div>
+          {/* the card sits over the photograph's corner, the way it sits on
+              the table in it */}
+          <div className="pointer-events-none absolute -bottom-8 -left-2 w-[62%] max-w-[300px] sm:-left-6 lg:-left-10">
+            <PaperCard />
+          </div>
         </Reveal>
       </div>
     </section>

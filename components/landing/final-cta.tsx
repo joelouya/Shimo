@@ -12,6 +12,7 @@
  * bookends the navy overture at the top of the page.
  */
 
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Mail } from "lucide-react";
 
@@ -25,14 +26,28 @@ export function FinalCta() {
       id="get-started"
       className="relative scroll-mt-24 overflow-hidden bg-primary text-primary-foreground"
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,0.06), transparent 55%)",
-        }}
-      />
+      {/* The room the closing line promises: the clubhouse after the round,
+          the board on the wall, everyone still there. Navy over it so the
+          type stays legible and the photograph reads as the ground, not the
+          subject. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <Image
+          src="/photos/clubhouse-post-round.png"
+          fill
+          quality={90}
+          sizes="100vw"
+          alt=""
+          className="object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-primary/78" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 90% at 50% 0%, rgba(26,35,50,0.35), rgba(26,35,50,0.75) 70%)",
+          }}
+        />
+      </div>
       <div className="relative mx-auto w-full max-w-3xl px-6 py-28 text-center lg:py-36">
         <Reveal>
           <p className="smallcaps text-clay-lift">Free during the pilot</p>
