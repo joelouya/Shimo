@@ -33,11 +33,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { BoardArt, PhoneArt, SealedCardArt, TeeSheetArt } from "@/components/landing/step-art";
+
 type Step = {
   index: string;
   title: string;
   body: string;
   icon: LucideIcon;
+  /** the fragment of the product this step is about, drawn on the card */
+  art: React.ComponentType<{ className?: string }>;
   /** The one step that carries the seal. */
   sealed?: boolean;
 };
@@ -48,18 +52,21 @@ const STEPS: Step[] = [
     title: "Set the day",
     body: "Create the tournament in a few minutes at the desk. Format, field, pairings and the tee sheet, without the morning of spreadsheets.",
     icon: CalendarPlus,
+    art: TeeSheetArt,
   },
   {
     index: "02",
     title: "Score on the course",
     body: "Golfers enter their scores hole by hole from their phone, and playing partners attest as they go. No paper cards to chase down.",
     icon: Smartphone,
+    art: PhoneArt,
   },
   {
     index: "03",
     title: "Every card, certified",
     body: "Dual entry, a marker's attestation, the player's certification and a tamper-evident seal on every figure. Results kept to the Rules of Golf.",
     icon: BadgeCheck,
+    art: SealedCardArt,
     sealed: true,
   },
   {
@@ -67,6 +74,7 @@ const STEPS: Step[] = [
     title: "Live, and kept",
     body: "A leaderboard and a clubhouse screen worth watching while it runs. When the day ends, the whole tournament is kept like a document.",
     icon: MonitorPlay,
+    art: BoardArt,
   },
 ];
 
@@ -191,6 +199,7 @@ export function HowItWorks() {
           >
             {STEPS.map((step, i) => {
               const Icon = step.icon;
+              const Art = step.art;
               return (
                 <button
                   key={step.index}
@@ -204,13 +213,11 @@ export function HowItWorks() {
                   className="absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[28px] border border-black/5 bg-card p-8 text-left shadow-lift"
                   style={cardStyle(i)}
                 >
-                  {/* Oversized glyph, faint, so the card reads as a plate rather
-                      than a mostly-empty box. */}
-                  <Icon
-                    aria-hidden="true"
-                    strokeWidth={1}
-                    className="pointer-events-none absolute -right-6 bottom-2 size-44 text-foreground/[0.04]"
-                  />
+                  {/* The step, drawn: a fragment of the product it describes,
+                      sitting in the card's middle band between the numeral
+                      and the title, so the card reads as a plate with
+                      something on it. */}
+                  <Art className="pointer-events-none absolute right-6 top-[74px] h-auto w-[62%] max-w-[210px] drop-shadow-[0_6px_16px_rgba(26,35,50,0.10)] sm:top-[82px]" />
                   <div className="relative flex items-start justify-between">
                     <span
                       className={`font-serif text-[40px] leading-none tnum ${

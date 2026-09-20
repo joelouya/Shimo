@@ -10,6 +10,7 @@
  * genuine product entry points, as quiet links rather than another CTA.
  */
 
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
 
@@ -74,7 +75,18 @@ export function Audiences() {
         <div className="mt-12 grid gap-6 lg:grid-cols-2">
           {/* For the golfer */}
           <Reveal className="h-full">
-            <div className="flex h-full flex-col rounded-3xl border border-border bg-card p-8 shadow-card lg:p-10">
+            <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-card">
+              <div className="relative aspect-[4/3]">
+                <Image
+                  src="/photos/scoring-on-course.png"
+                  fill
+                  quality={90}
+                  sizes="(min-width: 1024px) 560px, 100vw"
+                  alt="A golfer walking the fairway, entering a score on his phone."
+                  className="object-cover object-[50%_40%]"
+                />
+              </div>
+              <div className="flex flex-1 flex-col p-8 lg:p-10">
               <p className="smallcaps text-clay">For the golfer</p>
               <p className="mt-3 font-serif text-[clamp(22px,3vw,28px)] font-medium leading-tight text-foreground">
                 On your phone, on the course.
@@ -90,12 +102,24 @@ export function Audiences() {
                 Open the golfer&apos;s app
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
+              </div>
             </div>
           </Reveal>
 
           {/* For the club */}
           <Reveal delay={0.08} className="h-full">
-            <div className="flex h-full flex-col rounded-3xl bg-primary p-8 text-primary-foreground shadow-lift lg:p-10">
+            <div className="flex h-full flex-col overflow-hidden rounded-3xl bg-primary text-primary-foreground shadow-lift">
+              <div className="relative aspect-[4/3]">
+                <Image
+                  src="/photos/tournament-desk.png"
+                  fill
+                  quality={90}
+                  sizes="(min-width: 1024px) 560px, 100vw"
+                  alt="The tournament desk at dawn: a caddymaster checking cards as the first groups walk to the tee."
+                  className="object-cover object-[50%_45%]"
+                />
+              </div>
+              <div className="flex flex-1 flex-col p-8 lg:p-10">
               <p className="smallcaps text-clay-lift">For the club</p>
               <p className="mt-3 font-serif text-[clamp(22px,3vw,28px)] font-medium leading-tight text-cream">
                 At the desk, in control of the day.
@@ -111,6 +135,7 @@ export function Audiences() {
                 Open the club console
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
+              </div>
             </div>
           </Reveal>
         </div>
