@@ -146,8 +146,13 @@ export function Proof() {
             Why it holds up
           </p>
           <h2 className="mt-5 max-w-2xl font-serif text-[clamp(32px,5vw,54px)] font-medium leading-[1.04] tracking-[-0.02em] text-foreground text-balance">
-            Built in Kenya, for the way a tournament day actually runs.
+            Three things a club can rely on.
           </h2>
+          <p className="mt-5 max-w-lg text-[clamp(15px,1.8vw,17px)] leading-[1.65] text-ink-soft">
+            Built in Kenya, for the way a tournament day actually runs: a
+            result that stands up afterwards, scoring that works where the
+            golf is, and a club that looks the part.
+          </p>
         </Reveal>
 
         <div className="mt-6">
@@ -183,7 +188,7 @@ export function Proof() {
             <span className="hidden size-1 rounded-full bg-border sm:block" />
             <span>Rehearsed with a full field on simulated devices</span>
             <span className="hidden size-1 rounded-full bg-border sm:block" />
-            <span>Preparing for a first club pilot</span>
+            <span>Pilot programme open to Kenyan clubs</span>
           </div>
         </Reveal>
       </div>
