@@ -60,19 +60,16 @@ function List({ items, tone }: { items: string[]; tone: "ink" | "cream" }) {
 
 export function Audiences() {
   return (
-    <section className="border-t border-border bg-background">
-      <div className="mx-auto w-full max-w-6xl px-6 py-24 lg:py-32">
+    <section className="bg-background">
+      <div className="mx-auto w-full max-w-6xl px-6 pb-24 lg:pb-32">
         <Reveal>
           <p className="smallcaps flex items-center gap-3 text-muted-foreground">
             <span className="h-px w-8 bg-clay/60" />
-            Two ways in
+            Who it is for
           </p>
-          <h2 className="mt-5 max-w-2xl font-serif text-[clamp(32px,5vw,54px)] font-medium leading-[1.04] tracking-[-0.02em] text-foreground text-balance">
-            Made for both sides of the round.
-          </h2>
         </Reveal>
 
-        <div className="mt-12 grid gap-6 lg:grid-cols-2">
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
           {/* For the golfer */}
           <Reveal className="h-full">
             <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-card">
@@ -99,7 +96,7 @@ export function Audiences() {
                 href="/app"
                 className="group mt-8 inline-flex items-center gap-1.5 text-[14px] font-medium text-clay hover:text-clay-deep"
               >
-                Open the golfer&apos;s app
+                Open the golfer app
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
               </div>
@@ -132,7 +129,7 @@ export function Audiences() {
                 href="/admin"
                 className="group mt-8 inline-flex items-center gap-1.5 text-[14px] font-medium text-clay-lift hover:text-cream"
               >
-                Open the club console
+                Open the club desk
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
               </div>

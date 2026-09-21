@@ -96,3 +96,13 @@ when it is done.
 - Stat-card sparklines draw from the last three hours of the score feed
   (capped at 24 events in the store) and from certification times; a proper
   per-hole timeline would need the score rows' own timestamps.
+
+## Landing (from the rebuild)
+
+- The hero's Live Ops screenshot (`public/shots/live-ops.jpg`) shows the desk
+  before the top-bar refresh. Re-capture it from the new dashboard in demo
+  mode at 1760x1100 once the desk settles, and refresh `setup.jpg` and
+  `scoring.jpg` the same way if they return to the page.
+- The "how it works" cards could carry a fragment of the product per step
+  (tee sheet row, score cell, seal, board row) as their art; drawn versions
+  are in `components/landing/step-art.tsx` and may want polishing.

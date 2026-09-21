@@ -3,12 +3,13 @@
 /**
  * The cinematic opening.
  *
- * A pinned, scroll-driven overture that plays before the editorial hero:
- * the opening line resolves, a navy card rises and fills the frame, the golfer
- * app assembles inside a phone with the leader's figure counting up, Shimo's
- * moments float in beside what the tool spans, and the whole card lifts away to
- * reveal the hero below. It carries no call to action of its own; the page's
- * asks live in the hero, the mechanism and the close.
+ * A pinned, scroll-driven showreel that plays after the plain hero has said
+ * what Shimo is: the opening line resolves, a navy card rises and fills the
+ * frame, the golfer app assembles inside a phone with the leader's figure
+ * counting up, Shimo's moments float in beside what the tool spans, and the
+ * whole card lifts away to reveal the parts named one by one below. It
+ * carries no call to action of its own; the page's asks live in the hero and
+ * the close.
  *
  * The mechanics are borrowed from a generic product hero; everything visible is
  * rebuilt in Shimo's world. Warm paper ground, ink navy card, Fraunces for
@@ -25,7 +26,18 @@
  */
 
 import { useReducedMotion } from "framer-motion";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
+
+/*
+ * The pinned timeline runs in a layout effect, not a passive one. GSAP's pin
+ * re-parents the container into a spacer it inserts, and when the showreel
+ * is switched off (a window narrowed below the gate, reduced motion turned
+ * on) React removes the container from its original parent. A passive
+ * cleanup runs after that removal and the removal throws; a layout cleanup
+ * runs before it, so the spacer is gone and the node is back where React
+ * expects it. Same effect on the server, where neither runs.
+ */
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Check } from "lucide-react";
@@ -160,7 +172,7 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
   }, [enabled]);
 
   // The pinned scroll timeline.
-  useEffect(() => {
+  useIsoLayoutEffect(() => {
     if (!enabled) return;
     const LEADER_PTS = 41;
 
@@ -202,7 +214,7 @@ export function CinematicHero({ className, ...props }: CinematicHeroProps) {
         .fromTo(".cin-left", { x: -50, autoAlpha: 0 }, { x: 0, autoAlpha: 1, ease: "power4.out", duration: 1.4 }, "-=1.4")
         .fromTo(".cin-right", { x: 50, autoAlpha: 0, scale: 0.82 }, { x: 0, autoAlpha: 1, scale: 1, ease: "expo.out", duration: 1.4 }, "<")
         // Hold on the assembled product, then lift the whole card away to reveal
-        // the editorial hero below. No CTA scene: the overture hands into the page.
+        // the section below. No CTA scene: the showreel hands into the page.
         .to({}, { duration: 2.2 })
         .to(".cin-hero-text", { autoAlpha: 0, duration: 0.6 })
         .to(".cin-main-card", { yPercent: -150, ease: "power3.in", duration: 1.6 });

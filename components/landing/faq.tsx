@@ -6,8 +6,9 @@
  * Defuses the specific objections a skeptical club admin has before they bounce.
  * Every answer matches what is actually built (PRODUCT.md): browser-based, no
  * download; offline-first; certification and disputes to R&A 3.3b; the real list
- * of formats. Payment is described honestly as a demonstrated preview, not a
- * live feature. Native details/summary keeps it accessible and motion-free.
+ * of formats. Payment is not mentioned, because whether Shimo settles money
+ * is an open decision (docs/COMMITMENTS.md). Native details/summary keeps it
+ * accessible and motion-free.
  */
 
 import { ChevronDown } from "lucide-react";
@@ -36,10 +37,6 @@ const FAQS = [
     a: "Stableford and Stroke Play, across single or multi-round events with cuts, plus Scramble and Better Ball scored as teams. Match Play is on the roadmap.",
   },
   {
-    q: "Can members pay entry fees in Shimo?",
-    a: "Entry fees and tiers are part of registration, and the desk records payment the way the club already takes it. Shimo does not collect money today: whether M-PESA settlement ships, and how, is still an open decision.",
-  },
-  {
     q: "What does the clubhouse screen need?",
     a: "A television the club already owns. It runs unattended through the afternoon, read-only, and never shows a member's worst hole.",
   },
@@ -55,7 +52,7 @@ export function Faq() {
             Questions
           </p>
           <h2 className="mt-5 font-serif text-[clamp(32px,4.6vw,52px)] font-medium leading-[1.04] tracking-[-0.02em] text-foreground text-balance">
-            Before you commit a tournament to it.
+            What clubs ask before they commit a tournament to it.
           </h2>
         </Reveal>
 
