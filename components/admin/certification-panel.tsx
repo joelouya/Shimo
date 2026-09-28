@@ -9,6 +9,7 @@
  * DocuSign Certificate of Completion for the tournament.
  */
 
+import { ScoreCell } from "@/components/score-cell";
 import { useMemo, useState } from "react";
 import {
   Check,
@@ -356,8 +357,9 @@ function CorrectionCard({ c, name }: { c: CorrectionRequest; name: string }) {
 
 /**
  * The card as the Committee reads it: the player's own figures over the
- * marker's, nine and nine, a difference marked in amber. The pars sit above
- * so a figure can be judged without the printed card in hand.
+ * marker's, nine and nine, in card notation (rings under par, boxes over),
+ * a difference marked in amber. The pars sit above so a figure can be
+ * judged without the printed card in hand.
  */
 function HoleGrid({
   own,
@@ -385,15 +387,14 @@ function HoleGrid({
         const m = marker[from + i];
         const differs = o != null && m != null && o !== m;
         return (
-          <span
+          <ScoreCell
             key={`o${i}`}
-            className={cn(
-              "mx-auto flex size-7 items-center justify-center rounded-md text-[13px] font-medium tnum",
-              differs ? "bg-amber-wash text-amber-flag" : o == null ? "text-muted-foreground" : "bg-secondary text-foreground",
-            )}
-          >
-            {o ?? "·"}
-          </span>
+            gross={o}
+            par={pars[from + i]}
+            size="lg"
+            flag={differs}
+            className="justify-self-center"
+          />
         );
       })}
       <span className="smallcaps self-center pl-1 text-left text-[9px] text-muted-foreground">Marker</span>
@@ -402,15 +403,15 @@ function HoleGrid({
         const m = marker[from + i];
         const differs = o != null && m != null && o !== m;
         return (
-          <span
+          <ScoreCell
             key={`m${i}`}
-            className={cn(
-              "mx-auto flex size-7 items-center justify-center rounded-md text-[13px] tnum",
-              differs ? "bg-amber-wash text-amber-flag" : m == null ? "text-muted-foreground" : "text-ink-soft",
-            )}
-          >
-            {m ?? "·"}
-          </span>
+            gross={m}
+            par={pars[from + i]}
+            size="lg"
+            flag={differs}
+            dim={!differs}
+            className="justify-self-center"
+          />
         );
       })}
     </div>

@@ -15,6 +15,7 @@
  * a tamper-evident integrity record is computed and appended.
  */
 
+import { ScoreCell } from "@/components/score-cell";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -237,11 +238,13 @@ function ReviewGrid({
               >
                 <td className="py-1 pl-3 font-medium">{h.hole}</td>
                 <td className="text-center text-muted-foreground">{h.par}</td>
-                <td className="text-center">{markerScores[i] ?? "·"}</td>
+                <td className="text-center">
+                  <ScoreCell gross={markerScores[i]} par={h.par} flag={isDisc} dim={!isDisc} />
+                </td>
                 <td className="pr-3 text-center">
                   {isDisc ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="text-amber-flag">{ownScores[i] ?? "·"}</span>
+                      <ScoreCell gross={ownScores[i]} par={h.par} flag />
                       <button
                         onClick={() => onAgree(i, markerScores[i]!)}
                         className="rounded border border-amber-flag/40 px-1.5 py-0.5 text-[11px] text-amber-flag cursor-pointer"
@@ -257,7 +260,7 @@ function ReviewGrid({
                       </button>
                     </span>
                   ) : (
-                    (ownScores[i] ?? "·")
+                    <ScoreCell gross={ownScores[i]} par={h.par} />
                   )}
                 </td>
               </tr>
