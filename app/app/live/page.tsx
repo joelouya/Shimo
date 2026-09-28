@@ -1,5 +1,6 @@
 "use client";
 
+import { ScoreCell } from "@/components/score-cell";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -79,36 +80,6 @@ function scoreLabel(gross: number, par: number) {
   if (d === 0) return "Par";
   if (d === 1) return "Bogey";
   return `+${d}`;
-}
-
-/** classic card notation: circles for birdies, squares for bogeys */
-function ScoreCell({
-  gross,
-  par,
-  dim,
-}: {
-  gross: number | null;
-  par: number;
-  dim?: boolean;
-}) {
-  if (gross == null)
-    return <span className="text-muted-foreground">·</span>;
-  const d = gross - par;
-  return (
-    <span
-      className={cn(
-        "inline-flex size-6 items-center justify-center text-[12.5px] tnum",
-        d === -1 && "rounded-full border border-clay text-clay-deep",
-        d <= -2 && "rounded-full border-2 border-clay text-clay-deep",
-        d === 1 && "rounded-sm border border-stone/60 text-ink-soft",
-        d >= 2 && "rounded-sm border-2 border-stone/60 text-ink-soft",
-        d === 0 && "text-foreground",
-        dim && "opacity-60",
-      )}
-    >
-      {gross}
-    </span>
-  );
 }
 
 function ScorePad({

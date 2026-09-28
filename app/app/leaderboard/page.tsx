@@ -1,5 +1,6 @@
 "use client";
 
+import { ScoreCell } from "@/components/score-cell";
 import { memo, useCallback, useEffect, useState } from "react";
 import {
   AnimatePresence,
@@ -178,26 +179,15 @@ function Nine({
       <span className="smallcaps text-[8px] text-foreground self-center text-left pl-1">
         Score
       </span>
-      {course.holes.slice(from, from + 9).map((h, i) => {
-        const gross = card[from + i];
-        const d = gross == null ? 0 : gross - h.par;
-        return (
-          <span
-            key={h.hole}
-            className={cn(
-              "mx-auto flex size-5 items-center justify-center text-[11px] tnum",
-              gross == null && "text-muted-foreground",
-              gross != null && d === -1 && "rounded-full border border-clay text-clay-deep",
-              gross != null && d <= -2 && "rounded-full border-2 border-clay text-clay-deep",
-              gross != null && d === 1 && "rounded-sm border border-stone/50 text-ink-soft",
-              gross != null && d >= 2 && "rounded-sm border-2 border-stone/50 text-ink-soft",
-              gross != null && d === 0 && "text-foreground",
-            )}
-          >
-            {gross ?? "·"}
-          </span>
-        );
-      })}
+      {course.holes.slice(from, from + 9).map((h, i) => (
+        <ScoreCell
+          key={h.hole}
+          gross={card[from + i]}
+          par={h.par}
+          size="sm"
+          className="justify-self-center"
+        />
+      ))}
       <span className="smallcaps text-[8px] text-clay-deep self-center text-left pl-1">
         Pts
       </span>
