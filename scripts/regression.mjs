@@ -47,6 +47,7 @@ const jiti = createJiti(import.meta.url, {
 
 const S = await jiti.import("../lib/sim/store.ts");
 const DF = await jiti.import("../lib/sim/device-feeds.ts");
+const STALE = await jiti.import("../lib/stale-build.ts");
 const { roundKey } = await jiti.import("../lib/rounds.ts");
 const { scorePayload } = await jiti.import("../lib/integrity.ts");
 const MAP = await jiti.import("../lib/sync/mappers.ts");
@@ -3608,6 +3609,20 @@ section("The screen and the board read this device when there is no cloud");
   check("the public board is ready with the field and the cards",
     board.status === "ready" && board.players.length > 0 && board.byRound[1]?.[FRESH]?.[16] === 3,
     `${board.status} ${board.players.length} ${board.byRound[1]?.[FRESH]?.[16]}`);
+}
+
+/* ------------------------------------------------------------------ */
+section("A page from before the last deploy reloads once");
+{
+  const chunk = Object.assign(new Error("Loading chunk 123 failed."), { name: "ChunkLoadError" });
+  check("the router's chunk failure is a stale build", STALE.isStaleBuildError(chunk));
+  check("a failed dynamic import is a stale build",
+    STALE.isStaleBuildError(new Error("Failed to fetch dynamically imported module: /_next/static/chunks/x.js")));
+  check("a plain error is not",
+    !STALE.isStaleBuildError(new Error("Cannot read properties of undefined")) &&
+      !STALE.isStaleBuildError(null) && !STALE.isStaleBuildError("Loading chunk"));
+  check("without a window there is nothing to reload",
+    STALE.canReloadOntoFreshBuild() === false && STALE.reloadOntoFreshBuild() === false);
 }
 
 /* ------------------------------------------------------------------ */

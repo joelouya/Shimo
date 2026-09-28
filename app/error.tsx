@@ -16,6 +16,11 @@ import { RotateCcw } from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import {
+  canReloadOntoFreshBuild,
+  isStaleBuildError,
+  reloadOntoFreshBuild,
+} from "@/lib/stale-build";
 
 export default function ErrorPage({
   error,
@@ -24,9 +29,26 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // a screen built before the last deploy is not broken, only old: one
+  // reload onto the fresh build, and the ordinary screen if that already
+  // happened a moment ago
+  const refreshing = isStaleBuildError(error) && canReloadOntoFreshBuild();
   useEffect(() => {
     console.error(error);
+    if (isStaleBuildError(error)) reloadOntoFreshBuild();
   }, [error]);
+
+  if (refreshing) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center bg-background px-6 py-12 text-center">
+        <Logo className="text-[19px]" />
+        <p className="smallcaps mt-8 text-muted-foreground">A newer Shimo was published</p>
+        <h1 className="mt-3 font-serif text-[30px] leading-tight text-foreground">
+          Reloading onto it.
+        </h1>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-background px-6 py-12 text-center">

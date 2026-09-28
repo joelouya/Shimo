@@ -92,6 +92,13 @@ when it is done.
   breakdown (player over marker, totals, who marks whom, where each card
   stands). The sheet is a centred dialog; on a phone-width desk it would be
   better as a bottom sheet, but the desk is gated to tablets and up.
+- The service worker now caches page shells for the golfer app only; the
+  landing, the desk, the clubhouse screen and the public board go straight to
+  the network. A shell from before a deploy that still slips through (held by
+  the browser, not the worker) reloads itself once (`lib/stale-build.ts`).
+  A television that loses its connection keeps the board it holds in memory
+  but will not survive a reload offline; if a club asks for that, the screen
+  route would need its own shell in the worker, pinned to one build.
 - The clubhouse screen and the public board read from this device when the
   build has no cloud (demo, or a desk without keys). That reaches every tab on
   the one device and no further; the demo copy on those routes still says
