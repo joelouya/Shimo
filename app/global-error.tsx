@@ -6,6 +6,10 @@
  * dress it. Same message as the ordinary error screen: the round is safe.
  */
 
+import { useEffect } from "react";
+
+import { isStaleBuildError, reloadOntoFreshBuild } from "@/lib/stale-build";
+
 import "./globals.css";
 
 export default function GlobalError({
@@ -15,6 +19,11 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // a shell from before the last deploy: one reload onto the fresh build
+  useEffect(() => {
+    if (isStaleBuildError(error)) reloadOntoFreshBuild();
+  }, [error]);
+
   return (
     <html lang="en">
       <body

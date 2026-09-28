@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 
 import { Logo } from "@/components/logo";
+import { isStaleBuildError, reloadOntoFreshBuild } from "@/lib/stale-build";
 
 /* ------------------------------------------------------------------ */
 /* Boot: service worker registration (production only)                 */
@@ -52,7 +53,23 @@ export function PwaBoot() {
       window.dispatchEvent(new Event("shimo-installable"));
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+
+    // A page shell from before the last deploy asks for build files that are
+    // gone. A lazy import failing that way never reaches an error boundary,
+    // so it is caught here and answered with one reload onto the fresh build.
+    const onRejection = (e: PromiseRejectionEvent) => {
+      if (isStaleBuildError(e.reason) && reloadOntoFreshBuild()) e.preventDefault();
+    };
+    const onError = (e: ErrorEvent) => {
+      if (isStaleBuildError(e.error ?? e.message) && reloadOntoFreshBuild()) e.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    window.addEventListener("error", onError);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("unhandledrejection", onRejection);
+      window.removeEventListener("error", onError);
+    };
   }, []);
   return null;
 }
