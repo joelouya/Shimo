@@ -361,14 +361,22 @@ function CorrectionCard({ c, name }: { c: CorrectionRequest; name: string }) {
  * a difference marked in amber. The pars sit above so a figure can be
  * judged without the printed card in hand.
  */
-function HoleGrid({
+/**
+ * One card read the way the Committee reads it: the player's figures over
+ * the marker's, hole by hole, pars in the header, disagreements in amber.
+ * Live Ops opens the same grid for a group on the course, so the two rooms
+ * never show a card two different ways.
+ */
+export function HoleGrid({
   own,
   marker,
   pars,
+  className,
 }: {
   own: (number | null)[];
   marker: (number | null)[];
   pars: number[];
+  className?: string;
 }) {
   const nine = (from: number) => (
     <div className="grid grid-cols-[4rem_repeat(9,minmax(0,1fr))] gap-y-1 text-center">
@@ -417,7 +425,7 @@ function HoleGrid({
     </div>
   );
   return (
-    <div className="space-y-3 rounded-xl bg-card p-3 shadow-card">
+    <div className={cn("space-y-3 rounded-xl bg-card p-3 shadow-card", className)}>
       {nine(0)}
       <div className="h-px bg-border/70" />
       {nine(9)}

@@ -74,18 +74,6 @@ export default function PublicLeaderboard({
     [board.tournament],
   );
 
-  if (board.status === "unconfigured") {
-    return (
-      <Shell>
-        <p className="font-serif text-2xl text-foreground">
-          Live scoring isn&apos;t connected
-        </p>
-        <p className="mt-2 text-[15px] text-muted-foreground">
-          This board needs the club&apos;s live database configured.
-        </p>
-      </Shell>
-    );
-  }
   if (board.status === "loading") {
     return (
       <Shell>

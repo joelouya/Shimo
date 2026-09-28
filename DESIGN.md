@@ -348,9 +348,10 @@ between sections.
 Three layouts recur on the desk and are drawn from a shared kit: a row of
 stat cards (a label, a serif figure, a delta line, a clay sparkline on paper)
 across the head of a page; a list beside the chosen thing (the season beside
-the selected event, cards beside the card being read, groups beside the group
-being watched), the selected row set in ink; and a card grid for people, with
-the ledger one toggle away. Segmented pill tabs carry counts.
+the selected event, cards beside the card being read), the selected row set in
+ink; and a card grid, for people and for the groups on the course, with the
+closer look one click away (the ledger for people, a sheet for a group).
+Segmented pill tabs carry counts.
 
 Density rises where the task demands it. The desk scoring grid is deliberately
 tighter than anything else in the product, with frozen player and total columns

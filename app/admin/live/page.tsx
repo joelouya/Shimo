@@ -23,31 +23,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CertificationPanel } from "@/components/admin/certification-panel";
-import { ListRow, MasterDetail } from "@/components/admin/master-detail";
+import { CertificationPanel, HoleGrid } from "@/components/admin/certification-panel";
 import { PageHeader } from "@/components/admin/page-header";
 import { Segmented } from "@/components/admin/segmented";
 import { PlayerAvatar } from "@/components/player/identity";
-import { LiveBadge } from "@/components/live-dot";
-import { DEMO_USER_ID, playerById } from "@/lib/data";
+import { DEMO_USER_ID } from "@/lib/data";
 import { IS_PILOT } from "@/lib/mode";
 import {
   useActiveTournament,
+  useRoundCardIn,
   useRoundCerts,
+  useRoundMarkerScores,
   useRoundScores,
   useSlowClock,
   useStandings,
+  type ActiveTournament,
 } from "@/lib/sim/hooks";
 import {
   endTournamentDay,
   reviewFlag,
   startNextRound,
   useSim,
+  type Certification,
   type OpsFlag,
   type SavedGroup,
   groupHolesPlayed,
 } from "@/lib/sim/store";
+import { markedByMe } from "@/lib/markers";
 import { roundsOf } from "@/lib/rounds";
+import { rowStats } from "@/lib/scoring";
 import type { Player } from "@/lib/types";
 import { cn, toPar } from "@/lib/utils";
 import { formatElapsed, groupState, paceReadings, type PaceReading } from "@/lib/pace";
@@ -181,7 +185,8 @@ function GroupCard({
     <button
       type="button"
       onClick={onSelect}
-      aria-pressed={selected}
+      aria-haspopup="dialog"
+      aria-expanded={selected}
       className={cn(
         "w-full rounded-2xl p-4 text-left transition-shadow",
         // certified recedes into the page: no lift, sand ground, quieter ink
@@ -191,7 +196,7 @@ function GroupCard({
         // attention as an edge, per the Three Flags Rule
         state.attention === "review" && "ring-1 ring-amber-flag/60",
         state.attention === "dispute" && "ring-2 ring-red-flag/70 bg-red-wash/25",
-        // selection is the operator's focus and outranks the attention ring
+        // the group whose sheet is open stays marked behind it
         selected && "ring-2 ring-ink shadow-lift",
       )}
     >
@@ -320,78 +325,230 @@ function GroupCard({
   );
 }
 
-/** One line per group in the list: where it is, who is in it, what it needs. */
-function GroupRow({
-  g,
-  byId,
-  pace,
-  selected,
-  onSelect,
+/* ------------------------------------------------------------------ */
+/* The full breakdown of one group, opened from its card               */
+/* ------------------------------------------------------------------ */
+
+const EMPTY_CARD: (number | null)[] = Array(18).fill(null);
+
+/** Where one card stands, in the words the desk uses. */
+function cardStatus(
+  cert: Certification | undefined,
+  thru: number,
+  deskIn: boolean,
+): { label: string; tone: "quiet" | "review" | "dispute" | "done" } {
+  if (cert?.stage === "certified") return { label: "Certified and sealed", tone: "done" };
+  if (cert?.stage === "dq") return { label: "Disqualified", tone: "dispute" };
+  if (cert?.stage === "disputed" || cert?.stage === "committee-review") {
+    return { label: "Disputed, for the Committee", tone: "dispute" };
+  }
+  if (cert?.stage === "awaiting-player") {
+    return { label: "Marker attested, awaiting the player", tone: "review" };
+  }
+  if (cert?.stage === "awaiting-marker") {
+    return { label: "Card in, awaiting the marker", tone: "review" };
+  }
+  if (deskIn) return { label: "Entered at the desk", tone: "quiet" };
+  if (thru >= 18) return { label: "Card in, awaiting certification", tone: "quiet" };
+  if (thru > 0) return { label: `Through hole ${thru}`, tone: "quiet" };
+  return { label: "Yet to score", tone: "quiet" };
+}
+
+function Figure({
+  label,
+  value,
+  accent,
 }: {
-  g: SavedGroup;
-  byId: Map<string, Player>;
-  pace?: PaceReading;
-  selected: boolean;
-  onSelect: () => void;
+  label: string;
+  value: string | number;
+  accent?: boolean;
 }) {
-  const scores = useRoundScores();
-  const certs = useRoundCerts();
-  const allFlags = useSim((s) => s.flags);
-  const flags = allFlags.filter(
-    (f) => f.groupId === g.id && f.status === "open" && (!IS_PILOT || f.kind !== "red"),
-  );
-  const thru = g.playerIds.length
-    ? Math.min(...g.playerIds.map((pid) => (scores[pid] ?? []).filter((x) => x != null).length))
-    : 0;
-  const finished = thru >= 18;
-  const groupCerts = g.playerIds.map((pid) => certs[pid]);
-  const state = groupState({
-    thru,
-    allCertified: g.playerIds.length > 0 && groupCerts.every((c) => c?.stage === "certified"),
-    anyDisputed: groupCerts.some((c) => c?.stage === "disputed" || c?.stage === "committee-review"),
-    hasAmberFlag: flags.some((f) => f.kind === "amber"),
-    hasRedFlag: flags.some((f) => f.kind === "red"),
-  });
-  const names = g.playerIds
-    .map((pid) => byId.get(pid)?.name.split(" ").pop() ?? "")
-    .filter(Boolean)
-    .join(", ");
   return (
-    <ListRow selected={selected} onSelect={onSelect}>
-      <span
+    <div className="rounded-xl bg-secondary/50 px-2 py-2">
+      <dt className="smallcaps text-muted-foreground">{label}</dt>
+      <dd
         className={cn(
-          "flex w-11 shrink-0 flex-col items-center rounded-lg py-1.5 font-serif leading-none tnum",
-          selected ? "bg-cream/10" : state.phase === "certified" ? "bg-secondary/60" : "bg-secondary",
+          "mt-1 font-serif text-[18px] leading-none tnum",
+          accent ? "text-clay-deep" : "text-foreground",
         )}
       >
-        <span className="text-[16px]">{state.phase === "certified" ? "✓" : finished ? "F" : `H${thru + 1}`}</span>
-        <span className={cn("mt-0.5 text-[9px] uppercase tracking-wider", selected ? "text-cream/60" : "text-muted-foreground")}>
-          Gr {g.number}
-        </span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium">{names || "Empty group"}</span>
-        <span className={cn("block truncate text-[11px]", selected ? "text-primary-foreground/60" : "text-muted-foreground")}>
-          {state.attention === "dispute"
-            ? "Disputed, for the Committee"
-            : state.attention === "review"
-              ? "Marker discrepancy"
-              : pace?.outOfPosition
-                ? `${pace.behind} min behind`
-                : state.phase === "certified"
-                  ? "Certified and sealed"
-                  : finished
-                    ? "Card in"
-                    : `Teed off ${g.teeTime}`}
-        </span>
-      </span>
-      {state.attention !== "none" && (
-        <Flag
-          className={cn("size-3 shrink-0", state.attention === "dispute" ? "text-red-flag" : "text-amber-flag")}
-          fill="currentColor"
-        />
-      )}
-    </ListRow>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Everything the desk can know about one group, read off the same store the
+ * cards are: each player's figures over their marker's, hole by hole, the
+ * running totals, who marks whom, and where each card stands. The grid is the
+ * Committee room's, so a card looks the same in both rooms.
+ */
+function GroupSheet({
+  g,
+  active,
+  byId,
+  pace,
+  onClose,
+  onCommittee,
+}: {
+  g: SavedGroup | null;
+  active: ActiveTournament;
+  byId: Map<string, Player>;
+  pace?: PaceReading;
+  onClose: () => void;
+  onCommittee: () => void;
+}) {
+  const scores = useRoundScores();
+  const marks = useRoundMarkerScores();
+  const certs = useRoundCerts();
+  const cardIn = useRoundCardIn();
+  const isStableford = active.tournament.format === "Stableford";
+  const pars = active.course.holes.map((h) => h.par);
+
+  const players = g
+    ? g.playerIds.map((pid) => byId.get(pid)).filter((p): p is Player => !!p)
+    : [];
+  const thru =
+    g && g.playerIds.length
+      ? Math.min(
+          ...g.playerIds.map((pid) => (scores[pid] ?? []).filter((x) => x != null).length),
+        )
+      : 0;
+  const surname = (id: string) => byId.get(id)?.name.split(" ").pop() ?? "";
+
+  return (
+    <Dialog open={!!g} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
+        {g && (
+          <>
+            <DialogHeader>
+              <p className="smallcaps text-muted-foreground tnum">
+                Group {g.number} · teed off {g.teeTime}
+                {pace?.elapsed !== undefined && <> · out {formatElapsed(pace.elapsed)}</>}
+              </p>
+              <DialogTitle className="font-serif text-[24px] font-medium leading-tight">
+                {players.map((p) => p.name).join(", ") || "Empty group"}
+              </DialogTitle>
+              <DialogDescription>
+                {thru >= 18
+                  ? "All cards in."
+                  : thru > 0
+                    ? `Through hole ${thru}.`
+                    : "Yet to score."}
+                {pace?.outOfPosition && ` ${pace.behind} min behind the field.`}
+                {pace?.total !== undefined &&
+                  ` ${formatElapsed(pace.front)} out, ${formatElapsed(pace.back)} back, ${formatElapsed(pace.total)} for the round.`}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-4">
+              {players.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nobody is in this group.</p>
+              )}
+              {players.map((p) => {
+                const own = scores[p.id] ?? EMPTY_CARD;
+                const mk = marks[p.id] ?? EMPTY_CARD;
+                const stats = rowStats(
+                  p,
+                  own,
+                  active.course,
+                  active.tournament.handicapAllowance,
+                  active.tournament.maxHoleScore,
+                );
+                const status = cardStatus(certs[p.id], stats.thru, !!cardIn[p.id]);
+                const marking = markedByMe(g, p.id);
+                const differs = own.some(
+                  (o, i) => o != null && mk[i] != null && o !== mk[i],
+                );
+                return (
+                  <section key={p.id} className="rounded-2xl border border-border/70 p-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <PlayerAvatar player={p} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-medium text-foreground">
+                          {p.name}
+                          {p.id === DEMO_USER_ID && (
+                            <span className="ml-1.5 rounded bg-clay-wash px-1 py-px text-[9px] font-medium text-clay-deep">
+                              demo user
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11.5px] text-muted-foreground tnum">
+                          HI {p.handicap} · plays {stats.ph}
+                          {marking && <> · marks {surname(marking)}</>}
+                        </p>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-[11.5px] font-medium",
+                          status.tone === "dispute"
+                            ? "text-red-flag"
+                            : status.tone === "review"
+                              ? "text-amber-flag"
+                              : status.tone === "done"
+                                ? "text-muted-foreground"
+                                : "text-ink-soft",
+                        )}
+                      >
+                        {status.tone === "done" && (
+                          <Check className="mr-1 inline size-3.5 align-[-2px]" />
+                        )}
+                        {status.label}
+                      </p>
+                    </div>
+
+                    <dl className="mt-3 grid grid-cols-4 gap-2 text-center sm:max-w-sm">
+                      <Figure label="Thru" value={stats.thru >= 18 ? "F" : stats.thru || "·"} />
+                      <Figure label="Gross" value={stats.thru ? stats.grossTotal : "·"} />
+                      <Figure
+                        label="To par"
+                        value={stats.thru ? toPar(stats.grossToPar) : "·"}
+                        accent={stats.thru > 0 && stats.grossToPar < 0}
+                      />
+                      {isStableford ? (
+                        <Figure label="Points" value={stats.thru ? stats.points : "·"} />
+                      ) : (
+                        <Figure
+                          label="Net"
+                          value={stats.thru ? toPar(stats.netToPar) : "·"}
+                          accent={stats.thru > 0 && stats.netToPar < 0}
+                        />
+                      )}
+                    </dl>
+
+                    <HoleGrid
+                      own={own}
+                      marker={mk}
+                      pars={pars}
+                      className="mt-3 bg-secondary/30 shadow-none"
+                    />
+                    {differs && (
+                      <p className="mt-2 text-[11.5px] text-amber-flag">
+                        The two cards disagree where the figures are amber. Both players
+                        are prompted to check at the next tee.
+                      </p>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+
+            <DialogFooter className="sm:justify-between">
+              <Button variant="ghost" onClick={onCommittee}>
+                Committee room
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/admin/scores">
+                  <ClipboardList className="size-4" />
+                  Enter scores from cards
+                </Link>
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -492,8 +649,8 @@ export default function LiveOpsPage() {
   const [reviewing, setReviewing] = useState<OpsFlag | null>(null);
   const [ending, setEnding] = useState(false);
   const [advancing, setAdvancing] = useState(false);
-  // The one group the desk is watching. A focus anchor, nothing more: click to
-  // hold it, click again to let go.
+  // The group whose sheet is open, if any. Every group is always on the page;
+  // the sheet is the closer look.
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   // deep link: /admin/live#certification opens the Committee tab. Read on the
   // first render - this page only ever renders on the client, behind SimGate.
@@ -558,17 +715,7 @@ export default function LiveOpsPage() {
       (pid) => (scores[pid] ?? []).filter((x) => x != null).length < 18,
     ),
   ).length;
-  // the group being watched: the chosen one, else one asking for a human,
-  // else the first still out. Cheap enough to derive on every render.
-  const watchGroups = active?.groups ?? [];
-  const watching =
-    watchGroups.find((g) => g.id === selectedGroup) ??
-    watchGroups.find((g) => openFlags.some((f) => f.groupId === g.id)) ??
-    watchGroups.find((g) =>
-      g.playerIds.some((pid) => (scores[pid] ?? []).filter((x) => x != null).length < 18),
-    ) ??
-    watchGroups[0] ??
-    null;
+  const openGroup = (active?.groups ?? []).find((g) => g.id === selectedGroup) ?? null;
 
   if (!active) {
     return (
@@ -647,53 +794,48 @@ export default function LiveOpsPage() {
         </div>
       )}
 
-      <div className="mt-6">
-        <MasterDetail
-          listWidth={340}
-          list={
-            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
-              {active.groups.length === 0 && (
-                <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-                  No pairings saved yet. Set them in Pairings & tee times.
-                </p>
-              )}
-              {active.groups.map((g) => (
-                <GroupRow
-                  key={g.id}
-                  g={g}
-                  byId={byId}
-                  pace={paceBy.get(g.id)}
-                  selected={watching?.id === g.id}
-                  onSelect={() => setSelectedGroup(g.id)}
-                />
-              ))}
-            </div>
-          }
-          detail={
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-              <div>
-                {watching ? (
-                  <GroupCard
-                    g={watching}
-                    byId={byId}
-                    pace={paceBy.get(watching.id)}
-                    selected={false}
-                    onSelect={() => {}}
-                  />
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-10 text-center text-sm text-muted-foreground">
-                    Pick a group to watch it here.
-                  </div>
-                )}
-              </div>
-              <div>
-                <LeaderboardPanel isStableford={active.tournament.format === "Stableford"} />
-                <EventFeed byId={byId} />
-              </div>
-            </div>
-          }
-        />
+      {/*
+        Every group on the page at once, the way a starter's sheet is read:
+        the whole field in a glance, then one group up close. Clicking a card
+        opens its sheet; the board and the feed keep their column beside.
+      */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div>
+          {active.groups.length === 0 && (
+            <p className="rounded-2xl bg-card px-6 py-10 text-center text-sm text-muted-foreground shadow-card">
+              No pairings saved yet. Set them in Pairings & tee times.
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {active.groups.map((g) => (
+              <GroupCard
+                key={g.id}
+                g={g}
+                byId={byId}
+                pace={paceBy.get(g.id)}
+                selected={selectedGroup === g.id}
+                onSelect={() => setSelectedGroup(g.id)}
+              />
+            ))}
+          </div>
+        </div>
+        <div>
+          <LeaderboardPanel isStableford={active.tournament.format === "Stableford"} />
+          <EventFeed byId={byId} />
+        </div>
       </div>
+
+      <GroupSheet
+        g={openGroup}
+        active={active}
+        byId={byId}
+        pace={openGroup ? paceBy.get(openGroup.id) : undefined}
+        onClose={() => setSelectedGroup(null)}
+        onCommittee={() => {
+          setSelectedGroup(null);
+          setTab("certs");
+        }}
+      />
         </>
       )}
 

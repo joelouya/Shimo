@@ -4,6 +4,10 @@
  * Read-only leaderboard data for the public /live/[id] route. Reads straight
  * from Supabase with no store and no auth: hydrate once, stay subscribed to
  * score changes, and poll every 30s as a fallback if the socket goes quiet.
+ *
+ * A build with no cloud reads the same shape from this device's own copy of
+ * the day instead (lib/sim/device-feeds.ts), so the demo's board follows the
+ * demo's desk.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -18,12 +22,13 @@ import {
   type RoundCards,
   type ViewMode,
 } from "@/lib/scoring";
+import { devicePublicBoard, watchDevice } from "@/lib/sim/device-feeds";
 import { rowToPlayer, rowToTournament } from "@/lib/sync/mappers";
 import type { Course, Player, Tournament } from "@/lib/types";
-import { REMOTE_CONFIGURED, supabase } from "./client";
+import { CLOUD_FEEDS, supabase } from "./client";
 
 export interface PublicBoard {
-  status: "loading" | "ready" | "not-found" | "unconfigured";
+  status: "loading" | "ready" | "not-found";
   tournament: Tournament | null;
   course: Course | null;
   players: Player[];
@@ -41,7 +46,7 @@ function emptyCard() {
 
 export function usePublicBoard(tournamentId: string): PublicBoard {
   const [board, setBoard] = useState<PublicBoard>({
-    status: REMOTE_CONFIGURED ? "loading" : "unconfigured",
+    status: "loading",
     tournament: null,
     course: null,
     players: [],
@@ -52,8 +57,20 @@ export function usePublicBoard(tournamentId: string): PublicBoard {
   });
   const scoresRef = useRef<Record<number, Record<string, (number | null)[]>>>({});
 
+  // no cloud: this device's copy of the day, rebuilt as the store changes
   useEffect(() => {
-    if (!REMOTE_CONFIGURED) return;
+    if (CLOUD_FEEDS) return;
+    return watchDevice(
+      (s) => devicePublicBoard(s, tournamentId),
+      (b) => {
+        scoresRef.current = b.byRound;
+        setBoard(b);
+      },
+    );
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (!CLOUD_FEEDS) return;
     let cancelled = false;
     let channel: { unsubscribe: () => void } | null = null;
 

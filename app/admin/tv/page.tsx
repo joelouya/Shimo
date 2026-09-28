@@ -12,7 +12,9 @@
  * two copies fed the same data independently reach the same conclusions: the
  * panel derives the same held announcements the screen is holding, without the
  * screen ever having to write anything down. Decisions go the other way, as
- * rows in tv_decisions that the television reads and folds in.
+ * rows in tv_decisions that the television reads and folds in; a build with
+ * no cloud keeps the same rows on this device, and the screen reads them from
+ * the shared local state instead.
  *
  * The one thing this cannot mirror exactly is the moment-to-moment playback
  * clock, which is why the current-state line is phrased as what the panel
@@ -20,7 +22,6 @@
  */
 
 import { PageHeader } from "@/components/admin/page-header";
-import { REMOTE_CONFIGURED } from "@/lib/sync/client";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
 import {
@@ -92,11 +93,6 @@ export default function ProducerPanel() {
     opts?: { factKey?: string; payload?: Record<string, string | boolean> },
   ) => {
     if (!live) return;
-    if (!REMOTE_CONFIGURED) {
-      // the screen reads the cloud, so without one there is nobody to tell
-      setSendError("The clubhouse screen reads from the cloud, which this build is not connected to.");
-      return;
-    }
     setBusy(kind + (opts?.factKey ?? ""));
     setSendError(null);
     try {
@@ -375,9 +371,9 @@ export default function ProducerPanel() {
                 />
               ) : (
                 /*
-                 * The screen is driven by the connected club's live feed. Until
-                 * that is flowing, the desk sees the frame it will fill rather
-                 * than a fetch error, so the preview reads as waiting, not broken.
+                 * Until the feed has a first snapshot, the desk sees the frame
+                 * it will fill rather than a fetch error, so the preview reads
+                 * as waiting, not broken.
                  */
                 <div className="flex h-full flex-col items-center justify-center gap-2.5 px-8 text-center">
                   <span className="size-2 rounded-full bg-clay-lift/70" />
@@ -385,7 +381,7 @@ export default function ProducerPanel() {
                     The clubhouse screen appears here
                   </p>
                   <p className="text-[13px] text-cream/45">
-                    Live once the connected club is scoring
+                    Live as soon as the day&apos;s first figures arrive
                   </p>
                 </div>
               )}

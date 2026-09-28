@@ -7,10 +7,21 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { IS_PILOT } from "@/lib/mode";
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const REMOTE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_KEY);
+
+/**
+ * Whether the clubhouse screen and the public board read the cloud, and the
+ * producer panel writes to it. The same rule the sync engine applies: a pilot
+ * with keys, and nothing else. A demo build reads its own device even when a
+ * developer's machine happens to hold keys, so what the demo shows is always
+ * the demo's own day.
+ */
+export const CLOUD_FEEDS = IS_PILOT && REMOTE_CONFIGURED;
 
 /** Stable per-device id so a device ignores the echoes of its own writes. */
 export const CLIENT_ID = (() => {
