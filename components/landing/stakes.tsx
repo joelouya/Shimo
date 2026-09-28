@@ -102,19 +102,16 @@ export function Stakes() {
         <Reveal>
           <p className="smallcaps flex items-center gap-3 text-muted-foreground">
             <span className="h-px w-8 bg-clay/60" />
-            Tournament day, today
+            The problem
           </p>
           <h2 className="mt-5 font-serif text-[clamp(34px,5.2vw,58px)] font-medium leading-[1.03] tracking-[-0.02em] text-foreground text-balance">
-            The day still runs
-            <br className="hidden sm:block" /> on paper.
+            Most club tournaments still run on paper cards and a spreadsheet.
           </h2>
           <p className="mt-6 max-w-xl text-[clamp(16px,1.9vw,19px)] leading-[1.7] text-ink-soft">
-            Cards come in by hand and are typed up at the desk. A score gets
-            queried after the round. The result is compiled by whoever is free,
-            and prize-giving waits on a spreadsheet.
-          </p>
-          <p className="mt-4 max-w-xl font-serif text-[clamp(18px,2.1vw,22px)] italic leading-[1.5] text-foreground">
-            A good competition, held together by its most fragile hour.
+            Cards come in by hand and get typed up at the desk. Scores are
+            queried after the round. The result is compiled by whoever is
+            free, and prizegiving waits on it. Shimo replaces that hour with
+            one that runs itself.
           </p>
         </Reveal>
 

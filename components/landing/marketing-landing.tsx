@@ -3,41 +3,45 @@
 /**
  * The marketing landing.
  *
- * Ordered so a total stranger is carried from "what is this" to a real ask, one
- * section at a time: a cinematic overture, the hero, the problem named plainly,
- * how it works, the proof, who it is for, the actual product, questions, and the
- * close. Read as a document rather than a product page, editorial and quiet.
+ * Ordered so a total stranger knows what Shimo is before anything else: a
+ * plain hero (who it is for, what it does, the one action), then the
+ * cinematic showreel, then the parts named one by one, the problem, how it
+ * works, why it holds up and who it serves, questions, and the close. Every
+ * button leads somewhere real; nothing on the page scrolls the reader to
+ * another button.
  *
  * This is the demo / sales surface. In pilot mode the root routes players
  * straight into the app instead of here, so this whole tree (and its cinematic)
  * is only ever loaded for prospects, never for someone opening a pilot link.
  */
 
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Mail } from "lucide-react";
 
 import { CinematicHero } from "@/components/landing/cinematic-hero";
 import { TopNav } from "@/components/landing/top-nav";
 import { ReturnedCard } from "@/components/landing/returned-card";
+import { Features } from "@/components/landing/features";
 import { Stakes } from "@/components/landing/stakes";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { Proof } from "@/components/landing/proof";
 import { Audiences } from "@/components/landing/audiences";
-import { ProductShots } from "@/components/landing/product-shots";
 import { Faq } from "@/components/landing/faq";
 import { FinalCta } from "@/components/landing/final-cta";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { routeForDevice } from "@/lib/device";
 import { contactHref } from "@/lib/contact";
-import Link from "next/link";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
 export function MarketingLanding() {
   const still = useReducedMotion();
   const router = useRouter();
+  const mail = contactHref("Running a tournament on Shimo");
 
   return (
     <main className="min-h-dvh">
@@ -45,13 +49,8 @@ export function MarketingLanding() {
           only way to move around. */}
       <TopNav />
 
-      {/* The cinematic overture plays first, then lifts away to reveal the
-          hero. It renders nothing under reduced motion, where the hero serves
-          directly. */}
-      <CinematicHero />
-
-      {/* ---- §2 hero ---- */}
-      <section className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 pb-20 pt-24 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pb-28 lg:pt-28">
+      {/* ---- §1 hero: what this is, in plain words ---- */}
+      <section className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 pb-16 pt-28 lg:grid-cols-[1fr_1.05fr] lg:gap-14 lg:pb-24 lg:pt-36">
         <div>
           <motion.p
             initial={{ opacity: 0, y: still ? 0 : 12 }}
@@ -60,29 +59,27 @@ export function MarketingLanding() {
             className="smallcaps flex items-center gap-3 text-muted-foreground"
           >
             <span className="h-px w-8 bg-clay/60" />
-            Tournament golf, beautifully run
+            Tournament software for golf clubs · Kenya
           </motion.p>
 
           <motion.h1
             initial={{ opacity: 0, y: still ? 0 : 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.75, ease: EASE, delay: 0.06 }}
-            className="mt-5 font-serif text-[clamp(46px,8.2vw,88px)] font-medium leading-[0.98] tracking-[-0.021em] text-foreground text-balance"
+            className="mt-5 font-serif text-[clamp(42px,6.6vw,74px)] font-medium leading-[1.0] tracking-[-0.021em] text-foreground text-balance"
           >
-            Every card
-            <br />
-            comes back <span className="italic">signed.</span>
+            Run your club&apos;s tournament day from one place.
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: still ? 0 : 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.75, ease: EASE, delay: 0.14 }}
-            className="mt-6 max-w-lg font-serif text-[clamp(19px,2.2vw,23px)] leading-[1.55] text-ink-soft"
+            className="mt-6 max-w-lg text-[clamp(17px,1.9vw,19px)] leading-[1.6] text-ink-soft"
           >
-            Shimo is tournament management and live scoring for golf clubs.
-            Entries and tee sheets, live scoring on the course, cards certified
-            to the Rules of Golf, and a clubhouse screen worth watching.
+            Entries and tee sheets, live scoring from players&apos; phones, cards
+            certified to the Rules of Golf, a live leaderboard and a clubhouse
+            screen. Free during the pilot.
           </motion.p>
 
           <motion.div
@@ -95,54 +92,75 @@ export function MarketingLanding() {
               Try the demo
               <ArrowRight className="size-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              className="text-ink-soft"
-              onClick={() =>
-                document
-                  .getElementById("how-it-works")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
-            >
-              See how it works
-            </Button>
+            {mail && (
+              <Button variant="outline" size="lg" asChild>
+                <a href={mail}>
+                  <Mail className="size-4" />
+                  Talk to us
+                </a>
+              </Button>
+            )}
           </motion.div>
 
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, ease: EASE, delay: 0.34 }}
-            className="mt-6 text-[13px] leading-relaxed text-muted-foreground"
+            className="mt-5 font-serif text-[15px] italic text-muted-foreground"
           >
-            No sign-up. The demo opens on a seeded club day, ready to explore.
+            Every card comes back signed. No sign-up to look around.
           </motion.p>
         </div>
 
-        <div className="flex justify-center lg:justify-end">
-          <ReturnedCard />
-        </div>
+        {/* The product, not a metaphor: the desk's Live Ops screen, with the
+            returned card sitting over its corner the way it sits on a desk. */}
+        <motion.div
+          initial={{ opacity: 0, y: still ? 0 : 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, ease: EASE, delay: 0.18 }}
+          className="relative"
+        >
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lift">
+            <Image
+              src="/shots/live-ops.jpg"
+              width={1760}
+              height={1100}
+              priority
+              sizes="(min-width: 1024px) 600px, 100vw"
+              alt="The club's Live Ops screen: every group on the course, a live leaderboard and a running score feed."
+              className="block h-auto w-full"
+            />
+          </div>
+          {/* small, and only over the screenshot's bottom-left corner, so the
+              product behind it stays readable */}
+          <div className="pointer-events-none absolute -bottom-6 -left-3 hidden w-[280px] origin-bottom-left scale-[0.62] sm:block lg:-left-6">
+            <ReturnedCard />
+          </div>
+        </motion.div>
       </section>
 
-      {/* ---- §3 the problem, named ---- */}
+      {/* ---- §2 the showreel: the cinematic, pinned, lifting away into the
+              parts it just showed. Renders nothing on phones and under
+              reduced motion. ---- */}
+      <CinematicHero />
+
+      {/* ---- §3 the parts, named ---- */}
+      <Features />
+
+      {/* ---- §4 the problem ---- */}
       <Stakes />
 
-      {/* ---- §4 how it works ---- */}
+      {/* ---- §5 how it works ---- */}
       <HowItWorks />
 
-      {/* ---- §5 proof / credibility ---- */}
+      {/* ---- §6 why it holds up, and who it is for ---- */}
       <Proof />
-
-      {/* ---- §6 for the golfer / for the club ---- */}
       <Audiences />
 
-      {/* ---- §7 real product screenshots ---- */}
-      <ProductShots />
-
-      {/* ---- §9 questions ---- */}
+      {/* ---- §7 questions ---- */}
       <Faq />
 
-      {/* ---- §8 pricing + §10 the final ask ---- */}
+      {/* ---- §8 the close ---- */}
       <FinalCta />
 
       <footer className="border-t border-border">
@@ -150,13 +168,13 @@ export function MarketingLanding() {
           <Logo className="text-[15px]" />
           <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]">
             <Link href="/admin" className="focus-ring rounded-md text-foreground/70 hover:text-foreground">
-              The club desk
+              For clubs
             </Link>
             <Link href="/app" className="focus-ring rounded-md text-foreground/70 hover:text-foreground">
-              The golfer app
+              For golfers
             </Link>
-            {contactHref("Shimo") && (
-              <a href={contactHref("Shimo")!} className="focus-ring rounded-md text-foreground/70 hover:text-foreground">
+            {mail && (
+              <a href={mail} className="focus-ring rounded-md text-foreground/70 hover:text-foreground">
                 Talk to us
               </a>
             )}
