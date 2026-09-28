@@ -41,9 +41,11 @@ const OUT_GROSS = HOLES.reduce((n, h) => n + h.gross, 0);
 /** The score cell rule, exactly as the app marks it. */
 function mark(gross: number, par: number) {
   const d = gross - par;
-  if (d <= -2) return "rounded-full border-2 border-clay text-clay-deep";
+  // the double shapes are two lines with paper between, as in ScoreCell
+  const inner = "relative before:pointer-events-none before:absolute before:inset-[2.5px] before:border";
+  if (d <= -2) return `rounded-full border border-clay text-clay-deep ${inner} before:rounded-full before:border-clay`;
   if (d === -1) return "rounded-full border border-clay text-clay-deep";
-  if (d >= 2) return "rounded-sm border-2 border-stone/60 text-ink-soft";
+  if (d >= 2) return `rounded-sm border border-stone/60 text-ink-soft ${inner} before:rounded-[1px] before:border-stone/60`;
   if (d === 1) return "rounded-sm border border-stone/60 text-ink-soft";
   return "text-foreground";
 }

@@ -46,6 +46,7 @@ const jiti = createJiti(import.meta.url, {
 });
 
 const S = await jiti.import("../lib/sim/store.ts");
+const DF = await jiti.import("../lib/sim/device-feeds.ts");
 const { roundKey } = await jiti.import("../lib/rounds.ts");
 const { scorePayload } = await jiti.import("../lib/integrity.ts");
 const MAP = await jiti.import("../lib/sync/mappers.ts");
@@ -3527,6 +3528,86 @@ section("Invitations: the token stays where it was minted");
   const linked = st().roster.find((p) => p.id === other.id);
   check("linking an email keeps the invitation that was sent",
     linked.invite?.token === t2 && linked.invite?.claimedBy === "linked@example.com");
+}
+
+/* ------------------------------------------------------------------ */
+section("The screen and the board read this device when there is no cloud");
+{
+  S.simStore.setState({ ...st(), liveTournamentId: TID, liveRound: 1 }, true);
+  check("a tournament this device has never heard of gives no snapshot",
+    DF.deviceTvSnapshot(st(), "t-nowhere") === null &&
+      DF.devicePublicBoard(st(), "t-nowhere").status === "not-found");
+
+  // a figure the phone wrote through the sync path: the cell and its stamp.
+  // A fresh id, because earlier sections have entered Joel's card at the desk
+  // and a desk stamp rightly makes the screen read that cell as the desk's.
+  const FRESH = "p-fresh-device";
+  const FRESH_STAMP = new Date(Date.now() - 90_000).toISOString();
+  {
+    const s0 = st();
+    const own = Array(18).fill(null); own[16] = 3; own[2] = 5;
+    const mk = Array(18).fill(null); mk[16] = 3;
+    S.simStore.setState({
+      ...s0,
+      scores: { ...s0.scores, [K1]: { ...s0.scores[K1], [FRESH]: own } },
+      markerScores: { ...s0.markerScores, [K1]: { ...s0.markerScores[K1], [FRESH]: mk } },
+      stamps: {
+        ...s0.stamps,
+        [`scores:${TID}:1:${FRESH}:16:player`]: FRESH_STAMP,
+        [`scores:${TID}:1:${FRESH}:2:desk`]: FRESH_STAMP,
+      },
+    }, true);
+  }
+  const snap = DF.deviceTvSnapshot(st(), TID);
+  check("the snapshot is the live tournament, round and field",
+    snap?.tournament.id === TID && snap.round === 1 &&
+      snap.players.some((p) => p.id === JOE) && snap.groups.length > 0);
+  const cell = snap.rows.find((r) => r.playerId === FRESH && r.hole === 16 && r.source === "player");
+  check("a figure typed on this device is on the screen's card",
+    cell?.gross === 3 && cell.round === 1);
+  check("a stamped figure is dated by its stamp",
+    cell && cell.at === Date.parse(FRESH_STAMP), `${cell?.at} vs ${Date.parse(FRESH_STAMP)}`);
+  check("a card the desk typed in reads as the desk's",
+    snap.rows.find((r) => r.playerId === FRESH && r.hole === 2)?.source === "desk");
+  check("a marker's copy is on the screen's card as the marker's",
+    snap.rows.some((r) => r.source === "marker"));
+
+  // the demo field writes with no stamp: its figures keep one date across builds
+  const ghost = "p-ghost-device";
+  const card = Array(18).fill(null); card[0] = 4;
+  S.simStore.setState({ ...st(), scores: { ...st().scores, [K1]: { ...st().scores[K1], [ghost]: card } } }, true);
+  const a = DF.deviceTvSnapshot(st(), TID).rows.find((r) => r.playerId === ghost);
+  const b = DF.deviceTvSnapshot(st(), TID).rows.find((r) => r.playerId === ghost);
+  check("an unstamped figure is dated once and keeps that date", a && b && a.at === b.at);
+
+  // decisions: the panel's rows, kept here, in order, and folded into the snapshot
+  const before = st().tvDecisions.length;
+  S.recordTvDecision(TID, "test", { actor: "the desk" });
+  S.recordTvDecision(TID, "coverage", { payload: { level: "quiet" }, actor: "the desk" });
+  const d = st().tvDecisions;
+  check("a decision appends with a climbing id",
+    d.length === before + 2 && d.at(-1).id === d.at(-2).id + 1 && d.at(-1).kind === "coverage");
+  const snap2 = DF.deviceTvSnapshot(st(), TID);
+  const ids = snap2.decisions.map((x) => x.id);
+  check("the screen sees every decision, oldest first",
+    snap2.decisions.some((x) => x.kind === "test" && x.actor === "the desk") &&
+      ids.every((id, i) => i === 0 || id > ids[i - 1]));
+  check("a decision about another tournament stays off this screen", (() => {
+    S.recordTvDecision("t-other", "test");
+    return !DF.deviceTvSnapshot(st(), TID).decisions.some((x) => x.actor === "" && x.kind === "test");
+  })());
+  check("the list is bounded but keeps the newest", (() => {
+    const many = Array.from({ length: 601 }, (_, i) => ({ id: i + 1, tournamentId: TID, kind: "skip", payload: {}, actor: "", at: i }));
+    S.simStore.setState({ ...st(), tvDecisions: many }, true);
+    S.recordTvDecision(TID, "test");
+    const now = st().tvDecisions;
+    return now.length === 480 && now.at(-1).id === 602;
+  })());
+
+  const board = DF.devicePublicBoard(st(), TID);
+  check("the public board is ready with the field and the cards",
+    board.status === "ready" && board.players.length > 0 && board.byRound[1]?.[FRESH]?.[16] === 3,
+    `${board.status} ${board.players.length} ${board.byRound[1]?.[FRESH]?.[16]}`);
 }
 
 /* ------------------------------------------------------------------ */

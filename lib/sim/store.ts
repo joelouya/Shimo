@@ -128,6 +128,25 @@ export interface ScoreEvent {
   ts: number;
 }
 
+/** One decision from the producer panel, kept on this device. */
+export interface LocalTvDecision {
+  id: number;
+  tournamentId: string;
+  kind:
+    | "approve"
+    | "reject"
+    | "cancel"
+    | "coverage"
+    | "quiet"
+    | "retract"
+    | "test"
+    | "skip";
+  factKey?: string;
+  payload?: Record<string, string | number | boolean>;
+  actor: string;
+  at: number;
+}
+
 export interface OpsFlag {
   id: string;
   kind: "amber" | "red";
@@ -349,6 +368,13 @@ export interface SimState {
    * Append-only and carrying no personal data. See lib/exposure.ts.
    */
   exposure: ExposureEvent[];
+  /**
+   * What the club has told the clubhouse screen, when there is no cloud to
+   * tell it through. A connected build writes tv_decisions rows instead; a
+   * demo or unconnected desk appends here and the screen reads it back
+   * through the shared local state. Same shape, same append-only rule.
+   */
+  tvDecisions: LocalTvDecision[];
   /** pace stamps, keyed `${roundKey}:${groupId}` */
   pace: Record<string, GroupPace>;
   /** minutes behind the field before a group is flagged in Live Ops */
@@ -515,6 +541,7 @@ export function buildInitialState(): SimState {
     guestEntries: [],
     checkIns: {},
     exposure: [],
+    tvDecisions: [],
     pace: {},
     paceThresholdMin: 15,
     pairings: IS_PILOT
@@ -670,6 +697,7 @@ function normalize(saved: SimState): SimState {
   out.clubId ||= "muthaiga";
   out.clubDefaults = { ...DEFAULT_CLUB_DEFAULTS, ...(out.clubDefaults ?? {}) };
   out.exposure ??= [];
+  out.tvDecisions ??= [];
   out.pace ??= {};
   out.paceThresholdMin ??= 15;
   out.stamps ??= {};
@@ -756,6 +784,8 @@ function trimLogs(draft: SimState) {
   if (draft.integrityLog.length > 200) draft.integrityLog = draft.integrityLog.slice(0, 160);
   if (draft.disputes.length > 400) draft.disputes = draft.disputes.slice(0, 320);
   if (draft.corrections.length > 400) draft.corrections = draft.corrections.slice(0, 320);
+  // oldest first, so the tail is what the screen still needs
+  if (draft.tvDecisions.length > 600) draft.tvDecisions = draft.tvDecisions.slice(-480);
 }
 
 function mutate(fn: (draft: SimState) => void) {
@@ -2302,6 +2332,35 @@ export function groupForCode(
  * per-device id the sync layer already generates, and it never leaves the
  * club's own data.
  */
+/**
+ * A producer decision, kept on this device because there is no cloud to send
+ * it to. Ids climb, as the database's would, so the screen applies each one
+ * once and a poll that sees the same list again changes nothing.
+ */
+export function recordTvDecision(
+  tournamentId: string,
+  kind: LocalTvDecision["kind"],
+  opts: {
+    factKey?: string;
+    payload?: LocalTvDecision["payload"];
+    actor?: string;
+  } = {},
+) {
+  if (!tournamentId) return;
+  mutate((draft) => {
+    const last = draft.tvDecisions.at(-1)?.id ?? 0;
+    draft.tvDecisions.push({
+      id: last + 1,
+      tournamentId,
+      kind,
+      ...(opts.factKey ? { factKey: opts.factKey } : {}),
+      payload: opts.payload ?? {},
+      actor: opts.actor ?? "",
+      at: Date.now(),
+    });
+  });
+}
+
 export function recordExposure(
   tournamentId: string,
   surface: Surface,

@@ -88,8 +88,14 @@ when it is done.
 - The wizard, Settings, Pairings, Poster, Summary, the check-in desk and the
   TV producer body kept their own layouts under the new band. The wizard's
   review step still reads as a form rather than a printed fixture card.
-- Live Ops on a tablet stacks list, watched group, then the board; a sheet
-  that opens the watched group over the list would read better under 1024px.
+- Live Ops shows every group as a card again, with a sheet for the full
+  breakdown (player over marker, totals, who marks whom, where each card
+  stands). The sheet is a centred dialog; on a phone-width desk it would be
+  better as a bottom sheet, but the desk is gated to tablets and up.
+- The clubhouse screen and the public board read from this device when the
+  build has no cloud (demo, or a desk without keys). That reaches every tab on
+  the one device and no further; the demo copy on those routes still says
+  nothing about that limit.
 - The tournaments detail pane opens sub-pages in place of tabs; when the
   registrations, tee sheet and results pages settle, they could become tabs
   inside the pane so the desk never leaves the season view.

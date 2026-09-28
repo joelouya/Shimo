@@ -17,28 +17,30 @@
  * It also never goes blank. A screen showing yesterday's board with a quiet
  * note in the corner is worth a great deal more to a club than a screen
  * showing an error, so a failed refresh keeps what it already had.
+ *
+ * A build with no cloud behind it reads the same snapshot from this device
+ * instead (lib/sim/device-feeds.ts), so the demo's screen follows the demo's
+ * desk. The screen cannot tell the two apart and does not need to.
  */
 
 import { useEffect, useRef, useState } from "react";
 
 import { COURSES } from "@/lib/data";
 import { roundsOf } from "@/lib/rounds";
+import { deviceTvSnapshot, watchDevice } from "@/lib/sim/device-feeds";
 import { rowToClub, rowToPlayer, rowToTournament } from "@/lib/sync/mappers";
-import { REMOTE_CONFIGURED, supabase } from "@/lib/sync/client";
+import { CLOUD_FEEDS, supabase } from "@/lib/sync/client";
 import type { CourseRecord, ScoreRow, TvDecision, TvSnapshot } from "./types";
 
-export type FeedStatus =
-  | "loading"
-  | "ready"
-  | "not-found"
-  | "unconfigured"
-  | "reconnecting";
+export type FeedStatus = "loading" | "ready" | "not-found" | "reconnecting";
 
 export interface TvFeed {
   status: FeedStatus;
   snapshot: TvSnapshot | null;
   /** epoch ms of the last successful read, so the screen can say how stale it is */
   lastUpdated: number | null;
+  /** the cloud, or this device's own copy of the day when there is no cloud */
+  source: "cloud" | "device";
 }
 
 const POLL_MS = 20_000;
@@ -52,15 +54,33 @@ function millis(v: unknown): number {
 
 export function useTvFeed(tournamentId: string): TvFeed {
   const [feed, setFeed] = useState<TvFeed>({
-    status: REMOTE_CONFIGURED ? "loading" : "unconfigured",
+    status: "loading",
     snapshot: null,
     lastUpdated: null,
+    source: CLOUD_FEEDS ? "cloud" : "device",
   });
   // the last good snapshot, held so a failed refresh never empties the screen
   const held = useRef<TvSnapshot | null>(null);
 
+  // no cloud: the day as this device knows it, rebuilt as the store changes
   useEffect(() => {
-    if (!REMOTE_CONFIGURED) return;
+    if (CLOUD_FEEDS || !tournamentId) return;
+    return watchDevice(
+      (s) => deviceTvSnapshot(s, tournamentId),
+      (snapshot) => {
+        if (!snapshot) {
+          // a tournament this device has never heard of; keep any board we had
+          setFeed((f) => (f.snapshot ? f : { ...f, status: "not-found" }));
+          return;
+        }
+        held.current = snapshot;
+        setFeed({ status: "ready", snapshot, lastUpdated: Date.now(), source: "device" });
+      },
+    );
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (!CLOUD_FEEDS) return;
     let cancelled = false;
     let channel: { unsubscribe: () => void } | null = null;
 
@@ -185,7 +205,7 @@ export function useTvFeed(tournamentId: string): TvFeed {
           online: true,
         };
         held.current = snapshot;
-        setFeed({ status: "ready", snapshot, lastUpdated: Date.now() });
+        setFeed({ status: "ready", snapshot, lastUpdated: Date.now(), source: "cloud" });
       } catch {
         if (cancelled) return;
         // hold what we had; only say so once it is old enough to matter
@@ -256,6 +276,8 @@ export function useTvFeed(tournamentId: string): TvFeed {
  * wrong.
  */
 export function isStale(feed: TvFeed, now: number) {
+  // this device's own copy is never behind itself
+  if (feed.source === "device") return false;
   return feed.lastUpdated != null && now - feed.lastUpdated > STALE_MS;
 }
 

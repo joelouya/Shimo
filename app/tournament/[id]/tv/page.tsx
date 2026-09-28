@@ -137,9 +137,6 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
     ).filter((r) => r.thru > 0);
   }, [snapshot]);
 
-  if (feed.status === "unconfigured") {
-    return <Plain title="TV mode needs a connected club" />;
-  }
   if (feed.status === "not-found") {
     return <Plain title="No such tournament" />;
   }
